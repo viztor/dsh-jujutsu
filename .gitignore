@@ -1,0 +1,11 @@
+# Node
+node_modules/
+dist/
+coverage/
+*.log
+
+# macOS
+.DS_Store
+
+# Build output (npm `files` ships it; prepublishOnly rebuilds it)
+lib/

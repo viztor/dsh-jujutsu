@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+# pnpm settings live here in pnpm 12; the `pnpm` field in package.json is no
+# longer read (it warns and ignores the key).
+#
+# `esbuild` ships a native binary that is linked by a postinstall script. pnpm
+# blocks dependency build scripts by default, which makes `pnpm install` exit 1
+# with ERR_PNPM_IGNORED_BUILDS and leaves vitest unable to run. Approving exactly
+# this one dependency is the narrowest fix.

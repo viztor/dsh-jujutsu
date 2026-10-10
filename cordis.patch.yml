@@ -1,0 +1,21 @@
+# Bundle patch for `dsh-jujutsu`.
+#
+# One job: insert the plugin's row so the harness mounts it.
+#
+# The row `name` must equal the *installed package name*, not the plugin's
+# exported `name` — the loader resolves a bundle row's `name` to a path under
+# the profile's `node_modules`, and a mismatch answers "failed to import".
+# `dsh-opencode-patch` shipped that failure; see docs/16-package-conventions.md.
+#
+# No `name` on any non-insert row here, because there are none: this plugin adds
+# a policy listener and changes no existing service, so it overrides nothing.
+# (Contrast `dsh-tinyfish`, which repoints the `web` seam and must match that
+# row by `id` alone.)
+#
+# `config` is intentionally absent. Every field in the Config schema has a
+# default (SPEC.md §6), and a patch-level `config` would *replace* the row's
+# config wholesale rather than merge — so a host that wants to change one field
+# should override this row in its own later layer, which wins.
+- insert:
+    - id: dsh-jujutsu
+      name: "dsh-jujutsu"
