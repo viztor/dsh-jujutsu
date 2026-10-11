@@ -307,8 +307,20 @@
       };
     }
 
-    /** One field, rendered by `ConfigField`. */
-    function control(model, name, t) {
+    /**
+     * One field, rendered by `ConfigField`.
+     *
+     * The handlers come from `model.actions()`, **not** from the field state.
+     * `SettingsFieldState` is `{ text, overridden, invalid }` and nothing else —
+     * it carries no `onEdit`/`onReset`/`disabled`. Reading handlers off it
+     * yields `undefined`, and `ConfigField` throwing on the first keystroke
+     * abdicates the whole entry: the slot retires a crashing registration from
+     * its cell while leaving it on the ledger, so the page renders nothing and
+     * the panel shows up as an occupant with `active: false`. That is exactly
+     * what happened here, and it is why "registered" was never the same as
+     * "working".
+     */
+    function control(name, model, actions, shell, t) {
       var meta = FIELDS[name];
       var state = model.field(name);
       return h(primitives.ConfigField, {
@@ -317,7 +329,8 @@
         value: state.text,
         secret: false,
         choices: choicesOf(meta),
-        disabled: state.disabled,
+        // The form, not the field, owns writability.
+        disabled: shell.writable !== true,
         overridden: state.overridden,
         invalid: state.invalid,
         labels: {
@@ -325,8 +338,12 @@
           inherited: t("inherited"),
           invalid: t("invalid"),
         },
-        onChange: state.onEdit,
-        onReset: state.onReset,
+        onChange: function (value) {
+          actions.edit(name, value);
+        },
+        onReset: function () {
+          actions.resetField(name);
+        },
       });
     }
 
@@ -356,7 +373,7 @@
         },
         h("p", { key: "blurb" }, t(props.group.blurbKey)),
         props.group.fields.map(function (name) {
-          return control(props.model, name, t);
+          return control(name, props.model, props.actions, props.shell, t);
         }),
       );
     }
@@ -366,8 +383,18 @@
       var t = translator(props);
       var model = props.model;
       var shell = model.shell();
+      // `shell()` is state only; the verbs live in `actions()`. `SettingsForm`
+      // takes `onSave`/`onDiscard`, which are NOT fields of the shell.
+      var actions = model.actions();
       var blocks = GROUPS.map(function (group) {
-        return h(Group, { key: group.id, group: group, model: model, t: t });
+        return h(Group, {
+          key: group.id,
+          group: group,
+          model: model,
+          actions: actions,
+          shell: shell,
+          t: t,
+        });
       });
       return h(
         primitives.SettingsForm,
@@ -380,8 +407,8 @@
             readOnly: t("readOnly"),
           },
           state: shell,
-          onSave: shell.onSave,
-          onDiscard: shell.onDiscard,
+          onSave: actions.save,
+          onDiscard: actions.discard,
         },
         blocks,
       );

@@ -39,15 +39,23 @@ function loadPanel(): Record<string, any> {
       SettingsValueField: "SettingsValueField",
       ConfigField: "ConfigField",
       DisclosureRow: "DisclosureRow",
+      // Mirrors the real classes exactly, because the bug this guards against
+      // was reading handlers off the wrong one. `SettingsFormShell` is state
+      // only (`available`/`writable`/`dirty`/`invalid`/`saving`/`failed`) and
+      // `SettingsFieldState` is `{ text, overridden, invalid }`; every verb
+      // lives in `actions()`.
       SettingsFormModel: class {
         shell() {
-          return { onSave() {}, onDiscard() {} };
+          return {
+            available: true, writable: true, dirty: false,
+            invalid: false, saving: false, failed: false,
+          };
         }
         field() {
-          return {
-            text: "x", overridden: false, invalid: false, disabled: false,
-            onEdit() {}, onReset() {},
-          };
+          return { text: "x", overridden: false, invalid: false };
+        }
+        actions() {
+          return { edit() {}, resetField() {}, save() {}, discard() {} };
         }
       },
       settingsTextField: (f: string) => ({
@@ -95,6 +103,23 @@ function panelComponent() {
   // the panel asks for the right keys without needing the real dictionary.
   const t = (key: string) => key;
   return { Panel: (extra: Record<string, unknown>) => registered!({ ...injected, t, ...extra }), panel };
+}
+
+/** Collect `[type, props]` for every element, running function components. */
+function elementsOf(node: unknown, out: [string, any][] = []): [string, any][] {
+  if (node === null || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) elementsOf(item, out);
+    return out;
+  }
+  const n = node as { type?: unknown; props?: unknown; kids?: unknown[] };
+  if (typeof n.type === "function") {
+    elementsOf(n.type(n.props ?? {}), out);
+    return out;
+  }
+  if (typeof n.type === "string") out.push([n.type, n.props ?? {}]);
+  for (const kid of n.kids ?? []) elementsOf(kid, out);
+  return out;
 }
 
 /** Collect every element type in a rendered tree, running function components. */
@@ -261,5 +286,38 @@ describe("the bundle loads as written", () => {
     expect(PANEL).toContain("key: NS");
     expect(PANEL).not.toContain('"plugins.row.config"');
     expect(PKG.name).toBe("dsh-jujutsu");
+  });
+});
+
+describe("the handlers come from the right object", () => {
+  it("passes callable handlers to every ConfigField", () => {
+    // The bug this exists for: the panel read `onChange`/`onReset` off the
+    // field STATE and `onSave`/`onDiscard` off the form SHELL. None of those
+    // four exist, so all four were `undefined`, `ConfigField` threw on render,
+    // and the slot retired the entry — leaving it on the ledger as an occupant
+    // with `active: false` while the page drew nothing. Registration was never
+    // evidence the panel worked.
+    const { Panel } = panelComponent();
+    const elements = elementsOf(Panel({ view: "page" }));
+    const fields = elements.filter(([type]) => type === "ConfigField");
+    expect(fields.length).toBeGreaterThan(0);
+    for (const [, props] of fields) {
+      expect(typeof props.onChange, "onChange").toBe("function");
+      expect(typeof props.onReset, "onReset").toBe("function");
+      expect(typeof props.disabled, "disabled").toBe("boolean");
+      expect(typeof props.value, "value").toBe("string");
+    }
+    const forms = elements.filter(([type]) => type === "SettingsForm");
+    expect(forms).toHaveLength(1);
+    expect(typeof forms[0]![1].onSave, "onSave").toBe("function");
+    expect(typeof forms[0]![1].onDiscard, "onDiscard").toBe("function");
+    expect(forms[0]![1].state).toBeTypeOf("object");
+  });
+
+  it("renders without throwing", () => {
+    // A throwing render is not a visible error: the slot swallows it and
+    // abdicates the entry. Fail loudly here instead.
+    const { Panel } = panelComponent();
+    expect(() => elementsOf(Panel({ view: "page" }))).not.toThrow();
   });
 });

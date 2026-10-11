@@ -752,9 +752,43 @@ it, because nothing else would notice.
 
 ### The registration is verified
 
-`Slots.listSubTree` on the configuration slot now reports an occupant (it
-was verified on `plugins.row.config` before the panel moved to the bundle's
-own page; the registration mechanics are identical):
+`Slots.listSubTree` on the configuration slot reports an occupant, and the
+occupant reports `active: true`:
+
+### A crashing entry stays on the ledger, inactive
+
+Worth writing down, because it cost more time than anything else here and it is
+invisible from the outside.
+
+`SlotCore.reportEntryError` retires a crashing entry from its cell — for the
+shadowing kinds (`single`, `keyed`, `list`) it abdicates the entry, one-shot.
+Its own documentation is explicit that **"the registration itself stays on the
+ledger either way — raw `entries` still lists the entry and its disposer keeps
+working."**
+
+So a panel that throws during render produces exactly this:
+
+```json
+{ "registrant": "mf", "key": "dsh-jujutsu", "priority": 0, "active": false }
+```
+
+An occupant that exists, so a check for "is it registered" passes, and
+`active: false`, so nothing renders. **Registration was never evidence the panel
+worked**, and this document said "verified live" on that basis. It was wrong.
+
+The crash itself: the panel read its four handlers off the wrong objects.
+
+| Read from | Actually there? |
+|---|---|
+| `field(name).onEdit` / `.onReset` / `.disabled` | **No** — `SettingsFieldState` is `{ text, overridden, invalid }` |
+| `shell().onSave` / `.onDiscard` | **No** — `SettingsFormShell` is state only |
+
+Every verb lives in `model.actions()` — `edit(field, text)`, `resetField(field)`,
+`save()`, `discard()` — and `SettingsForm` takes `onSave`/`onDiscard` from there.
+Passing four `undefined` handlers made `ConfigField` throw on its first render.
+The panel now reads `actions()`, and a test asserts every handler passed to
+`ConfigField` and `SettingsForm` is callable, because a throwing render is not a
+visible error — the slot swallows it and abdicates the entry.
 
 ```json
 { "registrant": "mf", "key": "dsh-jujutsu#dsh-jujutsu", "priority": 0, "active": true }
