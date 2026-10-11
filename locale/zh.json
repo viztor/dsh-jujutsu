@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Jujutsu",
+    "description": "为 DeepSeek Harness 提供以 Jujutsu 为核心的版本控制：在 jj 工作区中拒绝 Git 命令，并引导模型改用对应的 jj 命令。"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Jujutsu",
+    "description": "Jujutsu-native version control for the DeepSeek Harness: Git is refused inside a jj workspace, and the model is given the jj command instead."
+  }
+}

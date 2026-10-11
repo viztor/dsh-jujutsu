@@ -26,11 +26,14 @@
     "./package.json": "./package.json",
     "./client": {
       "default": "./client/panel.js"
-    }
+    },
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib",
     "client",
+    "locale/*.json",
+    "icon.svg",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -88,5 +91,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/viztor/dsh-jujutsu.git"
-  }
+  },
+  "icon": "./icon.svg"
 }

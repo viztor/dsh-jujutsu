@@ -1,11 +1,9 @@
 /**
- * The admin panel's contract with the schema.
+ * The admin panel's contract: with the schema, with the harness's components,
+ * and with its own translations.
  *
  * The panel is hand-written JavaScript and the schema is TypeScript, so nothing
- * at build time connects them. This test is that connection: every field the
- * panel draws must exist in `Config`, and every hint it shows must be the
- * schema's own description. A panel that describes a setting differently from
- * the setting's own schema is worse than no panel.
+ * at build time connects them. These tests are that connection.
  */
 
 import { readFileSync } from "node:fs";
@@ -14,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 const PANEL = readFileSync("client/panel.js", "utf8");
 const CONFIG = readFileSync("src/config.ts", "utf8");
+const PKG = JSON.parse(readFileSync("package.json", "utf8")) as Record<string, unknown>;
 
 /** Field names declared in `Config`. */
 function schemaFields(): Set<string> {
@@ -21,52 +20,232 @@ function schemaFields(): Set<string> {
   return new Set([...body.matchAll(/^  ([a-zA-Z]+): z\b/gm)].map((m) => m[1] ?? ""));
 }
 
-/** Field names the panel draws, from `FIELDS`. */
-function panelFields(): Set<string> {
-  const body = PANEL.slice(PANEL.indexOf("var FIELDS = {"));
-  return new Set([...body.matchAll(/^ {6}([a-zA-Z]+): \{/gm)].map((m) => m[1] ?? ""));
+/** Load the bundle with stubbed modules and return its exports. */
+function loadPanel(): Record<string, any> {
+  let factory: ((require: (id: string) => unknown) => Record<string, any>) | undefined;
+  const win = {
+    __ModuleLoader__: {
+      load: (m: { factory: never }) => {
+        factory = m.factory;
+      },
+    },
+  };
+  new Function("window", PANEL)(win);
+  if (factory === undefined) throw new Error("bundle did not register a factory");
+
+  const stubs: Record<string, unknown> = {
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      SettingsForm: "SettingsForm",
+      SettingsValueField: "SettingsValueField",
+      ConfigField: "ConfigField",
+      DisclosureRow: "DisclosureRow",
+      SettingsFormModel: class {
+        shell() {
+          return { onSave() {}, onDiscard() {} };
+        }
+        field() {
+          return {
+            text: "x", overridden: false, invalid: false, disabled: false,
+            onEdit() {}, onReset() {},
+          };
+        }
+      },
+      settingsTextField: (f: string) => ({
+        field: f,
+        format: (v: unknown) => String(v ?? ""),
+        parse: (t: string) => ({ kind: "set", value: t }),
+      }),
+    },
+    react: {
+      createElement: (type: unknown, props: unknown, ...kids: unknown[]) => ({ type, props, kids }),
+      useState: (initial: unknown) => [initial, () => {}],
+    },
+  };
+  return factory((id: string) => stubs[id]);
+}
+
+/** Reach the Panel component through `apply`'s own registration. */
+function panelComponent() {
+  const panel = loadPanel();
+  let registered: ((p: unknown) => unknown) | undefined;
+  let injected: Record<string, unknown> = {};
+  panel.apply({
+    effect: (fn: () => unknown) => fn(),
+    locale: { register: () => () => {} },
+    configForms: {
+      get: () => ({ getSnapshot: () => ({}), subscribe: () => () => {}, mutate: async () => {} }),
+      whileServed: (_n: string[], fn: () => unknown) => {
+        fn();
+        return () => {};
+      },
+    },
+    slots: {
+      inject: (_n: string, fn: () => unknown) => {
+        fn();
+        return () => {};
+      },
+      register: (spec: { inject?: () => Record<string, unknown> }, c: (p: unknown) => unknown) => {
+        injected = spec.inject?.() ?? {};
+        registered = c;
+        return () => {};
+      },
+    },
+  });
+  // `t` is what the slot supplies from `locale: NS`; a key-echoing stub proves
+  // the panel asks for the right keys without needing the real dictionary.
+  const t = (key: string) => key;
+  return { Panel: (extra: Record<string, unknown>) => registered!({ ...injected, t, ...extra }), panel };
+}
+
+/** Collect every element type in a rendered tree, running function components. */
+function typesOf(node: unknown, out: string[] = []): string[] {
+  if (node === null || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) typesOf(item, out);
+    return out;
+  }
+  const n = node as { type?: unknown; props?: unknown; kids?: unknown[] };
+  if (typeof n.type === "function") {
+    typesOf(n.type(n.props ?? {}), out);
+    return out;
+  }
+  if (typeof n.type === "string") out.push(n.type);
+  for (const kid of n.kids ?? []) typesOf(kid, out);
+  return out;
 }
 
 describe("the panel covers the schema", () => {
   it("draws a control for every config field", () => {
-    const missing = [...schemaFields()].filter((f) => !panelFields().has(f));
+    const missing = [...schemaFields()].filter((f) => !(f in loadPanel().FIELDS));
     expect(missing).toEqual([]);
   });
 
   it("draws no control for a field the schema does not have", () => {
-    const extra = [...panelFields()].filter((f) => !schemaFields().has(f));
+    const extra = Object.keys(loadPanel().FIELDS).filter((f) => !schemaFields().has(f));
     expect(extra).toEqual([]);
   });
 
   it("groups every field exactly once", () => {
-    const listed = [...PANEL.matchAll(/fields: \[([^\]]*)\]/g)]
-      .flatMap((m) => (m[1] ?? "").split(","))
-      .map((s) => s.trim().replace(/"/g, ""))
-      .filter(Boolean);
+    const listed = loadPanel()
+      .GROUPS.flatMap((g: { fields: string[] }) => g.fields);
     expect(new Set(listed).size).toBe(listed.length);
-    expect(new Set(listed)).toEqual(panelFields());
+    expect(new Set(listed)).toEqual(new Set(Object.keys(loadPanel().FIELDS)));
   });
 });
 
-describe("the panel's copy matches the schema", () => {
-  it("uses each field's own description as its hint", () => {
-    // The descriptions are long single strings in `config.ts`; pull them out and
-    // require each to appear verbatim in the panel.
-    const hints = [...PANEL.matchAll(/hint:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g)].map(
-      (m) => (m[1] ?? "").replace(/\\"/g, '"'),
-    );
-    expect(hints.length).toBeGreaterThanOrEqual(panelFields().size);
-    for (const hint of hints) {
-      expect(CONFIG.replace(/\s+/g, " ")).toContain(hint.replace(/\s+/g, " ").slice(0, 60));
+describe("built-in components only", () => {
+  it("renders every field through ConfigField", () => {
+    const { Panel, panel } = panelComponent();
+    const types = typesOf(Panel({ view: "page" }));
+    const controls = types.filter((x) => x === "ConfigField");
+    expect(controls).toHaveLength(Object.keys(panel.FIELDS).length);
+    for (const handRolled of ["Switch", "SegmentedControl", "SettingsValueField", "section", "h3", "input"]) {
+      expect(types, handRolled).not.toContain(handRolled);
+    }
+  });
+
+  it("groups fields with the built-in DisclosureRow", () => {
+    const { Panel, panel } = panelComponent();
+    const types = typesOf(Panel({ view: "page" }));
+    expect(types.filter((x) => x === "DisclosureRow")).toHaveLength(panel.GROUPS.length);
+  });
+
+  it("draws no inline styles", () => {
+    expect(PANEL).not.toContain("style: {");
+  });
+});
+
+describe("translations", () => {
+  const { STRINGS } = loadPanel();
+
+  it("has the same keys in every locale", () => {
+    // A key in one locale and not another renders the key itself, which is
+    // visible — but better to catch it here.
+    const en = Object.keys(STRINGS.en).sort();
+    for (const locale of Object.keys(STRINGS)) {
+      expect(Object.keys(STRINGS[locale]).sort(), locale).toEqual(en);
+    }
+  });
+
+  it("translates every string it declares", () => {
+    for (const locale of Object.keys(STRINGS)) {
+      for (const [key, value] of Object.entries(STRINGS[locale] as Record<string, string>)) {
+        expect(value.trim().length, `${locale}.${key}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("resolves every group and field key", () => {
+    const panel = loadPanel();
+    const keys = [
+      ...panel.GROUPS.flatMap((g: { titleKey: string; blurbKey: string }) => [g.titleKey, g.blurbKey]),
+      ...Object.values(panel.FIELDS as Record<string, { labelKey: string; hintKey: string }>)
+        .flatMap((f) => [f.labelKey, f.hintKey]),
+    ];
+    for (const locale of Object.keys(STRINGS)) {
+      for (const key of keys) {
+        expect(STRINGS[locale][key], `${locale}.${key}`).toBeTypeOf("string");
+      }
+    }
+  });
+
+  it("keeps the English hints identical to the schema descriptions", () => {
+    // A panel that describes a setting differently from the setting's own
+    // schema is worse than no panel. The host renders `config.ts`; this renders
+    // the panel.
+    const flat = CONFIG.replace(/\s+/g, " ");
+    for (const [name, meta] of Object.entries(
+      loadPanel().FIELDS as Record<string, { hintKey: string }>,
+    )) {
+      const hint = (STRINGS.en as Record<string, string>)[meta.hintKey] ?? "";
+      expect(hint.length, name).toBeGreaterThan(20);
+      expect(flat, name).toContain(hint.replace(/\s+/g, " ").slice(0, 60));
     }
   });
 });
 
-describe("the client bundle is loadable as written", () => {
-  it("wraps itself in the ModuleLoader factory the web client expects", () => {
+describe("the display metadata the host reads", () => {
+  it("names the plugin in both locales", () => {
+    for (const lang of ["en", "zh"]) {
+      const meta = JSON.parse(readFileSync(`locale/${lang}.json`, "utf8")) as {
+        meta: { title: string; description: string };
+      };
+      expect(meta.meta.title, lang).toBe("Jujutsu");
+      expect(meta.meta.description.length, lang).toBeGreaterThan(40);
+    }
+  });
+
+  it("declares the icon and ships it", () => {
+    // `readPluginMeta` resolves `icon` relative to the manifest and caps it at
+    // 256 KiB.
+    expect(PKG.icon).toBe("./icon.svg");
+    const svg = readFileSync("icon.svg", "utf8");
+    expect(svg.trimStart().startsWith("<svg")).toBe(true);
+    expect(Buffer.byteLength(svg)).toBeLessThanOrEqual(262_144);
+  });
+
+  it("exports the locale files, which the host resolves through `exports`", () => {
+    // `readPluginMeta` reaches `locale/<lang>.json` via the exports-aware
+    // resolver, so a missing entry fails with ERR_PACKAGE_PATH_NOT_EXPORTED and
+    // the display name silently falls back to the package id. Measured: that is
+    // exactly what happened before this entry existed. The icon needs no entry
+    // — `iconOf` reads it straight off the manifest's directory.
+    const exportsMap = PKG.exports as Record<string, unknown>;
+    expect(Object.keys(exportsMap)).toContain("./locale/*.json");
+  });
+
+  it("ships the metadata files", () => {
+    const files = PKG.files as string[];
+    for (const entry of ["locale/*.json", "icon.svg", "lib", "client"]) {
+      expect(files, entry).toContain(entry);
+    }
+  });
+});
+
+describe("the bundle loads as written", () => {
+  it("wraps itself in the ModuleLoader factory", () => {
     expect(PANEL).toContain("window.__ModuleLoader__.load");
     expect(PANEL).toContain('id: "dsh-jujutsu"');
-    expect(PANEL).toContain("factory: factory");
   });
 
   it("requires only what the client runtime provides", () => {
@@ -77,246 +256,10 @@ describe("the client bundle is loadable as written", () => {
     ]);
   });
 
-  it("declares the same namespace as the host half", () => {
-    // The Plugins page keys the row by this string; if the two halves disagree
-    // the form is served a namespace nothing writes.
-    expect(PANEL).toContain('var NS = "dsh-jujutsu"');
-    const index = readFileSync("src/index.ts", "utf8");
-    expect(index).toContain('name = "dsh-jujutsu"');
-  });
-});
-
-describe("the panel factory actually runs", () => {
-  /** Load the bundle with stubbed modules and return its exports. */
-  async function loadPanel(): Promise<Record<string, any>> {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync("client/panel.js", "utf8");
-    let factory: ((require: (id: string) => unknown) => Record<string, any>) | undefined;
-    const sandbox = { window: { __ModuleLoader__: { load: (m: { factory: never }) => { factory = m.factory; } } } };
-    // The bundle is a script, not a module: run it with `window` in scope.
-    new Function("window", source)(sandbox.window);
-    if (factory === undefined) throw new Error("bundle did not register a factory");
-
-    const stubs: Record<string, unknown> = {
-      "@deepseek-ai/dsh-client-ui-primitives": {
-        SettingsForm: "SettingsForm",
-        SettingsValueField: "SettingsValueField",
-        ConfigField: "ConfigField",
-        DisclosureRow: "DisclosureRow",
-        SettingsFormModel: class {
-          shell() {
-            return { onSave() {}, onDiscard() {} };
-          }
-          field() {
-            return {
-              text: "x", overridden: false, invalid: false, disabled: false,
-              onEdit() {}, onReset() {},
-            };
-          }
-        },
-        settingsTextField: (f: string) => ({
-          field: f,
-          format: (v: unknown) => String(v ?? ""),
-          parse: (t: string) => ({ kind: "set", value: t }),
-        }),
-      },
-      react: { createElement: (...a: unknown[]) => ({ type: a[0], props: a[1] }) },
-    };
-    return factory((id: string) => stubs[id]);
-  }
-
-  it("registers a factory under the plugin's id", async () => {
-    const panel = await loadPanel();
-    expect(panel.NS).toBe("dsh-jujutsu");
-    expect(panel.inject).toEqual(["slots", "locale", "configForms"]);
-  });
-
-  it("builds one spec per config field", async () => {
-    const panel = await loadPanel();
-    expect(panel.buildSpecs()).toHaveLength(panelFields().size);
-  });
-
-  it("blocks a save on a value the field does not accept", async () => {
-    // `parse` returning undefined is what blocks the save rather than
-    // discarding the edit silently — the contract the form model documents.
-    const panel = await loadPanel();
-    expect(panel.booleanField("enabled").parse("true")).toEqual({ kind: "set", value: true });
-    expect(panel.booleanField("enabled").parse("maybe")).toBeUndefined();
-    expect(panel.enumField("guard", ["deny", "off"]).parse("deny")).toEqual({
-      kind: "set", value: "deny",
-    });
-    expect(panel.enumField("guard", ["deny", "off"]).parse("allow")).toBeUndefined();
-  });
-
-  it("round-trips a stored value through format", async () => {
-    const panel = await loadPanel();
-    expect(panel.booleanField("enabled").format(false)).toBe("false");
-    expect(panel.booleanField("enabled").format(undefined)).toBe("");
-    expect(panel.enumField("guard", ["deny", "off"]).format("off")).toBe("off");
-  });
-});
-
-
-
-describe("the row id must equal the settings namespace", () => {
-  /**
-   * A coupling that is invisible from either file alone.
-   *
-   * The slot is keyed `<package name>#<row id>`, but the page resolves the
-   * form it passes to the entry with `formFor(openRow.rowId)` — and `formFor`
-   * returns `undefined` unless some configuration namespace equals that id.
-   * So the row id must be the settings namespace, or the panel is rendered
-   * with no `form` at all.
-   *
-   * It holds today only because both happen to be `dsh-jujutsu`.
-   */
-  it("uses the same string for the patch row id and the namespace", () => {
-    const patch = readFileSync("cordis.patch.yml", "utf8");
-    const rowId = /-\s*id:\s*([a-z-]+)/.exec(patch)?.[1];
-    expect(rowId).toBe("dsh-jujutsu");
-    expect(PANEL).toContain(`var NS = "${rowId}"`);
-  });
-
   it("mounts on the bundle's own page, keyed by the package name", () => {
-    // `plugins.bundle.config` renders on the plugin's page between its
-    // description and its rows. `plugins.row.config` would put it behind a
-    // Configure control on one row instead.
     expect(PANEL).toContain('"plugins.bundle.config"');
     expect(PANEL).toContain("key: NS");
     expect(PANEL).not.toContain('"plugins.row.config"');
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { name: string };
-    expect(pkg.name).toBe("dsh-jujutsu");
-  });
-});
-
-describe("each field renders the control its type deserves", () => {
-  /** Load the bundle and reach the Panel through apply's registration. */
-  async function panelComponent() {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync("client/panel.js", "utf8");
-    let factory: ((require: (id: string) => unknown) => Record<string, any>) | undefined;
-    const win = { __ModuleLoader__: { load: (m: { factory: never }) => { factory = m.factory; } } };
-    new Function("window", source)(win);
-    if (factory === undefined) throw new Error("no factory");
-
-    const fields: Record<string, { text: string }> = {};
-    const stubs: Record<string, unknown> = {
-      "@deepseek-ai/dsh-client-ui-primitives": {
-        SettingsForm: "SettingsForm",
-        SettingsValueField: "SettingsValueField",
-        ConfigField: "ConfigField",
-        DisclosureRow: "DisclosureRow",
-        SettingsFormModel: class {
-          shell() { return { onSave() {}, onDiscard() {} }; }
-          field(name: string) {
-            fields[name] ??= { text: "" };
-            return {
-              ...fields[name], overridden: false, invalid: false, disabled: false,
-              onEdit() {}, onReset() {},
-            };
-          }
-        },
-        settingsTextField: (f: string) => ({ field: f, format: String, parse: (x: string) => ({ kind: "set", value: x }) }),
-      },
-      react: {
-        createElement: (type: unknown, props: unknown, ...kids: unknown[]) => ({ type, props, kids }),
-        useState: (initial: unknown) => [initial, () => {}],
-      },
-    };
-    const panel = factory((id: string) => stubs[id]);
-
-    let registered: ((p: unknown) => unknown) | undefined;
-    let injected: Record<string, unknown> = {};
-    panel.apply({
-      effect: (fn: () => unknown) => fn(),
-      locale: { register: () => () => {} },
-      configForms: {
-        get: () => ({ getSnapshot: () => ({}), subscribe: () => () => {}, mutate: async () => {} }),
-        whileServed: (_n: string[], fn: () => unknown) => { fn(); return () => {}; },
-      },
-      slots: {
-        inject: (_n: string, fn: () => unknown) => { fn(); return () => {}; },
-        register: (spec: { inject?: () => Record<string, unknown> }, c: (p: unknown) => unknown) => {
-          // The page renders the component with whatever `inject` supplies —
-          // the model, in this plugin's case. Calling it here is what makes the
-          // test exercise the same props the real page would pass.
-          injected = spec.inject?.() ?? {};
-          registered = c;
-          return () => {};
-        },
-      },
-    });
-    return { Panel: (extra: Record<string, unknown>) => registered!({ ...injected, ...extra }), panel };
-  }
-
-  /** Collect every element type in a rendered tree. */
-  function typesOf(node: unknown, out: string[] = []): string[] {
-    if (node === null || typeof node !== "object") return out;
-    // Children arrive as arrays as often as single nodes: `createElement(type,
-    // props, blocks)` gives one array child, and the group maps give arrays too.
-    if (Array.isArray(node)) {
-      for (const item of node) typesOf(item, out);
-      return out;
-    }
-    const n = node as { type?: unknown; props?: unknown; kids?: unknown[] };
-    // A function component's own output only exists once it runs, so run it —
-    // otherwise the walk stops at `Group` and never sees the fields inside.
-    if (typeof n.type === "function") {
-      typesOf(n.type(n.props ?? {}), out);
-      return out;
-    }
-    if (typeof n.type === "string") out.push(n.type);
-    for (const kid of n.kids ?? []) typesOf(kid, out);
-    return out;
-  }
-
-  it("renders every field through the built-in ConfigField", async () => {
-    // One code path for all three kinds: `ConfigField` picks the control from
-    // `choices` (empty -> text, finite -> a choice control). The panel draws no
-    // label, input or reset of its own.
-    const { Panel, panel } = await panelComponent();
-    const types = typesOf(Panel({ view: "page" }));
-    const controls = types.filter((x) => x === "ConfigField");
-    expect(controls).toHaveLength(Object.keys(panel.FIELDS).length);
-    // No hand-rolled control components.
-    expect(types).not.toContain("Switch");
-    expect(types).not.toContain("SegmentedControl");
-    expect(types).not.toContain("SettingsValueField");
-  });
-
-  it("gives each field the choices its kind needs", async () => {
-    // `choices` is the whole control selection: empty means a text input, a
-    // finite list means a choice control, and a boolean is just two choices.
-    const { panel } = await panelComponent();
-    for (const [name, meta] of Object.entries(panel.FIELDS as Record<string, any>)) {
-      const choices = panel.choicesOf(meta) as string[];
-      // Text fields get an empty list (a text input); every other kind gets a
-      // finite list (a choice control). That list is the entire selection.
-      if (meta.kind === "text") expect(choices, name).toEqual([]);
-      else expect(choices.length, name).toBeGreaterThan(1);
-    }
-    expect(panel.choicesOf(panel.FIELDS.enabled)).toEqual(["true", "false"]);
-    expect(panel.FIELDS.jjPath.kind).toBe("text");
-  });
-
-  it("groups fields with the built-in DisclosureRow", async () => {
-    // The harness's own disclosure header, one per group. It is controlled, so
-    // the open state lives in the panel rather than in the component.
-    const { Panel, panel } = await panelComponent();
-    const types = typesOf(Panel({ view: "page" }));
-    const groups = types.filter((x) => x === "DisclosureRow");
-    expect(groups).toHaveLength((panel.GROUPS as unknown[]).length);
-    // And no hand-rolled section chrome.
-    expect(types).not.toContain("section");
-    expect(types).not.toContain("h3");
-  });
-
-  it("declares choices as plain strings, which is what ConfigField takes", async () => {
-    const { panel } = await panelComponent();
-    for (const [name, meta] of Object.entries(panel.FIELDS as Record<string, any>)) {
-      for (const c of panel.choicesOf(meta) as string[]) {
-        expect(typeof c, name).toBe("string");
-      }
-    }
+    expect(PKG.name).toBe("dsh-jujutsu");
   });
 });

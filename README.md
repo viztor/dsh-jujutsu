@@ -1,116 +1,142 @@
-# dsh-jujutsu
+# Jujutsu for DeepSeek Harness
 
-Working notes for a DeepSeek Harness (DSH) plugin that makes the harness
-**jj-native** — Jujutsu (`jj`) as the version-control surface, with `jj-hunk`
-for non-interactive, hunk-level change distribution — instead of Git.
+Makes the harness **jj-native**. Inside a [Jujutsu](https://jj-vcs.dev) workspace
+the agent stops reaching for Git and uses `jj` instead — and it is *told* why,
+rather than just being blocked.
 
-The plugin is **implemented**: 20 modules under `src/`, 57 tests, and a guard that
-has been verified running inside the harness. This repo also holds the
-[research digest](research/digest.md) and the [topic split](docs/00-index.md) of
-the conversation that seeded the design.
+- **Refuses Git where it would mislead.** `git status` in a colocated repo
+  reports a different state than `jj status`. The guard catches that and hands
+  back the command to run instead.
+- **Eleven `jj` tools**, so the model can read and write history without
+  shelling out and parsing output.
+- **Teaches the model** what `jj` is: no staging area, `@` is always a commit,
+  change IDs survive rewrites.
+- **A settings panel**, on the plugin's own page.
 
-## Where this came from
+The plugin is invisible outside a Jujutsu workspace. In a plain Git repo it does
+nothing at all.
 
-The design conversation happened in a **Google AI Mode** thread, shared as a
-public link. Google blocks automated access to `share.google/aimode/*` from
-datacentre IPs, so the page was rendered through an anti-bot scraper (Context.dev,
-residential proxy).
+## Install
 
-**The transcript is not kept verbatim.** It was distilled into
-[`research/digest.md`](research/digest.md) — every durable fact, command, number
-and decision from the thread, organised by topic — and the raw scrape was then
-deleted. It carried a personal share link and a private conversation, and a
-verbatim copy is both a liability and a *worse* reference than a digest: 264K of
-Q&A against a few pages of the facts that survived scrutiny.
+Install from the harness **Plugins** page, or:
 
-- Research digest: [`research/digest.md`](research/digest.md)
-- Topic split: [`docs/00-index.md`](docs/00-index.md)
+```bash
+dsh plugin install dsh-jujutsu
+```
 
-## What's here
+Then open **Plugins → Jujutsu** to configure it. It works out of the box; the
+defaults are chosen to be safe.
+
+### Requirements
 
 | | |
 |---|---|
-| [`SPEC.md`](SPEC.md) | The build specification: scope, architecture, components, config, behaviour matrix, failure modes, testing, rollout. |
-| [`research/digest.md`](research/digest.md) | The durable record of the source thread: facts, commands, numbers and decisions, by topic. |
-| [`src/README.md`](src/README.md) | The module map, what is verified and how, and what is still open. |
-| [`docs/00-index.md`](docs/00-index.md) | The topic split of the source conversation, plus the decision index. |
-| [`docs/11-verified-dsh-api-contract.md`](docs/11-verified-dsh-api-contract.md) | The harness seams, read from the installed `0.2.0-rc.2` source. |
-| [`docs/13-empirical-verification.md`](docs/13-empirical-verification.md) | What was measured with real `jj` 0.46.0 and `jj-hunk` 0.5.1. |
-| [`docs/14-decision-log.md`](docs/14-decision-log.md) | The eight decisions and the fourteen resolutions, with their evidence. |
-| [`docs/15-verb-mapping.md`](docs/15-verb-mapping.md) | The Git → `jj` denial-message table. |
-| [`docs/22-context-injection.md`](docs/22-context-injection.md) | The injection seam, and what the model is told about `jj`. |
-| [`docs/24-implementation-plan.md`](docs/24-implementation-plan.md) | Module-by-module interfaces and the build order M0–M6. |
-| [`docs/27-integration-surfaces.md`](docs/27-integration-surfaces.md) | The whole harness extension map — 90 events, ~95 services. |
-| [`docs/34-probe-plan.md`](docs/34-probe-plan.md) | What was open, and how it was closed. |
-| [`docs/35-probe-results-live.md`](docs/35-probe-results-live.md) | The live probe: built, installed, exercised, removed. Twelve of fourteen questions closed. |
-| [`src/README.md`](src/README.md) | The module map — every module with its signature and the document that specifies it. |
+| `jj` | **Required.** 0.46.0 or newer. `brew install jj` |
+| `jj-hunk` | Optional. Adds hunk-level `split`/`squash`. Without it those two tools report unavailable rather than failing. `cargo install --git https://github.com/laulauland/jj-hunk jj-hunk` |
+| Node | 24 or newer |
 
-**It works.** The guard, the detection and the injection are implemented and
-verified — 57 tests, `pnpm run ci` green, and three live cases run against real
-repositories through the harness itself:
+## What it does
 
-| Call | Result |
+### Refuses Git, and says what to run instead
+
+| You run | What happens |
 |---|---|
-| `git status` in a colocated `jj` repo | **refused** — `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
-| `git status` in a plain Git repo | **ran** — the plugin is invisible outside a `jj` workspace |
-| `git log` in a **subdirectory** of a `jj` repo | **refused** — the upward walk found the workspace root |
+| `git status` | `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
+| `git commit -m "…"` | `Refused: git commit -m. Run: jj commit -m "<msg>".` |
+| `git rebase -i` | Refused — it needs a terminal. Suggests `jj rebase`, `jj squash`, `jj absorb`. |
+| `rm -rf .git` | Refused, and explains that `jj`'s commit objects live there |
+| `jj status`, `jj log`, … | Run normally |
+| `echo "git commit"` | Runs — it never touched Git |
 
-The eleven `jj` tools are implemented and their definitions validated against the
-real `defineTool`; their live registration still needs a harness restart to
-confirm. See [`src/README.md`](src/README.md) for what is verified and how.
+Reads and writes are configured separately. A user who is happy to let the model
+*look* with Git has not thereby agreed to let it *write*.
 
-Local toolchain this project targets: `jj` 0.46.0 (`brew install jj`) and
-`jj-hunk` 0.5.1 (`cargo install --git https://github.com/laulauland/jj-hunk jj-hunk`).
+### Eleven `jj` tools
 
-## Headline findings
+| Tool | What it does |
+|---|---|
+| `jj_status` | The working copy, including whether it is **conflicted** |
+| `jj_log`, `jj_diff`, `jj_op_log` | History, changes, and the operation log |
+| `jj_new`, `jj_describe`, `jj_squash` | Start, describe and fold changes |
+| `jj_bookmark`, `jj_op_restore` | Name revisions; undo anything |
+| `jj_hunk_list`, `jj_hunk_apply` | Select and apply individual hunks |
 
-1. **The early turns answer a different question than the one being asked.**
-   Turns 1–9 read "jujutsu" as *Jiu-Jitsu, the martial art*, and invent a
-   "Jiu-Jitsu domain project" (`jiujitsu.config.json`, `positions.json`,
-   `src/techniques/`). Only at turn 10 does the thread switch to **Jujutsu, the
-   version-control system**. Any design detail taken from turns 1–9 must be
-   re-read with that substitution in mind. See
-   [`docs/01-framing-and-intent.md`](docs/01-framing-and-intent.md).
+All of them return **structured JSON**, never prose. Revisions are addressed by
+**change ID**, which survives a rewrite — a commit ID does not.
 
-2. **The proposed guard API is wrong for this harness version.** The thread
-   uses `ctx.tools.on('tools/pre-execute', …)` and `throw new Error(…)`. The
-   real contract is a **waterfall returning a decision object**
-   (`{kind:'deny', reason}`), with a dedicated `tools.guard()` for monotonic
-   policy and `tools/post-execute` for corrective feedback. See
-   [`docs/11-verified-dsh-api-contract.md`](docs/11-verified-dsh-api-contract.md).
+### Teaches the model
 
-3. **There is no git tool to disable.** The thread's "recommended" Option A is
-   to disable `@deepseek-ai/dsh-tool-git` in a preset. No such package — and no
-   `git` tool name — exists in DSH `0.2.0-rc.2`. Git is reachable only through
-   the `bash` tool, so the guard has to target **`bash` argument text**.
+The model is told, in its system prompt, that version control here is Jujutsu
+and what that implies. The rule is withheld where it would be false: in a plain
+Git repo, or in a directory with no repository at all.
 
-4. **The "silent translation layer" is not implementable.** `tools/pre-execute`
-   explicitly excludes input rewriting, and the thread's `callContext.bypass(…)`
-   does not exist. This is convenient: the design already rejects the silent
-   approach (turns 8→9), so the correct mechanism is the loud one.
+In a directory with **no** version control, the plugin says so — so the agent
+can offer to initialise one, suggesting `jj git init` (colocated, so Git tooling
+still works).
 
-5. **`jj-hunk` is the right primitive for a headless agent.** Native `jj` wants
-   an interactive TUI (`jj split -i`) to split hunks; `jj-hunk` is a
-   non-interactive CLI with `json`/`yaml` output, which is what a tool-calling
-   agent needs. See [`docs/08-jj-hunk.md`](docs/08-jj-hunk.md).
+## Configuration
 
-## The digest
+Open **Plugins → Jujutsu**. Everything is on that page.
 
-[`research/digest.md`](research/digest.md) is the record of what that research
-thread established, written to stand alone. It is **hand-maintained**: the raw
-scrape it came from has been deleted, so there is nothing left to regenerate it
-from. Treat it as a primary document, not a build product.
+| Setting | Default | What it changes |
+|---|---|---|
+| Guard | `deny` | `off` leaves the guard mounted but inert — useful to see what it *would* have caught |
+| Read-only Git | `ask` | What to do with `git status`, `git log`, … |
+| Writing Git | `ask` | What to do with `git commit`, `git push`, … |
+| Remember approvals | on | Stop re-asking about a verb you already approved, for this session |
+| Mention missing version control | on | Tell the model when a directory has no repository |
+| Prefer Jujutsu | on | Suggest `jj git init` rather than `git init` |
+| Explain Jujutsu in the prompt | on | Off means the guard still refuses Git but the model is not told why |
+| Offer the jj manual | on | Ship the `jj` manual as an on-demand skill |
+| jj / jj-hunk executable | `jj`, `jj-hunk` | Set these when they are not on `PATH` |
 
-## Privacy
+### Turning it off for one project
 
-The source thread was a personal Google AI Mode share link and the conversation
-behind it was private. **The verbatim transcript is not kept.** It was distilled
-into [`research/digest.md`](research/digest.md), which carries the technical
-record and none of the personal material, and the raw scrape, the cleaned
-transcript and the per-turn files were deleted. The digest is safe to publish;
-the thread was not.
+Drop a `.dsh-jujutsu.json` in the project root:
 
-## Building
+```json
+{ "enabled": false }
+```
+
+The **nearest** marker walking up from the working directory wins, so you can
+disable a monorepo and re-enable one vendored `jj` repo inside it with
+`{"enabled": true}`.
+
+The file is yours to place — add it to `.gitignore` if the switch should stay
+local, or commit it to share the behaviour with your team. A malformed marker is
+ignored rather than obeyed, so a typo cannot silently disable the guard.
+
+## Troubleshooting
+
+**"Refused" when I wanted Git.** That is the plugin working. Set *Read-only Git*
+or *Writing Git* to `allow`, or add a `.dsh-jujutsu.json` with
+`{"enabled": false}` for that project.
+
+**Nothing happens at all.** The plugin only acts inside a Jujutsu workspace —
+a directory with a `.jj` directory, in it or any parent. Check with
+`jj status`; if that says *"There is no jj repo in '.'"*, the plugin is correctly
+inactive. `jj git init` creates one (colocated by default).
+
+**The hunk tools say unavailable.** `jj-hunk` is not installed or not on `PATH`.
+Set *jj-hunk executable* to an absolute path, or install it.
+
+**`jj new` or `jj commit` is refused.** The plugin refuses commit-creating
+commands when `jj` has no identity configured, because `jj` would create a commit
+with an empty author that **cannot be pushed**:
+
+```bash
+jj config set --user user.name "Your Name"
+jj config set --user user.email "you@example.com"
+```
+
+Commands that *preserve* an author — `jj describe`, `jj squash` — are not
+affected.
+
+## For developers
+
+The rest of this file is about building and verifying the plugin itself.
+
+### Build and test
 
 ```bash
 pnpm run build     # tsc -p tsconfig.build.json  ->  lib/
@@ -119,30 +145,46 @@ pnpm run ci        # tsc --noEmit + vitest
 
 **`lib/` is not optional and not committed.** The published entry is emitted
 JavaScript, because Node **refuses to strip types for files under
-`node_modules`**:
-
-```
-ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING
-```
-
-That is why the plugin works from a `link:` install and would not work from a
-tarball: a link resolves to the working tree (where stripping is allowed), while
-a real install lands in `node_modules` (where it is not). Shipping
-`main: "src/index.ts"` therefore produces a package that cannot load once
-installed — measured, not assumed.
+`node_modules`** (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`). That is why the
+plugin works from a `link:` install and would not work from a tarball: a link
+resolves to the working tree, where stripping is allowed.
 
 `tsconfig.build.json` emits with `rewriteRelativeImportExtensions`, so the
-`./foo.ts` specifiers the source uses become `./foo.js` in the output without a
-bundler. `lib/` is gitignored; `files` ships it, and `prepublishOnly` rebuilds
-it, so a tarball always carries fresh JavaScript.
-
-### Publishing
+`./foo.ts` specifiers the source uses become `./foo.js` without a bundler.
 
 ```bash
-pnpm publish        # prepublishOnly runs the build and the full suite first
+pnpm publish       # prepublishOnly runs the build and the full suite first
 ```
 
-The package declares the harness packages as **peerDependencies**, matching the
-sibling `dsh-tinyfish` convention: the host provides `@deepseek-ai/dsh-tools` and
-`@deepseek-ai/dsh-llm`, which the built JavaScript imports at runtime.
-`@deepseek-ai/schemastery` is the only true dependency.
+### Layout
+
+| | |
+|---|---|
+| `src/` | The host half — guard, tools, prompt, detection. See [`src/README.md`](src/README.md). |
+| `client/` | The panel. Built-in harness components only. |
+| `locale/` | Display name and one-liner, per language. |
+| `SPEC.md` | The build specification. |
+| `docs/` | 36 documents: verified contracts, measurements, decisions. |
+| `research/digest.md` | The durable record of the conversation that seeded the design. |
+
+### What is verified, and how
+
+Every claim about the harness was read from the `0.2.0-rc.2` source with line
+citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
+`jj` was measured against the installed 0.46.0 ([docs/13](docs/13-empirical-verification.md)).
+Both documents record what the sweeps did **not** find, and what remains open.
+
+The guard, the eleven tools, the prompt injection and the panel have all been
+observed working in a live session. **111 tests**, `pnpm run ci` green.
+
+### Where this came from
+
+The design conversation happened in a **Google AI Mode** thread, shared as a
+public link, and was scraped through an anti-bot proxy. The transcript is **not
+kept verbatim** — it carried a personal share link and a private conversation.
+It was distilled into [`research/digest.md`](research/digest.md) and the raw
+scrape deleted. The digest is safe to publish; the thread was not.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

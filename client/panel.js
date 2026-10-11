@@ -12,10 +12,9 @@
  * ## Built-in components only
  *
  * Every control is a harness primitive: `SettingsForm` for the frame,
- * `SettingsFormModel` for the drafts, and **`ConfigField`** for each field.
- * Nothing here draws its own label, input, reset or validation message —
- * `ConfigField` owns all of that, which is what keeps the panel looking like the
- * rest of the settings surface and surviving a restyle.
+ * `SettingsFormModel` for the drafts, **`ConfigField`** for each field, and
+ * **`DisclosureRow`** for each group. Nothing here draws its own label, input,
+ * reset or validation message.
  *
  * `ConfigField` is driven by `value: string` plus `choices`:
  *
@@ -23,20 +22,19 @@
  * - **`choices`** → a finite control (an enum, and `["true","false"]` for a
  *   boolean).
  *
- * So the field *kind* decides the control, and the panel never reaches for
- * `Switch` or `SegmentedControl` directly.
- *
  * ## Where it is mounted
  *
  * `plugins.bundle.config`, keyed by the **package name** — the bundle's own
- * page, between its description and its rows. Not `plugins.row.config`: that one
- * puts the configuration behind a Configure control on a single row, which is
- * right for a bundle declaring several rows with different settings. This bundle
- * declares one row and one configuration, so the configuration belongs on the
- * plugin's own page.
+ * page, between its description and its rows. That slot renders `view: 'page'`
+ * only, so there is no `summary` branch to get wrong.
  *
- * `plugins.bundle.config` is also simpler by contract: it renders `view: 'page'`
- * **only**, so there is no `summary` branch to get wrong.
+ * ## Translation
+ *
+ * Every string lives in `STRINGS`, keyed, with one entry per locale, and the
+ * panel reads them through the `t` the slot supplies (`locale: NS` in the
+ * registration). Nothing is written inline. The **display name and one-liner
+ * are not here** — those are `locale/<lang>.json`, read by the host through
+ * `readPluginMeta`, because they must render before any bundle loads.
  *
  * ## Why it is hand-written JavaScript
  *
@@ -68,132 +66,179 @@
     exports.NS = NS;
 
     /**
-     * Every field, grouped the way a user thinks about them rather than the
-     * order `Config` declares them.
-     */
-    var GROUPS = [
-      {
-        id: "guard",
-        title: "Guard",
-        blurb:
-          "What happens when the model reaches for Git inside a Jujutsu workspace.",
-        fields: ["guard", "readOnlyGit", "bypass", "rememberBypass"],
-      },
-      {
-        id: "init",
-        title: "When there is no repository",
-        blurb:
-          "A directory with neither .jj nor .git has no history at all. The plugin can say so.",
-        fields: ["alertUninitialised", "preferJj"],
-      },
-      {
-        id: "prompt",
-        title: "Teaching",
-        blurb: "What the model is told about version control here.",
-        fields: ["injectContext", "teachSkill"],
-      },
-      {
-        id: "binaries",
-        title: "Binaries",
-        blurb: "Where jj and jj-hunk are found.",
-        fields: ["jjPath", "jjHunkPath", "hunkInstall"],
-      },
-      {
-        id: "master",
-        title: "Master switch",
-        blurb: "Turns the whole plugin off, guard included.",
-        fields: ["enabled"],
-      },
-    ];
-
-    /**
-     * Field metadata: the accepted choices and the label.
+     * Every string the panel renders, per locale.
      *
-     * `choices` is what `ConfigField` renders as a finite control; an empty list
-     * means a text input. The `hint` strings are the `Config` field descriptions
-     * verbatim, kept in step by a test that reads both files.
+     * Keys are flat and prefixed by what they belong to, so a missing
+     * translation is visible as a missing key rather than as English leaking
+     * into a translated page. `zh` is checked by a test that walks both objects
+     * and fails on any key present in one and not the other.
      */
-    var FIELDS = {
-      enabled: {
-        kind: "boolean",
-        label: "Enabled",
-        hint: "Master switch. Off unregisters everything: no guard, no tools, no prompt injection.",
+    var STRINGS = {
+      en: {
+        save: "Save",
+        saving: "Saving…",
+        saveFailed: "The host did not accept the save.",
+        unavailable:
+          "This plugin is not currently mounted, so its settings cannot be edited.",
+        readOnly: "This deployment stores settings read-only.",
+        reset: "Reset to default",
+        inherited: "Inherited",
+        invalid: "Not a value this field accepts",
+
+        groupGuard: "Guard",
+        groupGuardBlurb:
+          "What happens when the model reaches for Git inside a Jujutsu workspace.",
+        groupInit: "When there is no repository",
+        groupInitBlurb:
+          "A directory with neither .jj nor .git has no history at all. The plugin can say so.",
+        groupPrompt: "Teaching",
+        groupPromptBlurb: "What the model is told about version control here.",
+        groupBinaries: "Binaries",
+        groupBinariesBlurb: "Where jj and jj-hunk are found.",
+        groupMaster: "Master switch",
+        groupMasterBlurb: "Turns the whole plugin off, guard included.",
+
+        enabledLabel: "Enabled",
+        enabledHint:
+          "Master switch. Off unregisters everything: no guard, no tools, no prompt injection.",
+        guardLabel: "Guard",
+        guardHint:
+          "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
+        readOnlyGitLabel: "Read-only Git",
+        readOnlyGitHint:
+          "What to do with Git commands that only read (status, log, diff, show, blame). ask prompts; allow is for users who want the model to inspect Git directly. Mutating forms are never covered by this setting.",
+        bypassLabel: "Writing Git",
+        bypassHint:
+          "What to do with Git commands that write (commit, push, checkout, rebase). ask requests a one-call approval; deny never asks; allow disables the guard for these.",
+        rememberBypassLabel: "Remember approvals",
+        rememberBypassHint:
+          "After you approve one Git command, stop asking about that same verb for the rest of the session. In memory only — it does not survive a restart.",
+        alertUninitialisedLabel: "Mention missing version control",
+        alertUninitialisedHint:
+          "When a directory has no version control at all, tell the model so it can offer to initialise one. Off means the plugin stays silent outside a repository.",
+        preferJjLabel: "Prefer Jujutsu",
+        preferJjHint:
+          "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when alertUninitialised is on.",
+        injectContextLabel: "Explain Jujutsu in the prompt",
+        injectContextHint:
+          "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",
+        teachSkillLabel: "Offer the jj manual",
+        teachSkillHint:
+          "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
+        jjPathLabel: "jj executable",
+        jjPathHint:
+          "The jj executable. Change this when jj is not on PATH, or to pin a specific build.",
+        jjHunkPathLabel: "jj-hunk executable",
+        jjHunkPathHint:
+          "The jj-hunk executable. Hunk-level split and squash need it; without it those tools report unavailable rather than failing.",
+        hunkInstallLabel: "When jj-hunk is missing",
+        hunkInstallHint:
+          "What to do when jj-hunk is missing. ask offers a pinned cargo install; never only reports; auto installs without asking.",
       },
-      guard: {
-        kind: "enum",
-        label: "Guard",
-        choices: ["deny", "off"],
-        hint: "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
-      },
-      readOnlyGit: {
-        kind: "enum",
-        label: "Read-only Git",
-        choices: ["deny", "ask", "allow"],
-        hint: "What to do with Git commands that only read (status, log, diff, show, blame). ask prompts; allow is for users who want the model to inspect Git directly. Mutating forms are never covered by this setting.",
-      },
-      bypass: {
-        kind: "enum",
-        label: "Writing Git",
-        choices: ["ask", "deny", "allow"],
-        hint: "What to do with Git commands that write (commit, push, checkout, rebase). ask requests a one-call approval; deny never asks; allow disables the guard for these.",
-      },
-      rememberBypass: {
-        kind: "boolean",
-        label: "Remember approvals",
-        hint: "After you approve one Git command, stop asking about that same verb for the rest of the session. In memory only — it does not survive a restart.",
-      },
-      alertUninitialised: {
-        kind: "boolean",
-        label: "Mention missing version control",
-        hint: "When a directory has no version control at all, tell the model so it can offer to initialise one. Off means the plugin stays silent outside a repository.",
-      },
-      preferJj: {
-        kind: "boolean",
-        label: "Prefer Jujutsu",
-        hint: "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when alertUninitialised is on.",
-      },
-      injectContext: {
-        kind: "boolean",
-        label: "Explain Jujutsu in the prompt",
-        hint: "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",
-      },
-      teachSkill: {
-        kind: "boolean",
-        label: "Offer the jj manual",
-        hint: "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
-      },
-      jjPath: {
-        kind: "text",
-        label: "jj executable",
-        hint: "The jj executable. Change this when jj is not on PATH, or to pin a specific build.",
-      },
-      jjHunkPath: {
-        kind: "text",
-        label: "jj-hunk executable",
-        hint: "The jj-hunk executable. Hunk-level split and squash need it; without it those tools report unavailable rather than failing.",
-      },
-      hunkInstall: {
-        kind: "enum",
-        label: "When jj-hunk is missing",
-        choices: ["ask", "never", "auto"],
-        hint: "What to do when jj-hunk is missing. ask offers a pinned cargo install; never only reports; auto installs without asking.",
+      zh: {
+        save: "保存",
+        saving: "保存中…",
+        saveFailed: "宿主未接受本次保存。",
+        unavailable: "该插件当前未挂载，因此无法编辑其设置。",
+        readOnly: "该部署以只读方式存储设置。",
+        reset: "恢复默认值",
+        inherited: "继承值",
+        invalid: "不是该字段接受的值",
+
+        groupGuard: "拦截",
+        groupGuardBlurb: "当模型在 Jujutsu 工作区内尝试使用 Git 时的行为。",
+        groupInit: "当目录中没有版本控制",
+        groupInitBlurb:
+          "既没有 .jj 也没有 .git 的目录完全没有历史记录，插件可以提醒模型。",
+        groupPrompt: "引导",
+        groupPromptBlurb: "向模型说明此处的版本控制方式。",
+        groupBinaries: "可执行文件",
+        groupBinariesBlurb: "jj 与 jj-hunk 的查找位置。",
+        groupMaster: "总开关",
+        groupMasterBlurb: "关闭整个插件，包括拦截功能。",
+
+        enabledLabel: "启用",
+        enabledHint: "总开关。关闭后不再注册任何内容：没有拦截、没有工具、也不注入提示。",
+        guardLabel: "拦截",
+        guardHint:
+          "deny 会拒绝 Jujutsu 工作区内的 Git 命令；off 仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
+        readOnlyGitLabel: "只读 Git",
+        readOnlyGitHint:
+          "对只读取的 Git 命令（status、log、diff、show、blame）如何处理。ask 会询问；allow 适合希望模型直接查看 Git 的用户。会写入的命令不受此项影响。",
+        bypassLabel: "写入型 Git",
+        bypassHint:
+          "对会写入的 Git 命令（commit、push、checkout、rebase）如何处理。ask 请求单次批准；deny 从不询问；allow 对这些命令关闭拦截。",
+        rememberBypassLabel: "记住批准",
+        rememberBypassHint:
+          "批准过某个 Git 命令后，本次会话内不再就同一动作重复询问。仅存于内存，重启后失效。",
+        alertUninitialisedLabel: "提示缺少版本控制",
+        alertUninitialisedHint:
+          "当目录完全没有版本控制时告知模型，以便它主动建议初始化。关闭后插件在仓库之外保持静默。",
+        preferJjLabel: "优先使用 Jujutsu",
+        preferJjHint:
+          "初始化时建议哪一种：jj git init（共置仓库，Git 工具链仍可用）或普通 git init。仅在开启「提示缺少版本控制」时生效。",
+        injectContextLabel: "在提示中说明 Jujutsu",
+        injectContextHint:
+          "在系统提示中告知模型此处的版本控制是 Jujutsu。关闭后拦截仍会拒绝 Git，但模型不会知道原因。",
+        teachSkillLabel: "提供 jj 手册",
+        teachSkillHint:
+          "将 jj 手册作为按需技能提供。对 token 影响中性；关闭只意味着模型在需要深入时能读到的内容更少。",
+        jjPathLabel: "jj 可执行文件",
+        jjPathHint: "jj 可执行文件。当 jj 不在 PATH 中，或需要固定某个构建时修改此项。",
+        jjHunkPathLabel: "jj-hunk 可执行文件",
+        jjHunkPathHint:
+          "jj-hunk 可执行文件。按块拆分与合并需要它；缺失时相关工具会报告不可用，而不是直接失败。",
+        hunkInstallLabel: "缺少 jj-hunk 时",
+        hunkInstallHint:
+          "jj-hunk 缺失时的行为。ask 提议使用固定版本的 cargo 安装；never 仅报告；auto 直接安装。",
       },
     };
 
-    /** The English dictionary. */
-    var en = {
-      title: "Jujutsu",
-      description:
-        "Makes the harness jj-native: Git is refused inside a Jujutsu workspace and the model is given the jj command instead.",
-      save: "Save",
-      saving: "Saving…",
-      saveFailed: "The host did not accept the save.",
-      unavailable:
-        "This plugin is not currently mounted, so its settings cannot be edited.",
-      readOnly: "This deployment stores settings read-only.",
-      reset: "Reset to default",
-      inherited: "Inherited",
-      invalid: "Not a value this field accepts",
+    /**
+     * The groups, in the order the panel draws them, referencing string keys.
+     *
+     * The keys are the contract: a group whose `titleKey` is missing from a
+     * locale renders that key, which is visible immediately rather than
+     * silently falling back to English.
+     */
+    var GROUPS = [
+      { id: "guard", titleKey: "groupGuard", blurbKey: "groupGuardBlurb",
+        fields: ["guard", "readOnlyGit", "bypass", "rememberBypass"] },
+      { id: "init", titleKey: "groupInit", blurbKey: "groupInitBlurb",
+        fields: ["alertUninitialised", "preferJj"] },
+      { id: "prompt", titleKey: "groupPrompt", blurbKey: "groupPromptBlurb",
+        fields: ["injectContext", "teachSkill"] },
+      { id: "binaries", titleKey: "groupBinaries", blurbKey: "groupBinariesBlurb",
+        fields: ["jjPath", "jjHunkPath", "hunkInstall"] },
+      { id: "master", titleKey: "groupMaster", blurbKey: "groupMasterBlurb",
+        fields: ["enabled"] },
+    ];
+
+    /**
+     * The fields: kind, string keys, and the choices `ConfigField` renders.
+     *
+     * `choices` empty means a text input; a finite list means a choice control.
+     */
+    var FIELDS = {
+      enabled: { kind: "boolean", labelKey: "enabledLabel", hintKey: "enabledHint" },
+      guard: { kind: "enum", labelKey: "guardLabel", hintKey: "guardHint",
+        choices: ["deny", "off"] },
+      readOnlyGit: { kind: "enum", labelKey: "readOnlyGitLabel", hintKey: "readOnlyGitHint",
+        choices: ["deny", "ask", "allow"] },
+      bypass: { kind: "enum", labelKey: "bypassLabel", hintKey: "bypassHint",
+        choices: ["ask", "deny", "allow"] },
+      rememberBypass: { kind: "boolean", labelKey: "rememberBypassLabel",
+        hintKey: "rememberBypassHint" },
+      alertUninitialised: { kind: "boolean", labelKey: "alertUninitialisedLabel",
+        hintKey: "alertUninitialisedHint" },
+      preferJj: { kind: "boolean", labelKey: "preferJjLabel", hintKey: "preferJjHint" },
+      injectContext: { kind: "boolean", labelKey: "injectContextLabel",
+        hintKey: "injectContextHint" },
+      teachSkill: { kind: "boolean", labelKey: "teachSkillLabel", hintKey: "teachSkillHint" },
+      jjPath: { kind: "text", labelKey: "jjPathLabel", hintKey: "jjPathHint" },
+      jjHunkPath: { kind: "text", labelKey: "jjHunkPathLabel", hintKey: "jjHunkPathHint" },
+      hunkInstall: { kind: "enum", labelKey: "hunkInstallLabel", hintKey: "hunkInstallHint",
+        choices: ["ask", "never", "auto"] },
     };
 
     /** The choices `ConfigField` renders for a boolean. */
@@ -206,13 +251,7 @@
       return [];
     }
 
-    /**
-     * A boolean field, staged as text.
-     *
-     * The primitives ship text and number specs only, so this is the same
-     * contract written here: `format` renders the stored value, `parse` returns
-     * the write or `undefined` to block the save.
-     */
+    /** A boolean field, staged as text. */
     function booleanField(field) {
       return {
         field: field,
@@ -253,19 +292,28 @@
     }
 
     /**
-     * One field, rendered by `ConfigField`.
+     * Translate a key, falling back to the key itself.
      *
-     * The component owns the label, the control, the reset affordance and the
-     * validation message; this function only maps the form model's per-field
-     * state onto its props. `choices` is what selects the control, so a boolean
-     * and an enum are one code path.
+     * The fallback is the key rather than English on purpose: a missing
+     * translation should be obvious in the UI, not hidden behind a language the
+     * reader may not have asked for.
      */
-    function control(model, name) {
+    function translator(props) {
+      var t = props.t;
+      return function (key) {
+        if (typeof t !== "function") return key;
+        var value = t(key);
+        return typeof value === "string" && value.length > 0 ? value : key;
+      };
+    }
+
+    /** One field, rendered by `ConfigField`. */
+    function control(model, name, t) {
       var meta = FIELDS[name];
       var state = model.field(name);
       return h(primitives.ConfigField, {
         key: name,
-        label: meta.label,
+        label: t(meta.labelKey),
         value: state.text,
         secret: false,
         choices: choicesOf(meta),
@@ -273,9 +321,9 @@
         overridden: state.overridden,
         invalid: state.invalid,
         labels: {
-          reset: en.reset,
-          inherited: en.inherited,
-          invalid: en.invalid,
+          reset: t("reset"),
+          inherited: t("inherited"),
+          invalid: t("invalid"),
         },
         onChange: state.onEdit,
         onReset: state.onReset,
@@ -285,21 +333,20 @@
     /**
      * One collapsible group of fields.
      *
-     * `DisclosureRow` is the harness's own disclosure header and is
-     * **controlled** — it takes `open` and `onToggle` and holds no state — so
-     * the open/closed state lives here. Groups start open: a settings page
-     * whose fields are all hidden on arrival makes the user click to discover
-     * what is configurable.
+     * `DisclosureRow` is controlled (`open` + `onToggle`, no internal state), so
+     * the open state lives here. Groups start open: a settings page whose fields
+     * are all hidden makes the user click to discover what is configurable.
      */
     function Group(props) {
       var pair = react.useState(true);
       var open = pair[0];
       var setOpen = pair[1];
+      var t = props.t;
       return h(
         primitives.DisclosureRow,
         {
           icon: null,
-          title: props.group.title,
+          title: t(props.group.titleKey),
           open: open,
           expandable: true,
           onToggle: function () {
@@ -307,29 +354,30 @@
           },
           expandOnRowClick: true,
         },
-        h("p", { key: "blurb" }, props.group.blurb),
+        h("p", { key: "blurb" }, t(props.group.blurbKey)),
         props.group.fields.map(function (name) {
-          return control(props.model, name);
+          return control(props.model, name, t);
         }),
       );
     }
 
     /** The panel: the form frame, then one disclosure per group. */
     function Panel(props) {
+      var t = translator(props);
       var model = props.model;
       var shell = model.shell();
       var blocks = GROUPS.map(function (group) {
-        return h(Group, { key: group.id, group: group, model: model });
+        return h(Group, { key: group.id, group: group, model: model, t: t });
       });
       return h(
         primitives.SettingsForm,
         {
           labels: {
-            save: en.save,
-            saving: en.saving,
-            saveFailed: en.saveFailed,
-            unavailable: en.unavailable,
-            readOnly: en.readOnly,
+            save: t("save"),
+            saving: t("saving"),
+            saveFailed: t("saveFailed"),
+            unavailable: t("unavailable"),
+            readOnly: t("readOnly"),
           },
           state: shell,
           onSave: shell.onSave,
@@ -343,7 +391,7 @@
     function apply(ctx) {
       ctx.effect(function () {
         try {
-          return ctx.locale.register(NS, { en: en });
+          return ctx.locale.register(NS, { en: STRINGS.en, zh: STRINGS.zh });
         } catch (error) {
           return undefined;
         }
@@ -357,8 +405,6 @@
 
       ctx.effect(function () {
         var stop = ctx.configForms.whileServed([NS], function () {
-          // The bundle's own configuration, keyed by the package name. It
-          // renders on the plugin's page between the description and the rows.
           var dispose = ctx.slots.inject("plugins.bundle.config", function () {
             return ctx.slots.register(
               {
@@ -385,12 +431,12 @@
     exports.apply = apply;
     exports.FIELDS = FIELDS;
     exports.GROUPS = GROUPS;
+    exports.STRINGS = STRINGS;
     exports.Panel = Panel;
     exports.booleanField = booleanField;
     exports.enumField = enumField;
     exports.buildSpecs = buildSpecs;
     exports.choicesOf = choicesOf;
-    exports.en = en;
 
     return module.exports;
   };
