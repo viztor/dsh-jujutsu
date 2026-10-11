@@ -43,10 +43,3 @@ export function isRemembered(sessionId: string, verb: string): boolean {
 export function forget(): void {
   ALLOWED.clear();
 }
-
-/** How many grants are held, for tests. */
-export function grantCount(): number {
-  let total = 0;
-  for (const verbs of ALLOWED.values()) total += verbs.size;
-  return total;
-}

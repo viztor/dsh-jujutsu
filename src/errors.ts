@@ -67,20 +67,14 @@ export function toolError(
   return { error: { code, message, ...(hint === undefined ? {} : { hint }) } };
 }
 
-/**
- * Codes that are **fail-open** — the plugin keeps working.
+/*
+ * There is deliberately no `FAIL_OPEN` set here.
  *
- * The discriminator is who pays for the mistake (`docs/26` §C): fail open on
- * anything that only limits what the plugin itself can do; fail closed on
- * anything that would let the user create a durable artifact they cannot easily
- * undo.
+ * One existed and nothing consumed it. The fail-open policy is real, but it is
+ * implemented as a **blanket** `try { … } catch { return next(); }` in
+ * `guard.ts`, not as a decision per code: the guard cannot distinguish a benign
+ * failure from a serious one at the point it catches, because the failure may
+ * have come from anywhere in the detection path. A set naming seven codes read
+ * as though that selective handling existed, which made the code look more
+ * careful than it was. The discriminator is recorded in `docs/26` §C.
  */
-export const FAIL_OPEN: ReadonlySet<ErrorCode> = new Set([
-  ErrorCode.NOT_JJ_WORKSPACE,
-  ErrorCode.WORKSPACE_ROOT_UNRESOLVED,
-  ErrorCode.JJ_REPO_BROKEN,
-  ErrorCode.JJ_EXEC_FAILED,
-  ErrorCode.SHELL_EXEC_FAILED,
-  ErrorCode.SHELL_TIMEOUT,
-  ErrorCode.FS_ERROR,
-]);

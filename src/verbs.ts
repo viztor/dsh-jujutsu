@@ -141,6 +141,3 @@ export function isReadOnlyForm(verb: string, args: readonly string[]): boolean {
   const form = args[0] ?? "";
   return forms.includes(form);
 }
-
-/** The verbs this module treats as always read-only. For tests and docs. */
-export const alwaysReadOnlyVerbs: readonly string[] = [...ALWAYS_READ_ONLY];

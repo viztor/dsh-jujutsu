@@ -7,7 +7,7 @@
  * detection inside the guard is exercised for real rather than stubbed.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apply } from "../src/index.ts";
 import { forget } from "../src/bypass.ts";
@@ -291,5 +291,44 @@ describe("destructive paths — expansions must not over-trigger", () => {
     expect((await harness.preExecute(at(harness, "rm -rf $DIR/.gitignore"))).kind).toBe(
       "allow",
     );
+  });
+});
+
+describe("fail-open is loud", () => {
+  it("allows the call and reports the error when the guard throws", async () => {
+    // Fail-open is deliberate: a throw here would become a tool error that skips
+    // post-execute for *every* call. But swallowing it silently means a broken
+    // detector disables the guard for the rest of the session and nothing says
+    // so — the user would read that as "there was nothing to refuse".
+    //
+    // Reaching the fail-open path needs something the guard does NOT already
+    // guard internally. Breaking `ctx.fs` does not work: `detect.safeType`
+    // catches that itself and returns `undefined`, so the call is allowed by the
+    // ordinary "cannot tell" route and the outer catch never runs. `decide`
+    // reads `exec.name` unguarded, so a throwing getter lands there.
+    const h = fakeHarness();
+    apply(h.ctx, { guard: "deny", bypass: "deny", readOnlyGit: "deny" });
+
+    const exec = bash(h, "git commit -m 'fix'");
+    Object.defineProperty(exec, "name", {
+      get() {
+        throw new Error("detector exploded");
+      },
+      configurable: true,
+    });
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const decision = await h.preExecute(exec);
+      // Fail open: the command is allowed.
+      expect(decision.kind).toBe("allow");
+      // And it is reported, tagged with the package so it can be found.
+      expect(spy).toHaveBeenCalled();
+      const reported = spy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(reported).toContain("[dsh-jujutsu]");
+      expect(reported).toContain("guard failed");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -21,15 +21,16 @@ is `docs/24-implementation-plan.md` §4.
 | `preflight.ts` | the 14 environment checks at `agent/created` | `docs/26` Part A |
 | `hunk.ts` | the `jj-hunk` bridge | `docs/08`, `docs/24` §3.8 |
 | `tools.ts` | the eleven first-class tools | `docs/18`, `docs/25` §3 |
+| `state.ts` | the cached per-session workspace state the prompt reads | `docs/22` §2 |
 | `marker.ts` | the per-project switch, `.dsh-jujutsu.json` | `docs/29` §3 |
 | `shell.ts` | `ctx.shell` wrapper + `shellQuote` | `docs/24` §1, §3.1 |
-| `errors.ts` | error codes, `toolError`, the fail-open set | `docs/26` Part B |
+| `errors.ts` | error codes and `toolError` | `docs/26` Part B |
 
 ## State
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 52 tests, `pnpm run ci` green:
+Implemented and tested — 132 tests, `pnpm run ci` green:
 
 | Module | What works |
 |---|---|
@@ -67,13 +68,19 @@ workspace" and let the command through.
 
 ### What is verified, and how
 
-| Layer | Evidence |
+| Layer | Where the evidence is |
 |---|---|
-| detection | 14 tests against **real fixture repos** on disk, including a subdirectory walk-up and a nested repo |
-| the resolver | the 64-command corpus, asserting the prototype's exact numbers |
-| the guard | 21 tests driving `apply()` through a harness double, plus **three live cases** against real repos |
-| the injection | 9 tests, including that both contributions are empty outside a `jj` workspace |
-| the tools | 5 tests, including that **every definition is accepted by the real `defineTool`** |
+| detection | [`test/detect.test.ts`](../test/detect.test.ts) — **real fixture repos** on disk, including a subdirectory walk-up and a nested repo |
+| the resolver | [`test/parse.test.ts`](../test/parse.test.ts) — the 64-command corpus, asserting the prototype's exact numbers |
+| the guard | [`test/guard.test.ts`](../test/guard.test.ts) — drives `apply()` through a harness double, plus **three live cases** against real repos |
+| the injection | [`test/context.test.ts`](../test/context.test.ts) — including that both contributions are empty outside a `jj` workspace |
+| the tools | [`test/tools.test.ts`](../test/tools.test.ts) — including that **every definition is accepted by the real `defineTool`** |
+| the panel | [`test/panel.test.ts`](../test/panel.test.ts) — the schema contract, the built-in-only rule, and that no handler is `undefined` |
+| the binaries | [`test/e2e.test.ts`](../test/e2e.test.ts) — real `jj` and `jj-hunk` through the plugin's own shell contract |
+
+Counts are deliberately absent: a table of numbers goes stale the first time
+someone adds a test, and did. `test/docs.test.ts` now checks that any count the
+documentation *does* state matches reality.
 
 ### One live verification is still pending, and the cause is now proven
 

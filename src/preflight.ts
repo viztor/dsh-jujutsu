@@ -73,9 +73,12 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
         jjHunk: await hasJjHunk(ctx, settings, workspace.root),
         ...(await changeId(ctx, settings, workspace.root)),
       });
-    } catch {
+    } catch (error) {
       // Never fail session creation. A broken preflight must not cost the user
       // their session; the checks degrade to their lazy per-call fallbacks.
+      // Reported anyway: "degraded to the lazy fallback" and "never ran" look
+      // identical from the outside.
+      console.error("[dsh-jujutsu] preflight failed, using per-call fallbacks:", error);
     }
   });
 }

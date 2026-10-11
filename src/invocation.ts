@@ -817,16 +817,6 @@ function probeCell(result: Invocation) {
   return 'git: ' + result.gitInvocations.map((s) => '`' + s + '`').join(', ');
 }
 
-function esc(s: string) {
-  return String(s).replace(/\|/g, '\\|').replace(/\n/g, '\\n');
-}
-
-function table(rows: readonly (readonly string[])[]) {
-  const out: string[] = [];
-  for (const r of rows) out.push('| ' + r.map(esc).join(' | ') + ' |');
-  return out.join('\n');
-}
-
 /**
  * Run the whole corpus. Exported so the test can assert the port behaves
  * identically to the prototype rather than reimplementing the scoring.

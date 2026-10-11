@@ -72,11 +72,6 @@ export function markAsked(exec: ToolExecution, refusal: Refusal): void {
   PENDING.set(exec, { refusal, asked: true });
 }
 
-/** What did the guard decide about this call? */
-export function pendingOf(exec: ToolExecution): Pending | undefined {
-  return PENDING.get(exec);
-}
-
 /** Register the explainer. */
 export function applyExplain(ctx: Context, settings: Settings): void {
   if (settings.guard === "off") return;
@@ -108,8 +103,11 @@ export function applyExplain(ctx: Context, settings: Settings): void {
           }),
         ],
       };
-    } catch {
+    } catch (error) {
       // Never let the explainer change the outcome of a call it did not decide.
+      // Reported because the explanation is the half of the denial the model
+      // actually reads; losing it silently makes a correct refusal look abrupt.
+      console.error("[dsh-jujutsu] explanation failed, denial stands:", error);
     }
     return next();
   });

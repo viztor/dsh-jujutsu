@@ -85,9 +85,17 @@ export function applyGuard(ctx: Context, settings: Settings): void {
   ctx.on("tools/pre-execute", async (exec, next) => {
     try {
       return await decide(ctx, exec, next, settings);
-    } catch {
+    } catch (error) {
       // Fail open, and never let a detector bug escape: a throw here becomes a
       // tool error that skips post-execute for *every* call, not just this one.
+      //
+      // But fail open **loudly**. Swallowing this silently means a broken
+      // detector disables the guard for the rest of the session and nothing
+      // anywhere says so — the user would conclude the plugin simply had
+      // nothing to refuse. The tag matches the harness convention
+      // (`cordis-client-runner` reports render failures the same way); the host
+      // writes to stderr, so this cannot disturb a protocol stream on stdout.
+      console.error("[dsh-jujutsu] guard failed, allowing this call:", error);
       return next();
     }
   });
