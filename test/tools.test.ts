@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 /**
  * The tool surface.
  *
@@ -108,9 +110,14 @@ describe("jj bookmark flags — verified against jj 0.46.0", () => {
 });
 
 describe("jj output parsing — real jj 0.46.0 shapes", () => {
-  // Captured verbatim from `jj log --no-graph -T 'json(self)' -r '@|@-'` on
-  // 0.46.0. Note there is no `conflict` key: that is why jj_status queries it
-  // separately.
+  // The objects below are real 0.46.0 output; the **newlines between them are
+  // not**. `jj log --no-graph -T 'json(self)'` writes its objects back to back
+  // with no separator at all, so this fixture used to describe a shape jj never
+  // produces — which is exactly why the suite passed while `jj_log`, `jj_status`
+  // and `jj_op_log` were broken in production. The plugin's templates now end
+  // with `++ "\n"`, and the test below asserts that they do.
+  //
+  // Note there is no `conflict` key: that is why jj_status queries it separately.
   const REAL_NDJSON = [
     '{"commit_id":"3f36cebc222466bf08f46ecf9cb3245dcfb1fa42","parents":["e0cb8ce0f145457cfb9e91f85b3ccaa0741d2b73"],"change_id":"nqmnskmmvnttwxkzqmttkqpvtnzrroqx","description":"","author":{"name":"dsh-jujutsu fixture","email":"fixture@example.invalid","timestamp":"2026-10-10T16:22:34+08:00"}}',
     '{"commit_id":"e0cb8ce0f145457cfb9e91f85b3ccaa0741d2b73","parents":[],"change_id":"pzylsvzkqxlz","description":"base"}',
@@ -217,5 +224,51 @@ describe("identity parsing — the empty-identity trap", () => {
   it("rejects an empty value", async () => {
     const { parseIdentity } = await import("../src/tools.ts");
     expect(parseIdentity('user.name = ""\nuser.email = "s@example.invalid"')).toBe(false);
+  });
+});
+
+describe("the push trap is surfaced where it can still be avoided", () => {
+  it("warns on jj_new that an undescribed change cannot be pushed", async () => {
+    // Measured: `jj git push --bookmark x` refuses with
+    //   "Won't push commit … since it has no description"
+    // The failure is recoverable (jj names the commit) but predictable, and
+    // `jj_new` is the last point where the model can avoid it.
+    const { buildToolDefinitions } = await import("../src/tools.ts");
+    const defs = buildToolDefinitions(fakeHarness().ctx, resolveSettings({}));
+    const def = defs.find((d) => d.name === "jj_new") as
+      | { description: string; parameters: Record<string, { description?: string }> }
+      | undefined;
+    expect(def).toBeDefined();
+    expect(def!.description).toContain("refuses to push");
+    expect(def!.parameters.message?.description ?? "").toContain("cannot be pushed");
+  });
+});
+
+describe("every multi-revision template delimits its own output", () => {
+  it("ends the json(self) template with a newline", async () => {
+    // jj adds no separator between template results, so the template must. This
+    // is the regression guard for a bug no unit test could see: the parser was
+    // fed well-formed newline-delimited input by hand, while the command that
+    // produced it never emitted a newline. Measured against 0.46.0:
+    //   jj log --no-graph -T 'json(self)' -r '@|@-' | wc -l   ->  0
+    //   jj log --no-graph -T 'json(self) ++ "\n"' -r '@|@-' | wc -l  ->  2
+    const source = readFileSync("src/tools.ts", "utf8");
+    // Only the templates that can emit more than one object need this. A
+    // single-value template (`-T conflict`) emits one line and needs nothing.
+    const templates = [...source.matchAll(/"-T",\s*('([^']*)'|"([^"]*)")/g)]
+      .map((m) => m[2] ?? m[3] ?? "")
+      .filter((template) => template.includes("json("));
+    expect(templates.length).toBeGreaterThanOrEqual(3);
+    // The SOURCE text is checked, not an evaluated string, so the expected
+    // value needs the two characters the file actually holds: `String.raw`
+    // keeps them literal instead of collapsing them to one backslash.
+    // Built from a char code so the escaping is unambiguous: the source file
+    // holds TWO backslashes, because the template needs `\\n` for jj to
+    // receive a real newline escape.
+    const bs = String.fromCharCode(92);
+    const expected = `++ "${bs}${bs}n"`;
+    for (const template of templates) {
+      expect(template, template).toContain(expected);
+    }
   });
 });

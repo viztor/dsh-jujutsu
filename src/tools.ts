@@ -124,10 +124,19 @@ async function jj(
 /**
  * Run `jj` and parse its output as one JSON object per line.
  *
- * `json(self)` emits **newline-delimited JSON** — one object per line, not a
- * JSON array. Returning the raw string would hand the model a multi-line blob
- * under an output schema that promises a JSON value, so every line is parsed
- * here and the tool returns a real array.
+ * **`json(self)` does NOT separate its objects.** Verified against 0.46.0: with
+ * `-T 'json(self)'` over two revisions, `jj log --no-graph` writes both objects
+ * back to back with **no newline and no trailing newline** — `wc -l` reports 0.
+ * Splitting that on `\n` yields one line holding two concatenated objects, and
+ * `JSON.parse` fails with "Unexpected non-whitespace character after JSON".
+ *
+ * Every template that can emit more than one revision therefore ends with
+ * `++ "\n"`, which is what makes the output newline-delimited. An earlier
+ * revision of this file asserted the opposite in this comment and omitted the
+ * newline, so `jj_log`, `jj_status` and `jj_op_log` returned
+ * `JJ_OUTPUT_NOT_JSON` for every multi-revision query. Unit tests could not see
+ * it: they fed `parseJsonLines` strings that already had newlines. The
+ * end-to-end test, which runs real `jj`, found it immediately.
  */
 export function parseJsonLines(
   raw: string,
@@ -311,7 +320,7 @@ export function buildToolDefinitions(
         "log",
         "--no-graph",
         "-T",
-        "json(self)",
+        'json(self) ++ "\\n"',
         "-r",
         "@|@-",
       ]);
@@ -334,7 +343,7 @@ export function buildToolDefinitions(
       const cwd = cwdOf(exec);
       if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
       const revset = typeof args.revset === "string" ? args.revset : "::@";
-      const argv = ["log", "--no-graph", "-T", "json(self)", "-r", revset];
+      const argv = ["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
       return jjJson(ctx, settings, cwd, argv);
     },
@@ -369,7 +378,7 @@ export function buildToolDefinitions(
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
       if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
-      const argv = ["op", "log", "--no-graph", "-T", "json(self)"];
+      const argv = ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
       return jjJson(ctx, settings, cwd, argv);
     },
@@ -378,10 +387,14 @@ export function buildToolDefinitions(
   register({
     name: "jj_new",
     description:
-      "Start a new change on top of a revision. This is how a change is finalised — not `git commit`.",
+      "Start a new change on top of a revision. This is how a change is finalised — not `git commit`. Pass a message: jj refuses to push a change with no description.",
     parameters: {
       revset: { type: "string", description: "Parent revision. Defaults to `@`." },
-      message: { type: "string", description: "Description for the new change." },
+      message: {
+        type: "string",
+        description:
+          "Description for the new change. Strongly recommended — a change with no description cannot be pushed.",
+      },
     },
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {

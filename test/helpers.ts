@@ -44,6 +44,51 @@ export interface CapturedPrompt {
   }[];
 }
 
+
+/**
+ * A `ctx.shell` double that runs commands **for real**.
+ *
+ * The plugin reaches `jj` and `jj-hunk` through `ctx.shell`, whose request is a
+ * command *string* (`shell.ts` quotes each argument). This double honours that
+ * contract by handing the string to a shell, so a test using it exercises the
+ * plugin's argv construction, its quoting, and its output parsing against the
+ * installed binaries rather than against a mock's idea of them.
+ *
+ * Nothing else about the plugin is stubbed when this is used: `hunk.ts` and the
+ * `jj_*` tools run their real code paths.
+ */
+export function realShell(ctx: Context): void {
+  const shell = {
+    resolve: (request: { command: string; workdir?: string }) => request,
+    execute: async (spec: { command: string; workdir?: string }) => ({
+      result: async () => {
+        const { exec } = await import("node:child_process");
+        return await new Promise((done) => {
+          exec(
+            spec.command,
+            { cwd: spec.workdir, maxBuffer: 32 * 1024 * 1024 },
+            (error, stdout, stderr) => {
+              const code =
+                error === null ? 0 : typeof error.code === "number" ? error.code : 1;
+              done({
+                exitCode: code,
+                signal: null,
+                timedOut: false,
+                stdout: { text: stdout, truncated: false },
+                stderr: { text: stderr, truncated: false },
+              });
+            },
+          );
+        });
+      },
+    }),
+  };
+  (ctx as unknown as { shell: unknown }).shell = shell;
+  const get = (ctx as unknown as { get: (n: string) => unknown }).get;
+  (ctx as unknown as { get: (n: string) => unknown }).get = (name: string) =>
+    name === "shell" ? shell : get.call(ctx, name);
+}
+
 export interface FakeHarness {
   readonly ctx: Context;
   readonly listeners: readonly Listener[];

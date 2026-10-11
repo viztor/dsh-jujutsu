@@ -453,3 +453,32 @@ The fifth row is worth a note on method. I first tested it with
 recorded the doc as wrong. The doc was right and **my test was wrong**: it
 quotes `jj git init`, not `jj clone`. A verification pass that does not read the
 claim's context manufactures errors as easily as it finds them.
+
+### Why `jj git push`, and what it refuses that `git push` would not
+
+Worth stating because the answer is not "preference". In a **colocated** repo Git
+is a second-class citizen, and the differences are all measured:
+
+| | |
+|---|---|
+| `git symbolic-ref HEAD` | **`fatal: ref HEAD is not a symbolic ref`** — Git's HEAD is *detached*, because jj does not use Git branches |
+| `git status` | `Not currently on any branch.` |
+| `git push` (no arguments) | **fails** — `fatal: You are not currently on a branch` |
+| `jj git push --bookmark <name>` | works, and tracks the bookmark |
+
+So a model that reaches for `git push` does not merely use the wrong tool; it
+uses a tool whose model of "the current branch" **does not exist** here.
+
+And `jj git push` refuses two things `git push` would happily send:
+
+```
+Error: Won't push commit fcac4ff9ed12 since it has no author and/or committer set
+Error: Won't push commit 2d563ffd2f53 since it has no description
+```
+
+The first is the empty-identity trap the plugin already fails closed on. The
+second is a trap the plugin did not previously mention: **an undescribed commit
+cannot be pushed.** `jj_new` takes an optional `message`; a model that omits it
+builds a change it cannot publish. `jj` names the rejected commit in its hint, so
+the failure is recoverable, but it is predictable and worth warning about at the
+tool rather than at the push.
