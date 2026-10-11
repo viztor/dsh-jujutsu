@@ -307,7 +307,7 @@ The `--query`-only design in [19](19-jj-hunk-provisioning.md) and
 | Claim | Check | Result |
 |---|---|---|
 | `--format json` is the default | `jj-hunk list --help` | **holds** — `[default: json]`, `[possible values: json, yaml, text]` |
-| `--query` cannot combine with `--include`/`--exclude`/`--files` | `--help` lists them as separate options with no exclusion note | **not reproduced** — the mutual exclusion is a runtime error, and it was not re-tested this pass |
+| `--query` cannot combine with `--include`/`--exclude`/`--files` | executed | **holds** — `error: the argument '--query <QUERY>' cannot be used with '--files'`. Reproduced after an earlier pass could not see it in `--help`; the exclusion is a runtime error, not a documented one |
 | `-r/--rev` takes a revset | `--help` → `-r, --rev <REV>` | **holds** |
 | The message is a **positional**, not a flag | `jj-hunk split --help` → `Usage: jj-hunk split [OPTIONS] [SPEC] [MESSAGE]` | **holds** — and the plugin's argv is correct |
 | `split --query <q> -r @ <message>` binds the message correctly | executed | **holds** — the split commit carried `desc=[my message]` |
@@ -320,9 +320,32 @@ it mutates. A caller that trusted the exit code would treat a no-op as a success
 and on `split` would report a commit that was never created.
 
 One correction to the earlier record: the `--query` / `--include` mutual
-exclusion is **not** visible in `--help`. It was established by execution in an
-earlier pass and is retained on that basis, but it should be re-tested if the
-`jj-hunk` version moves.
+exclusion is **not** visible in `--help` — it is a runtime error only. An
+earlier pass recorded it as unreproduced for that reason; it has since been
+reproduced directly, and the row above now says so.
+
+### `jj-hunk` needs no jj configuration
+
+A tempting misconfiguration, and one this repo briefly carried: registering
+`merge-tools.jj-hunk` so that `jj split --tool jj-hunk` works. **Do not.** Its
+README is explicit:
+
+> jj-hunk uses jj's diff-tool interface. […] **Commands supply the tool
+> configuration automatically**; no interactive editor is required.
+
+`jj-hunk` writes the tool config itself when it drives jj. A hand-written entry
+changes nothing — measured: with `diff-args` and then `merge-args` both set,
+`jj split --tool jj-hunk` still invoked the bare `["$left", "$right"]` default
+and failed with `unrecognized subcommand '<path>/left'`. The `select` subcommand
+is invoked *by* jj-hunk, not by a user wiring it up.
+
+What `jj-hunk` *does* read from jj config is `hunkset-aliases`, through
+`jj config`, so user, repository and workspace precedence all apply:
+
+```toml
+[hunkset-aliases]
+"timeout_change()" = 'added(content:"timeout")'
+```
 
 ### Audit of the documentation itself
 
