@@ -55,11 +55,24 @@ describe("classifyGitInvocation", () => {
 });
 
 describe("the message catalogue is internally consistent", () => {
-  it("gives every message a reason and a display", () => {
-    const empty = ALL_MESSAGES.filter(
-      (message) => message.reason.trim() === "" || message.display.trim() === "",
+  it("gives every message a reason, and a display that is never blank", () => {
+    // `display` is optional now: absent means the reason stands in for it, which
+    // is what thirteen rows were spelling out by copying the reason verbatim.
+    // What must not happen is a display that is *present and empty* — that would
+    // render an approval prompt with nothing to approve, which is worse than
+    // having none at all.
+    const bad = ALL_MESSAGES.filter(
+      (message) => message.reason.trim() === "" || message.display?.trim() === "",
     );
-    expect(empty).toEqual([]);
+    expect(bad).toEqual([]);
+  });
+
+  it("does not copy the reason into the display", () => {
+    // The duplication this replaced: two hand-edited copies of one sentence, of
+    // which only one is read by a test. When there is nothing shorter to say, the
+    // field is absent.
+    const copied = ALL_MESSAGES.filter((message) => message.display === message.reason);
+    expect(copied).toEqual([]);
   });
 
   it("keeps every reason inside the character budget", () => {

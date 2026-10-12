@@ -40,8 +40,15 @@ export type Classification = "deny" | "ask" | "special";
 export interface Message {
   /** The terse actionable line that becomes `Error: <reason>`. ≤240 chars. */
   readonly reason: string;
-  /** The short variant a human sees in the approval prompt. */
-  readonly display: string;
+  /**
+   * The short variant a human sees in the approval prompt.
+   *
+   * Optional, and usually absent. Thirteen of the 43 rows had it set to a
+   * verbatim copy of `reason`, which is a drift waiting to happen: the two are
+   * edited by hand and only one of them is read by any test. Absent means "there
+   * is nothing shorter to say", and the reason stands in.
+   */
+  readonly display?: string;
   /** The longer explanation, attached via `tools/post-execute`. */
   readonly explain?: string;
 }
@@ -299,8 +306,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git cherry-pick. Run: jj duplicate <rev> -o <dest> to copy that change onto another commit.",
-      display:
-        "Refused: git cherry-pick. Run: jj duplicate <rev> -o <dest> to copy that change onto another commit.",
+      /* display falls back to reason */
     },
   },
   {
@@ -309,8 +315,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git revert. Run: jj revert -r <rev> -B @ to insert the inverse of <rev> just before the working copy.",
-      display:
-        "Refused: git revert. Run: jj revert -r <rev> -B @ to insert the inverse of <rev> just before the working copy.",
+      /* display falls back to reason */
     },
   },
   {
@@ -319,8 +324,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git tag. Run: jj tag list, jj tag set <name> -r <rev>, or jj tag delete <name>.",
-      display:
-        "Refused: git tag. Run: jj tag list, jj tag set <name> -r <rev>, or jj tag delete <name>.",
+      /* display falls back to reason */
     },
   },
   {
@@ -356,8 +360,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git fetch. Run: jj git fetch. The jj prefix matters: jj git fetch is a Jujutsu command and is never refused.",
-      display:
-        "Refused: git fetch. Run: jj git fetch. The jj prefix matters: jj git fetch is a Jujutsu command and is never refused.",
+      /* display falls back to reason */
     },
   },
   {
@@ -366,8 +369,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git clone. Run: jj git clone <url> [<dir>]; it creates a colocated repo by default.",
-      display:
-        "Refused: git clone. Run: jj git clone <url> [<dir>]; it creates a colocated repo by default.",
+      /* display falls back to reason */
     },
   },
   {
@@ -393,8 +395,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git worktree add. Run: jj workspace add <path>. Workspaces are Jujutsu's native multi-working-copy feature.",
-      display:
-        "Refused: git worktree add. Run: jj workspace add <path>. Workspaces are Jujutsu's native multi-working-copy feature.",
+      /* display falls back to reason */
     },
   },
   {
@@ -403,8 +404,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git submodule; Jujutsu has no submodule support. If the task truly needs submodules, use a separate plain Git clone outside this workspace.",
-      display:
-        "Refused: git submodule; Jujutsu has no submodule support. If the task truly needs submodules, use a separate plain Git clone outside this workspace.",
+      /* display falls back to reason */
     },
   },
   {
@@ -413,8 +413,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git bisect. Run: jj bisect run <cmd>; it finds the first bad revision automatically.",
-      display:
-        "Refused: git bisect. Run: jj bisect run <cmd>; it finds the first bad revision automatically.",
+      /* display falls back to reason */
     },
   },
   {
@@ -440,8 +439,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git clean -fd; Jujutsu has no untracked state to clean. Inspect with jj status, then delete the files yourself with rm.",
-      display:
-        "Refused: git clean -fd; Jujutsu has no untracked state to clean. Inspect with jj status, then delete the files yourself with rm.",
+      /* display falls back to reason */
     },
   },
   {
@@ -459,8 +457,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git init. This is already a Jujutsu workspace; there is nothing to initialise. To create a new Jujutsu repo elsewhere, run: jj git init <directory>.",
-      display:
-        "Refused: git init. This is already a Jujutsu workspace; there is nothing to initialise. To create a new Jujutsu repo elsewhere, run: jj git init <directory>.",
+      /* display falls back to reason */
     },
   },
   {
@@ -468,7 +465,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     classification: "deny",
     message: {
       reason: "Refused: git -C <dir>. Run: jj -R <dir> <sub>, or cd <dir> first.",
-      display: "Refused: git -C <dir>. Run: jj -R <dir> <sub>, or cd <dir> first.",
+      /* display falls back to reason */
     },
   },
   {
@@ -477,8 +474,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         'Refused: git config; Jujutsu reads identity from its own config, not .git/config. Run: jj config set --user user.name "<name>", or jj config list.',
-      display:
-        'Refused: git config; Jujutsu reads identity from its own config, not .git/config. Run: jj config set --user user.name "<name>", or jj config list.',
+      /* display falls back to reason */
     },
   },
   {
@@ -487,8 +483,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     message: {
       reason:
         "Refused: git lfs; Jujutsu has no LFS integration and the git binary fronts this subcommand. Fetch LFS objects with a plain Git checkout outside this workspace.",
-      display:
-        "Refused: git lfs; Jujutsu has no LFS integration and the git binary fronts this subcommand. Fetch LFS objects with a plain Git checkout outside this workspace.",
+      /* display falls back to reason */
     },
   },
 ];
@@ -501,8 +496,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
 export const GENERIC_FALLBACK: Message = {
   reason:
     "Refused: this is a Jujutsu workspace and git is not used here. Run: jj help for the command list, or jj log for history with change IDs.",
-  display:
-    "Refused: this is a Jujutsu workspace and git is not used here. Run: jj help for the command list, or jj log for history with change IDs.",
+  /* display falls back to reason */
 };
 
 /**

@@ -189,7 +189,7 @@ function gate(
   return {
     kind: "ask",
     reason: refusal.message.reason,
-    displayReason: { en: refusal.message.display },
+    displayReason: { en: refusal.message.display ?? refusal.message.reason },
   };
 }
 
