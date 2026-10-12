@@ -856,7 +856,22 @@ four revisions looking correct while drawing nothing.
 | `choices` → a `<select>`                | **none** — every kind is a text control           |
 | —                                       | `id` required, for the label's `htmlFor`          |
 
-The missing `choices` is the harness's design rather than a gap: a field's
-**spec** decides which drafts it accepts, and the control never rewrites what the
-user typed. So an enum is typed, and the accepted values belong in the field's
-`hint` — which is why every field needs one.
+The missing `choices` is not a gap in the harness: `SettingsValueField` is
+**only** the text control, and a card owns its boolean and enum fields — because
+only the card knows what its values mean. The sibling package documents exactly
+that and wraps the primitives' `Tag` and `Button` in its own `SettingsFieldShell`.
+
+So the card composes the right control per kind, all of them primitives:
+
+| Kind    | Control                                            |
+| ------- | -------------------------------------------------- |
+| boolean | `Switch`                                           |
+| enum    | `SegmentedControl`, one segment per accepted value |
+| text    | `SettingsValueField`                               |
+
+`SegmentedControl`'s option type carries _"Localized segment text"_, so an enum
+segment reads `Allow` — or `允许` — rather than `allow`. That is what the value
+labels in `STRINGS` are for.
+
+`SettingsValueField`'s `hint` still matters, and is now shown: the spec decides
+which drafts a text field accepts, and the hint is where a reader learns that.
