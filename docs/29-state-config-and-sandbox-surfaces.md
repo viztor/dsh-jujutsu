@@ -713,7 +713,17 @@ theme token, so the shell follows light/dark and any restyle.
 | Guard                       | `guard`, `readOnlyGit`, `bypass`, `rememberBypass` |
 | When there is no repository | `alertUninitialised`, `preferJj`                   |
 | Teaching                    | `injectContext`, `teachSkill`                      |
-| Master switch               | `enabled`                                          |
+
+**There is no master switch, and that is a decision rather than an omission.**
+The Plugins page already gives every row an enable toggle, and disabling the row
+**unmounts the plugin** — so `apply` never runs. A config-level `enabled` field
+would be a second control for one decision, and the two could disagree: the row
+on and the config off is a plugin that looks enabled and does nothing. The
+harness owns that switch, and this plugin does not re-implement it.
+
+Removing the field also removed the `if (!settings.enabled) return` at the top of
+`apply`, which was unreachable through the real path — the toggle unmounts rather
+than sets a value — and reachable only by hand-editing a config.
 
 **The panel is a subset of `Config`, deliberately.** Three fields are not drawn:
 

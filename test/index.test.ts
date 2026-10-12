@@ -13,25 +13,27 @@
  * the second test here pins it.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { apply } from "../src/index.ts";
 import { FIXTURES, fakeHarness } from "./helpers.ts";
 
-describe("the master switch", () => {
-  it("registers nothing at all when it is off", () => {
-    // Not "registers less": off unregisters everything. A listener left mounted
-    // would still refuse Git, which is the opposite of what the switch says.
-    const h = fakeHarness();
-    apply(h.ctx, { enabled: false });
-
-    expect(h.listeners).toEqual([]);
-    expect(h.tools).toEqual([]);
+describe("there is no master switch, and that is the decision", () => {
+  // The Plugins page already gives every row an enable toggle, and disabling the
+  // row unmounts the plugin -- so `apply` never runs. A config-level switch would
+  // be a second control for one decision, with the two able to disagree: the row
+  // on and the config off is a plugin that looks enabled and does nothing. The
+  // harness owns that switch; this plugin does not re-implement it.
+  it("has no `enabled` field in the schema", () => {
+    const schema = readFileSync("src/config.ts", "utf8");
+    expect(schema).not.toMatch(/^ {2}enabled: z\b/m);
   });
 
-  it("registers the guard, the explainer, the tools and the prompt when it is on", () => {
+  it("registers everything on every mount", () => {
     const h = fakeHarness();
-    apply(h.ctx, { enabled: true });
+    apply(h.ctx, {});
 
     const events = h.listeners.map((entry) => entry.event);
     expect(events).toContain("tools/pre-execute");
@@ -40,13 +42,11 @@ describe("the master switch", () => {
     expect(h.tools.length).toBeGreaterThan(0);
   });
 
-  it("treats a missing switch as on", () => {
-    // The default is `true`, and a patch row that skipped schema validation
-    // reaches `apply` as a partial object. Defaulting to off would silently
-    // disable the plugin for anyone whose config was written by hand.
-    const h = fakeHarness();
-    apply(h.ctx, {});
-    expect(h.listeners.length).toBeGreaterThan(0);
+  it("draws no master-switch group", () => {
+    // The panel is checked from its built bundle, which is what the browser
+    // loads; the source is checked for the absence of the field above.
+    const panel = readFileSync("lib/client.js", "utf8");
+    expect(panel).not.toContain("groupMaster");
   });
 });
 

@@ -1,0 +1,117 @@
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # No `version:` input: pnpm/action-setup refuses to run when it is given
+      # both that and a `packageManager` field, and package.json pins pnpm
+      # exactly. One source of truth, and the action reads it.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `ci` is the whole gate in one command: typecheck, then `vp check` for
+      # format and lint, then the build, then the suite. It is deliberately not
+      # spelled out step by step here — a tag should run exactly what a commit
+      # runs, and two lists would drift.
+      - run: pnpm run ci
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC trusted publishing needs this and nothing else: no token is stored
+      # in the repository, and provenance is automatic.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      # A tag that disagrees with the manifest publishes a version nobody can
+      # match to a commit, so this is checked before anything is built.
+      #
+      # The ref arrives through the environment rather than being interpolated
+      # into the script text: a tag name may contain `;`, `"`, `$` or a
+      # backtick, and this job holds `id-token: write`.
+      - name: The tag matches the manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$expected" ]; then
+            echo "::error::$TAG does not match package.json $expected"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm run build
+
+      # Trusted publishing: the registry verifies this workflow's OIDC identity,
+      # so no secret exists to leak or expire. To set it up, add
+      # viztor/dsh-jujutsu + `release.yml` to the package's Trusted Publisher
+      # settings on npmjs.com and allow the `npm publish` action.
+      #
+      # `--ignore-scripts` because the `verify` job already ran the full gate on
+      # this same commit; letting `prepublishOnly` run it again would double the
+      # work and give a second, differently-timed chance to fail.
+      #
+      # The `npm view` guard is the only place idempotency belongs: npm refuses
+      # to republish a version, so a retried tag has to skip rather than fail.
+      # The publish itself is NOT guarded — a swallowed error here once produced
+      # a green release for a version that never reached the registry.
+      - name: Publish to npmjs (OIDC, provenance)
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "dsh-jujutsu@$version" version 2>/dev/null; then
+            echo "$version is already on npmjs, skipping"
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi
+
+      # The release claim, checked instead of assumed. A successful `npm publish`
+      # does not mean the version is readable yet — npm answers "your package is
+      # being processed and may take a few minutes to become available", and an
+      # immediate `npm view` returns nothing. Checking once reports a healthy
+      # release as failed.
+      #
+      # Eight minutes, because that is what it has taken in practice for an
+      # unrelated package of this size. The message names the two things worth
+      # knowing: the publish steps above were green, so this is npm still
+      # indexing rather than a failed publish; and the command to re-check by
+      # hand.
+      - name: Verify the published version is readable
+        run: |
+          version=$(node -p "require('./package.json').version")
+          attempts=33
+          interval=15
+          for attempt in $(seq 1 $attempts); do
+            if npm view "dsh-jujutsu@$version" version >/dev/null 2>&1; then
+              echo "dsh-jujutsu@$version is live on npmjs.org (attempt $attempt/$attempts)"
+              exit 0
+            fi
+            if [ "$attempt" -lt "$attempts" ]; then
+              echo "attempt $attempt/$attempts: waiting for npm to index dsh-jujutsu@$version"
+              sleep $interval
+            fi
+          done
+          echo "::error::dsh-jujutsu@$version is still unreadable after $((attempts * interval - interval))s"
+          echo "::error::The publish step above was green, so npm is still processing it rather than having rejected it. Re-check with: npm view dsh-jujutsu@$version version"
+          exit 1

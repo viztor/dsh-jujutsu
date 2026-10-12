@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    # A release tag is the `release` workflow's trigger, not this one's. Without
+    # this filter a tag push matches no branch and the whole workflow is
+    # skipped, which is the bug this line exists to prevent: a workflow that
+    # never runs can never report anything.
+    tags-ignore: ["v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: check, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version:` input: pnpm/action-setup refuses to run when it is given
+      # both that and a `packageManager` field, and package.json pins pnpm
+      # exactly. One source of truth, and the action reads it — so the version
+      # itself is deliberately not repeated here, where it would only rot.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # A lockfile that no longer matches the manifest is a gate in its own
+      # right, and `--frozen-lockfile` is the only way to see it in CI.
+      - run: pnpm install --frozen-lockfile
+
+      # `ci` is the whole gate in one command — typecheck, `vp check` for format
+      # and lint, the build, then the suite — and it is deliberately not spelled
+      # out step by step here. A tag runs exactly what a commit runs, and two
+      # lists of the same steps drift.
+      #
+      # The build is inside it for a reason worth keeping: the panel tests read
+      # `lib/client.js`, the *built* artifact, because the source and the bundle
+      # are two different things and it is the bundle the browser loads. Running
+      # the suite without building first would test whatever was built last.
+      - name: Gate (typecheck, format, lint, build, test)
+        run: pnpm run ci
+
+      # Everything above runs against the working tree. This is the only check
+      # that sees what a consumer receives: it packs the tarball, installs it
+      # with plain npm into a scratch directory, and loads it. The type-stripping
+      # constraint that shapes this package — Node refuses to strip types for
+      # files under `node_modules` — is invisible to every test above and fatal
+      # here, which is the whole reason the step exists.
+      - name: Package checks
+        run: node scripts/check.ts

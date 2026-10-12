@@ -276,12 +276,6 @@ const STRINGS: Record<string, Record<string, string>> = {
     groupPrompt: "Teaching",
     groupBinaries: "Binaries",
     groupBinariesBlurb: "Where jj and jj-hunk are found.",
-    groupMaster: "Master switch",
-    groupMasterBlurb: "Turns the whole plugin off, guard included.",
-
-    enabledLabel: "Enabled",
-    enabledHint:
-      "Master switch. Off unregisters everything: no guard, no tools, no prompt injection.",
     guardLabel: "Guard",
     guardHint:
       "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
@@ -329,11 +323,6 @@ const STRINGS: Record<string, Record<string, string>> = {
     groupPrompt: "引导",
     groupBinaries: "可执行文件",
     groupBinariesBlurb: "jj 与 jj-hunk 的查找位置。",
-    groupMaster: "总开关",
-    groupMasterBlurb: "关闭整个插件，包括拦截功能。",
-
-    enabledLabel: "启用",
-    enabledHint: "总开关。关闭后不再注册任何内容：没有拦截、没有工具、也不注入提示。",
     guardLabel: "拦截",
     guardHint:
       "deny 会拒绝 Jujutsu 工作区内的 Git 命令；off 仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
@@ -376,7 +365,6 @@ interface FieldMeta {
 }
 
 const FIELDS: Record<string, FieldMeta> = {
-  enabled: { kind: "boolean", labelKey: "enabledLabel", hintKey: "enabledHint" },
   guard: { kind: "enum", labelKey: "guardLabel", hintKey: "guardHint", choices: ["deny", "off"] },
   readOnlyGit: {
     kind: "enum",
@@ -421,6 +409,14 @@ interface GroupMeta {
   readonly fields: readonly string[];
 }
 
+/**
+ * The panel's groups.
+ *
+ * **There is no master switch here, deliberately.** The Plugins page already
+ * gives every row an enable toggle, and disabling the row unmounts the plugin —
+ * so `apply` never runs and a config-level switch would be a second control for
+ * one decision, with the two able to disagree. The harness owns that switch.
+ */
 const GROUPS: readonly GroupMeta[] = [
   {
     id: "guard",
@@ -437,7 +433,6 @@ const GROUPS: readonly GroupMeta[] = [
     titleKey: "groupPrompt",
     fields: ["injectContext", "teachSkill"],
   },
-  { id: "master", titleKey: "groupMaster", blurbKey: "groupMasterBlurb", fields: ["enabled"] },
 ];
 
 /** A boolean field, staged as text. */

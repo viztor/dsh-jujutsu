@@ -31,15 +31,6 @@
 import z from "@deepseek-ai/schemastery";
 
 export const Config = z.object({
-  /** Master switch. Off means the plugin registers nothing at all. */
-  enabled: z
-    .boolean()
-    .default(true)
-    .description(
-      "Master switch. Off unregisters everything: no guard, no tools, no prompt injection.",
-    )
-    .volatile(),
-
   /** `deny` enforces; `off` installs the listeners but always calls `next()`. */
   guard: z
     .union([z.const("deny"), z.const("off")])

@@ -60,7 +60,6 @@ export const inject = ["tools"];
  */
 export function apply(ctx: Context, config?: unknown): void {
   const settings = resolveSettings(config);
-  if (!settings.enabled) return;
 
   // A mount is a boundary: module-level caches outlive an unmount, because the
   // harness keeps the module in its registry even after the bundle is removed.

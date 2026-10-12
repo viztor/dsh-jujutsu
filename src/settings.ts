@@ -7,9 +7,8 @@
  * {@link resolveSettings} from a raw, possibly-unvalidated row.
  *
  * The narrowing is deliberately permissive: a missing or malformed field falls
- * back to the schema default rather than disabling the plugin. The single
- * exception is `enabled`, which must be explicitly `false` to switch the plugin
- * off — a malformed row must never silently remove protection.
+ * back to the schema default rather than disabling the plugin, so a malformed
+ * row can never silently remove protection.
  *
  * @module dsh-jujutsu/settings
  */
@@ -17,7 +16,6 @@
 import { isRecord } from "./guard-utils.ts";
 
 export interface Settings {
-  readonly enabled: boolean;
   readonly guard: "deny" | "off";
   readonly readOnlyGit: "deny" | "ask" | "allow";
   readonly bypass: "ask" | "deny" | "allow";
@@ -60,7 +58,6 @@ function string(value: unknown, fallback: string): string {
 export function resolveSettings(raw: unknown): Settings {
   const row = isRecord(raw) ? raw : {};
   return {
-    enabled: row.enabled !== false,
     guard: oneOf(row.guard, GUARD, "deny"),
     readOnlyGit: oneOf(row.readOnlyGit, READ_ONLY, "ask"),
     bypass: oneOf(row.bypass, READ_ONLY, "ask"),

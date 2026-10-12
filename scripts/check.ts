@@ -1,0 +1,222 @@
+/**
+ * Package checks — what a consumer receives, not what the working tree holds.
+ *
+ * Every test in `test/` runs against the source. This runs against the
+ * **tarball**: it packs, installs with plain `npm` into a scratch directory, and
+ * loads the result. That distinction is the whole point of the file, because the
+ * constraint that shapes this package is invisible to every other check —
+ *
+ *   Node refuses to strip types for files under `node_modules`
+ *   (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING)
+ *
+ * — so a package whose entry is `src/index.ts` passes every test and cannot load
+ * once installed. That was measured, not assumed, and it is why `lib/` exists.
+ *
+ * Usage: node scripts/check.ts
+ */
+
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const ROOT = new URL("..", import.meta.url).pathname;
+
+const failures: string[] = [];
+const checks: string[] = [];
+
+/** Record one check's outcome. */
+function check(name: string, ok: boolean, detail = ""): void {
+  if (ok) {
+    checks.push(name);
+    return;
+  }
+  failures.push(detail === "" ? name : `${name}: ${detail}`);
+}
+
+/**
+ * `npm publish` exports the whole `npm_config_*` namespace to its children,
+ * including `npm_config_dry_run`. A child `npm install` that inherits it becomes
+ * a no-op, and this script would then read a package that was never written —
+ * failing with a message that names neither the cause nor the command. Stripping
+ * the namespace rather than just `dry_run` is deliberate: a future npm setting
+ * that changes what an install writes is the same failure wearing a new name.
+ */
+function npmEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("npm_config_")) continue;
+    env[key] = value;
+  }
+  return env;
+}
+
+/** Run a command, returning its stdout, or throwing with its stderr. */
+function run(command: string, args: string[], cwd: string): string {
+  return execFileSync(command, args, { cwd, encoding: "utf8", env: npmEnv() });
+}
+
+// --- 1. The release wiring agrees -----------------------------------------
+//
+// A tag that disagrees with the manifest publishes a version nobody can match
+// to a commit. The three files are written by different tools — package.json by
+// release-please, the manifest by release-please, the config by hand — so they
+// are checked together rather than trusted to stay in step.
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+    version: string;
+  };
+  const manifest = JSON.parse(
+    readFileSync(join(ROOT, ".release-please-manifest.json"), "utf8"),
+  ) as Record<string, string>;
+  const config = JSON.parse(readFileSync(join(ROOT, "release-please-config.json"), "utf8")) as {
+    packages: Record<string, unknown>;
+    "include-component-in-tag"?: boolean;
+  };
+
+  check(
+    "the manifest version matches package.json",
+    manifest["."] === pkg.version,
+    `manifest has ${String(manifest["."])}, package.json has ${pkg.version}`,
+  );
+  check(
+    "release-please is configured for the package root",
+    Object.keys(config.packages).includes("."),
+    `packages: ${Object.keys(config.packages).join(", ")}`,
+  );
+  // The default prefixes the component (`dsh-jujutsu-v0.2.0`), which matches no
+  // `v*.*.*` filter and so would never fire the publish workflow — a release
+  // that looks cut and never ships.
+  check(
+    "tags are plain vX.Y.Z, so the publish workflow fires",
+    config["include-component-in-tag"] === false,
+  );
+}
+
+// --- 2. The build output is current and complete --------------------------
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+    main: string;
+    types: string;
+    exports: Record<string, { default?: string } | string>;
+  };
+  const host = join(ROOT, pkg.main);
+  check("the host entry exists", existsSync(host), pkg.main);
+  check("the declarations exist", existsSync(join(ROOT, pkg.types)), pkg.types);
+
+  const clientExport = pkg.exports["./client"];
+  const clientPath = typeof clientExport === "string" ? clientExport : clientExport?.default;
+  check(
+    "the client export exists",
+    typeof clientPath === "string" && existsSync(join(ROOT, clientPath)),
+    String(clientPath),
+  );
+
+  // The route serves `${package}/client.js` and accepts only
+  // `/^client\..*\.js$/`, while `vp pack` emits `.cjs` for a `type: module`
+  // package. The rename is a build step, and this is what says it ran.
+  check(
+    "the client bundle is named client.js",
+    typeof clientPath === "string" && clientPath.endsWith("/client.js"),
+    String(clientPath),
+  );
+
+  const locale = readdirSync(join(ROOT, "locale")).filter((f) => f.endsWith(".json"));
+  check("both locales ship", locale.length >= 2, locale.join(", "));
+  check("the icon ships", existsSync(join(ROOT, "icon.svg")));
+  check("the bundle patch ships", existsSync(join(ROOT, "cordis.patch.yml")));
+}
+
+// --- 3. No machine paths in anything that ships ---------------------------
+//
+// A home directory leaks a username, an OS and a layout, and it is worthless to
+// the reader. Scanned over the shipped files rather than the tree, because those
+// are the ones a stranger receives.
+{
+  const shipped = ["src", "lib", "locale", "client", "README.md", "SPEC.md"];
+  const offenders: string[] = [];
+  const walk = (target: string): void => {
+    if (!existsSync(target)) return;
+    if (statSync(target).isDirectory()) {
+      for (const name of readdirSync(target)) {
+        if (name === "node_modules") continue;
+        walk(join(target, name));
+      }
+      return;
+    }
+    if (/\.(png|jpe?g|gif|webp|ico|woff2?|pdf|zip|gz|tgz)$/.test(target)) return;
+    const text = readFileSync(target, "utf8");
+    for (const pattern of [/\/Users\/[a-z]/i, /\/home\/[a-z]/i, /C:\\Users\\/i]) {
+      if (pattern.test(text)) offenders.push(target.replace(ROOT, ""));
+    }
+  };
+  for (const target of shipped) walk(join(ROOT, target));
+  check("no machine paths in shipped files", offenders.length === 0, offenders.join(", "));
+}
+
+// --- 4. The tarball installs and loads with plain npm ---------------------
+//
+// The check that earns the file. Everything above inspects files; this one asks
+// whether a consumer can use the package at all.
+{
+  const scratch = mkdtempSync(join(tmpdir(), "dsh-jujutsu-check-"));
+  try {
+    const packed = run("npm", ["pack", "--pack-destination", scratch], ROOT)
+      .trim()
+      .split("\n")
+      .pop();
+    const tarball = join(scratch, packed ?? "");
+    check("npm pack produced a tarball", packed !== undefined && existsSync(tarball), packed ?? "");
+
+    if (existsSync(tarball)) {
+      run("npm", ["init", "-y"], scratch);
+      run("npm", ["install", "--no-audit", "--no-fund", tarball], scratch);
+
+      const installed = join(scratch, "node_modules", "dsh-jujutsu");
+      check("the package installs into node_modules", existsSync(installed));
+
+      // `require` rather than `import`: this is the CommonJS face the harness's
+      // loader uses, and it is the one that fails on un-stripped TypeScript.
+      const probe = `
+        const mod = require('dsh-jujutsu');
+        const names = Object.keys(mod).sort().join(',');
+        if (!names.includes('apply')) throw new Error('no apply export: ' + names);
+        if (!names.includes('inject')) throw new Error('no inject export: ' + names);
+        if (!names.includes('Config')) throw new Error('no Config export: ' + names);
+        process.stdout.write(names);
+      `;
+      const loaded = run("node", ["-e", probe], scratch);
+      check(
+        "the installed package loads and exports what Cordis reads",
+        loaded.includes("apply"),
+        loaded,
+      );
+
+      // The client half is a script, not a module: it registers a factory and
+      // the loader calls it. Loading it needs a `window` stub and nothing else.
+      const clientProbe = `
+        let factory;
+        global.window = { __ModuleLoader__: { load: (m) => { factory = m.factory; } } };
+        require('dsh-jujutsu/client');
+        if (typeof factory !== 'function') throw new Error('no factory registered');
+        process.stdout.write('ok');
+      `;
+      const client = run("node", ["-e", clientProbe], scratch);
+      check("the installed client bundle registers its factory", client.includes("ok"), client);
+    }
+  } catch (error) {
+    check(
+      "the tarball installs and loads",
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+// --- report ----------------------------------------------------------------
+for (const name of checks) console.log(`ok    ${name}`);
+for (const failure of failures) console.error(`FAIL  ${failure}`);
+console.log(`\n${checks.length} passed, ${failures.length} failed`);
+if (failures.length > 0) process.exit(1);
