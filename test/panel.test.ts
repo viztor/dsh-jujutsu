@@ -845,3 +845,25 @@ describe("every toggle says what Off does", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("every setting is either drawn or documented", () => {
+  it("leaves no config field with neither", () => {
+    // The panel has a test that it draws every field it *exposes*. The README has
+    // a table of the advanced fields that are config-file only. Neither covered
+    // the join: a field could be in `Config`, in neither list, and ship as a
+    // setting nobody can find.
+    //
+    // Which side a field belongs on is a decision. Being on neither is an
+    // oversight, and this is the only place both lists are visible at once.
+    const schema = readFileSync("src/config.ts", "utf8");
+    const fields = [...schema.matchAll(/^ {2}([a-zA-Z]+): z\b/gm)].map((m) => m[1]!);
+    const { FIELDS } = loadPanel();
+    const readme = readFileSync("README.md", "utf8");
+
+    const orphans = fields.filter(
+      (field) =>
+        !(field in (FIELDS as Record<string, unknown>)) && !readme.includes(`\`${field}\``),
+    );
+    expect(orphans).toEqual([]);
+  });
+});

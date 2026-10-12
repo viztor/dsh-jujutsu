@@ -188,3 +188,29 @@ describe("no document recommends the wrong jj-hunk install", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("the README documents every setting", () => {
+  it("gives every documented default the one the schema declares", () => {
+    // A table of defaults that disagrees with the schema is worse than no table:
+    // it is the thing a reader checks before changing a setting.
+    const schema = readFileSync("src/config.ts", "utf8");
+    const blocks = schema.split(/\n(?= {2}[a-zA-Z]+: z)/);
+    const defaults = new Map<string, string>();
+    for (const block of blocks) {
+      const name = /^ {2}([a-zA-Z]+): z/.exec(block)?.[1];
+      if (name === undefined) continue;
+      const value = /\.default\(([^)]*)\)/.exec(block)?.[1] ?? "";
+      defaults.set(name, value.replace(/"/g, ""));
+    }
+
+    const readme = readFileSync("README.md", "utf8");
+    const wrong: string[] = [];
+    for (const [name, value] of defaults) {
+      // The advanced table spells the field name out; the page table uses a
+      // human label, so only the advanced one is checkable by name.
+      const row = new RegExp(`\\| *\`${name}\` *\\| *\`?([a-z-]+)\`? *\\|`).exec(readme);
+      if (row !== null && row[1] !== value) wrong.push(`${name}: says ${row[1]}, schema ${value}`);
+    }
+    expect(wrong).toEqual([]);
+  });
+});
