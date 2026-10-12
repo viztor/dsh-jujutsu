@@ -125,6 +125,25 @@ function run(command: string, args: string[], cwd: string): string {
   check("both locales ship", locale.length >= 2, locale.join(", "));
   check("the icon ships", existsSync(join(ROOT, "icon.svg")));
   check("the bundle patch ships", existsSync(join(ROOT, "cordis.patch.yml")));
+
+  // The same sentence describes this plugin in two places, and only one of them
+  // is in the repository the reader is looking at: `package.json` is what npm
+  // shows, `locale/en.json` is what the Plugins page shows. They drifted once --
+  // the package kept the old "Jujutsu-native version control" wording long after
+  // the panel was corrected -- and nothing caught it, because each was checked
+  // only for being non-empty.
+  const english = JSON.parse(readFileSync(join(ROOT, "locale/en.json"), "utf8")) as {
+    meta?: { description?: string };
+  };
+  const oneliner = english.meta?.description ?? "";
+  const pkgDescription = (
+    JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { description: string }
+  ).description;
+  check(
+    "the npm description opens with the plugin's own one-liner",
+    oneliner !== "" && pkgDescription.startsWith(oneliner),
+    `npm: "${pkgDescription.slice(0, 60)}…" vs panel: "${oneliner.slice(0, 60)}…"`,
+  );
 }
 
 // --- 3. No machine paths in anything that ships ---------------------------
