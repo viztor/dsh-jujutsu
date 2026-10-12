@@ -76,19 +76,30 @@ still works).
 
 ## Configuration
 
-Open **Plugins → Jujutsu**. Everything is on that page.
+Open **Plugins → Jujutsu**. Most settings are on that page:
 
-| Setting                         | Default         | What it changes                                                                      |
-| ------------------------------- | --------------- | ------------------------------------------------------------------------------------ |
-| Guard                           | `deny`          | `off` leaves the guard mounted but inert — useful to see what it _would_ have caught |
-| Read-only Git                   | `ask`           | What to do with `git status`, `git log`, …                                           |
-| Writing Git                     | `ask`           | What to do with `git commit`, `git push`, …                                          |
-| Remember approvals              | on              | Stop re-asking about a verb you already approved, for this session                   |
-| Mention missing version control | on              | Tell the model when a directory has no repository                                    |
-| Prefer Jujutsu                  | on              | Suggest `jj git init` rather than `git init`                                         |
-| Explain Jujutsu in the prompt   | on              | Off means the guard still refuses Git but the model is not told why                  |
-| Offer the jj manual             | on              | Ship the `jj` manual as an on-demand skill                                           |
-| jj / jj-hunk executable         | `jj`, `jj-hunk` | Set these when they are not on `PATH`                                                |
+| Setting                         | Default | What it changes                                                                      |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| Guard                           | `deny`  | `off` leaves the guard mounted but inert — useful to see what it _would_ have caught |
+| Read-only Git                   | `ask`   | What to do with `git status`, `git log`, …                                           |
+| Writing Git                     | `ask`   | What to do with `git commit`, `git push`, …                                          |
+| Remember approvals              | on      | Stop re-asking about a verb you already approved, for this session                   |
+| Mention missing version control | on      | Tell the model when a directory has no repository                                    |
+| Prefer Jujutsu                  | on      | Suggest `jj git init` rather than `git init`                                         |
+| Explain Jujutsu in the prompt   | on      | Off means the guard still refuses Git but the model is not told why                  |
+| Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                           |
+
+### Advanced: where the binaries are found
+
+Three settings are **not on the page**, because only an unusual install needs them
+and showing them would ask everyone else to decide about them. Set them in the
+profile's config instead — they are ordinary `Config` fields:
+
+| Setting       | Default   | What it changes                                                 |
+| ------------- | --------- | --------------------------------------------------------------- |
+| `jjPath`      | `jj`      | Set when `jj` is not on `PATH`, or to pin a specific build      |
+| `jjHunkPath`  | `jj-hunk` | Same, for `jj-hunk`                                             |
+| `hunkInstall` | `ask`     | What to do when `jj-hunk` is missing: `ask`, `never`, or `auto` |
 
 ### Turning it off for one project
 
