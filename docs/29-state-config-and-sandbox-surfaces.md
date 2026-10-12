@@ -625,20 +625,33 @@ row and one configuration, so the configuration belongs on the plugin's page.
 The bundle slot is also simpler by contract: it renders `view: 'page'` **only**,
 so there is no `summary` branch to get wrong.
 
-### Why it is plain JavaScript rather than TypeScript
+### Why it is TypeScript, built rather than hand-written
 
-Every other module here is TypeScript that Node strips at import. A client
-bundle is different: the web client loads it as a **script** through
-`window.__ModuleLoader__.load`, so it must already be JavaScript wrapped in the
-CJS factory the loader expects. Producing that normally needs a bundler — the
-sibling project uses `vp pack` plus a renaming script. This file is written
-directly in the output format instead, which keeps the plugin free of a build
-step at the cost of `React.createElement` instead of JSX.
+It was hand-written JavaScript for three revisions, on the reasoning that the web
+client loads a bundle as a **script** through `window.__ModuleLoader__.load`, so
+it "must already be JavaScript". That is half true and was used to skip the work:
+`vp pack` emits JavaScript, and the sibling package authors `src/client.ts` and
+builds `lib/client.js` the same way.
+
+The cost was every bug this panel had. All three were type errors `tsc` would have
+refused, because nothing checked a file written by hand:
+
+| Written         | Reality                                                 |
+| --------------- | ------------------------------------------------------- |
+| `state.onEdit`  | `SettingsFieldState` is `{ text, overridden, invalid }` |
+| `shell.onSave`  | `SettingsFormShell` is state only                       |
+| `props.actions` | the verbs arrive spread on the injected props           |
+
+`src/client/panel.ts` now declares the harness's client interfaces — transcribed
+from its own `.d.ts` files — and `vite.config.ts` builds it: CommonJS wrapped in
+the loader factory by the bundler's `banner`/`footer`. The wrapper shape was never
+wrong; where it lived was.
 
 ### The panel cannot drift from the schema
 
-The panel is JS and the schema is TS, so nothing at build time connects them.
-Two tests are that connection:
+The panel and the schema are both TypeScript now, but they are still separate
+surfaces — the panel draws a form, `config.ts` declares what a form may hold — so
+nothing at build time connects them. Tests are that connection:
 
 - **Coverage** — every field in `Config` is drawn, no field is drawn that
   `Config` does not declare, and each appears in exactly one group.
