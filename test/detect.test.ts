@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { detect, effectiveCwd, findWorkspaceRoot, invalidateDetection } from "../src/detect.ts";
 import { apply } from "../src/index.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 const { ctx } = fakeHarness();
 
@@ -26,7 +26,7 @@ beforeAll(() => {
   mkdirSync(`${FIXTURES}/jj-colocated/nested/deeper`, { recursive: true });
 });
 
-describe("workspace detection", () => {
+describe.skipIf(!HAS_FIXTURES)("workspace detection", () => {
   it("does not claim a plain Git repo", async () => {
     const found = await detect(ctx, `${FIXTURES}/plain-git`);
     expect(found.kind).toBe("none");
@@ -96,7 +96,7 @@ describe("workspace detection", () => {
   });
 });
 
-describe("effectiveCwd", () => {
+describe.skipIf(!HAS_FIXTURES)("effectiveCwd", () => {
   const { session } = fakeHarness();
   const s = session("s1", "/repo");
 
@@ -132,7 +132,7 @@ describe("effectiveCwd", () => {
   });
 });
 
-describe("cache invalidation — the stale-negative bug", () => {
+describe.skipIf(!HAS_FIXTURES)("cache invalidation — the stale-negative bug", () => {
   const SCRATCH = "/tmp/dsh-jujutsu-cache-test";
 
   beforeAll(() => {

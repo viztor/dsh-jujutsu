@@ -22,7 +22,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { resolveSettings } from "../src/settings.ts";
 import { buildToolDefinitions } from "../src/tools.ts";
-import { fakeHarness, realShell } from "./helpers.ts";
+import { fakeHarness, realShell, HAS_JJ } from "./helpers.ts";
 
 const ROOT = "/tmp/dsh-jujutsu-e2e";
 
@@ -74,7 +74,7 @@ beforeAll(() => {
   writeFileSync(`${ROOT}/g.txt`, "new file\n");
 });
 
-describe("the tools run real jj", () => {
+describe.skipIf(!HAS_JJ)("the tools run real jj", () => {
   it("jj_status reports the working copy, and that it is not conflicted", async () => {
     const h = harnessAt(ROOT);
     const result = (await h.call("jj_status")) as {
@@ -164,7 +164,7 @@ describe("the tools run real jj", () => {
   });
 });
 
-describe("the hunk bridge runs real jj-hunk", () => {
+describe.skipIf(!HAS_JJ)("the hunk bridge runs real jj-hunk", () => {
   it("jj_hunk_list returns real hunks for a real query", async () => {
     const h = harnessAt(ROOT);
     const result = (await h.call("jj_hunk_list", {

@@ -20,9 +20,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { apply } from "../src/index.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
-describe("there is no master switch, and that is the decision", () => {
+describe.skipIf(!HAS_FIXTURES)("there is no master switch, and that is the decision", () => {
   // The Plugins page already gives every row an enable toggle, and disabling the
   // row unmounts the plugin -- so `apply` never runs. A config-level switch would
   // be a second control for one decision, with the two able to disagree: the row
@@ -52,7 +52,7 @@ describe("there is no master switch, and that is the decision", () => {
   });
 });
 
-describe("the mount is a cache boundary", () => {
+describe.skipIf(!HAS_FIXTURES)("the mount is a cache boundary", () => {
   it("rediscovers a workspace created while the plugin was unmounted", async () => {
     // Measured live and recorded in src/README.md: detection caches a negative
     // result per directory, and the module outlives an unmount. Without the

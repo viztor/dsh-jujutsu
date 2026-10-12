@@ -21,7 +21,7 @@ import { invalidateDetection } from "../src/detect.ts";
 import { apply } from "../src/index.ts";
 import { invalidateMarkers } from "../src/marker.ts";
 import { VERB_ROWS } from "../src/messages.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 const CWD = `${FIXTURES}/jj-colocated`;
 
@@ -39,7 +39,7 @@ beforeEach(() => {
   invalidateMarkers();
 });
 
-describe("an approved call is remembered", () => {
+describe.skipIf(!HAS_FIXTURES)("an approved call is remembered", () => {
   it("asks once, then allows the same verb without asking", async () => {
     const h = fakeHarness();
     apply(h.ctx, { guard: "deny", readOnlyGit: "ask", rememberBypass: true });
@@ -96,7 +96,7 @@ describe("an approved call is remembered", () => {
   });
 });
 
-describe("the long-form branch is unreachable, deliberately", () => {
+describe.skipIf(!HAS_FIXTURES)("the long-form branch is unreachable, deliberately", () => {
   it("populates no `explain` on any message", () => {
     // The explainer attaches `additionalContexts` only when a refusal carries an
     // `explain`. Nothing does, because `docs/25` §2 defines two strings per

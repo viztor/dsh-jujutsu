@@ -20,7 +20,7 @@ import { invalidateDetection } from "../src/detect.ts";
 import { apply } from "../src/index.ts";
 import { invalidateMarkers } from "../src/marker.ts";
 import { clearWorkspaceState, workspaceState } from "../src/state.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 /**
  * The registered `agent/created` handler.
@@ -55,7 +55,7 @@ beforeEach(() => {
   invalidateMarkers();
 });
 
-describe("a jj workspace is recorded in full", () => {
+describe.skipIf(!HAS_FIXTURES)("a jj workspace is recorded in full", () => {
   it("records the kind, the root, and the two probes", async () => {
     const h = fakeHarness();
     apply(h.ctx, { guard: "deny", alertUninitialised: true });
@@ -83,7 +83,7 @@ describe("a jj workspace is recorded in full", () => {
   });
 });
 
-describe("a directory with no jj records what does govern", () => {
+describe.skipIf(!HAS_FIXTURES)("a directory with no jj records what does govern", () => {
   it("records a plain Git repository", async () => {
     const h = fakeHarness();
     apply(h.ctx, { guard: "deny" });
@@ -104,7 +104,7 @@ describe("a directory with no jj records what does govern", () => {
   });
 });
 
-describe("a broken preflight costs nothing", () => {
+describe.skipIf(!HAS_FIXTURES)("a broken preflight costs nothing", () => {
   it("records no state and does not throw when the session is malformed", async () => {
     // `agent/created` is awaited by the harness, so a throw here would cost the
     // user their session. A payload with no session is the cheapest way to reach

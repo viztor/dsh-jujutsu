@@ -58,6 +58,10 @@ export default defineConfig({
   ],
 
   test: {
+    // The fixture repositories are built here rather than assumed. They were
+    // built by a script nothing invoked, which made the suite pass on the machine
+    // that had run it by hand and fail everywhere else.
+    globalSetup: ["test/global-setup.ts"],
     include: ["test/**/*.test.ts"],
     // No alias for the primitives: the panel imports them **type-only**, which
     // is erased, so nothing resolves the package at runtime outside the browser.

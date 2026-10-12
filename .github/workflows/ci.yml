@@ -40,6 +40,29 @@ jobs:
       # right, and `--frozen-lockfile` is the only way to see it in CI.
       - run: pnpm install --frozen-lockfile
 
+      # The suite drives the real `jj` binary: `e2e.test.ts` builds repositories
+      # with it, and `test/global-setup.ts` builds the fixture repositories with
+      # it. Without this step the fixtures are never built, detection finds no
+      # repository, the guard allows what it should refuse, and nine tests fail
+      # with a message that blames the guard.
+      #
+      # That is what happened: the suite was green on the machine where the
+      # fixture script had been run by hand and red on every push for a week.
+      #
+      # Pinned rather than `latest`, because a policy plugin's behaviour depends
+      # on the VCS it governs and a silent upstream change should be a decision
+      # rather than a surprise. The pin is the version this was developed
+      # against; bump it deliberately.
+      - name: Install jj
+        env:
+          JJ_VERSION: 0.46.0
+        run: |
+          curl -fsSL -o /tmp/jj.tar.gz \
+            "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          tar -xzf /tmp/jj.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/jj /usr/local/bin/jj
+          jj --version
+
       # `ci` is the whole gate in one command — typecheck, `vp check` for format
       # and lint, the build, then the suite — and it is deliberately not spelled
       # out step by step here. A tag runs exactly what a commit runs, and two

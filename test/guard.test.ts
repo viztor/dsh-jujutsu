@@ -13,7 +13,7 @@ import { apply } from "../src/index.ts";
 import { forget } from "../src/bypass.ts";
 import { invalidateDetection } from "../src/detect.ts";
 import { invalidateMarkers } from "../src/marker.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 /** A `bash` call in the colocated fixture. */
 function bash(
@@ -46,7 +46,7 @@ beforeEach(() => {
   invalidateDetection();
 });
 
-describe("the guard refuses Git inside a jj workspace", () => {
+describe.skipIf(!HAS_FIXTURES)("the guard refuses Git inside a jj workspace", () => {
   it("denies `git commit` and names `jj commit`", async () => {
     const h = harnessWith({ readOnlyGit: "deny" });
     const decision = await h.preExecute(bash(h, "git commit -m 'fix'"));
@@ -81,7 +81,7 @@ describe("the guard refuses Git inside a jj workspace", () => {
   });
 });
 
-describe("the guard is invisible outside a jj workspace", () => {
+describe.skipIf(!HAS_FIXTURES)("the guard is invisible outside a jj workspace", () => {
   it("allows Git in a plain Git repo", async () => {
     const h = harnessWith();
     const decision = await h.preExecute(bash(h, "git commit -m x", `${FIXTURES}/plain-git`));
@@ -101,7 +101,7 @@ describe("the guard is invisible outside a jj workspace", () => {
   });
 });
 
-describe("the carve-outs and the false positives", () => {
+describe.skipIf(!HAS_FIXTURES)("the carve-outs and the false positives", () => {
   it("allows `jj git <sub>`", async () => {
     const h = harnessWith();
     for (const command of ["jj git export", "jj git fetch", "jj git push"]) {
@@ -117,7 +117,7 @@ describe("the carve-outs and the false positives", () => {
   });
 });
 
-describe("destructive paths — the unrecoverable class", () => {
+describe.skipIf(!HAS_FIXTURES)("destructive paths — the unrecoverable class", () => {
   it("refuses `rm -rf .git` in a colocated repo", async () => {
     const h = harnessWith({ readOnlyGit: "allow" });
     const decision = await h.preExecute(bash(h, "rm -rf .git"));
@@ -145,7 +145,7 @@ describe("destructive paths — the unrecoverable class", () => {
   });
 });
 
-describe("write protection", () => {
+describe.skipIf(!HAS_FIXTURES)("write protection", () => {
   it("refuses a write into .jj", async () => {
     const h = harnessWith();
     const exec = h.session("s1", `${FIXTURES}/jj-colocated`).exec("write", {
@@ -173,7 +173,7 @@ describe("write protection", () => {
   });
 });
 
-describe("the approval policy", () => {
+describe.skipIf(!HAS_FIXTURES)("the approval policy", () => {
   it("denies rather than asks under `never`, so our message survives", async () => {
     // Under `never` an ask auto-rejects *and* dsh-tools substitutes its own
     // reason, losing the jj command entirely (docs/17).
@@ -192,7 +192,7 @@ describe("the approval policy", () => {
   });
 });
 
-describe("the remembered bypass", () => {
+describe.skipIf(!HAS_FIXTURES)("the remembered bypass", () => {
   it("stops asking once the user has approved a verb", async () => {
     const h = harnessWith({ bypass: "ask" });
     const first = bash(h, "git commit -m one");
@@ -223,7 +223,7 @@ describe("the remembered bypass", () => {
   });
 });
 
-describe("fail open", () => {
+describe.skipIf(!HAS_FIXTURES)("fail open", () => {
   it("allows the call when the detector throws", async () => {
     // A throw inside `tools/pre-execute` becomes a tool error that skips
     // post-execute for every call, so the guard must swallow its own failures.
@@ -244,7 +244,7 @@ describe("fail open", () => {
   });
 });
 
-describe("destructive paths — expansions must not over-trigger", () => {
+describe.skipIf(!HAS_FIXTURES)("destructive paths — expansions must not over-trigger", () => {
   const h = () => {
     const harness = fakeHarness();
     apply(harness.ctx, { guard: "deny", bypass: "deny", readOnlyGit: "deny" });
@@ -288,7 +288,7 @@ describe("destructive paths — expansions must not over-trigger", () => {
   });
 });
 
-describe("fail-open is loud", () => {
+describe.skipIf(!HAS_FIXTURES)("fail-open is loud", () => {
   it("allows the call and reports the error when the guard throws", async () => {
     // Fail-open is deliberate: a throw here would become a tool error that skips
     // post-execute for *every* call. But swallowing it silently means a broken

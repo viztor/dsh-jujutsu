@@ -16,13 +16,39 @@
  * @module dsh-jujutsu/test-helpers
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 import type { Context } from "@deepseek-ai/cordis";
 import type { PreToolDecision, ToolExecution } from "@deepseek-ai/dsh-tools";
 
 /** The fixture root the builder script uses by default. */
 export const FIXTURES = "/tmp/dsh-jujutsu-fixtures";
+
+/**
+ * Whether the fixture repositories exist.
+ *
+ * They are built by `test/global-setup.ts` when `jj` is on PATH. When it is not,
+ * the tests that need a real repository skip against this rather than failing
+ * with a message that blames the guard.
+ */
+export const HAS_FIXTURES = existsSync(`${FIXTURES}/jj-colocated/.jj`);
+
+/**
+ * Whether `jj` is on PATH.
+ *
+ * `e2e.test.ts` builds its own repositories rather than using the fixtures, but
+ * it drives the real binary — so without `jj` it fails on the first `execFileSync`
+ * with an error that names neither the tool nor the reason.
+ */
+export const HAS_JJ = ((): boolean => {
+  try {
+    execFileSync("jj", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 /** One recorded `ctx.on` registration. */
 export interface Listener {

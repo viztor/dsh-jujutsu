@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apply } from "../src/index.ts";
 import { invalidateDetection } from "../src/detect.ts";
 import { MARKER_FILE, invalidateMarkers, markerFor } from "../src/marker.ts";
-import { FIXTURES, fakeHarness } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 const ROOT = "/tmp/dsh-jujutsu-marker-test";
 
@@ -29,7 +29,7 @@ beforeEach(() => {
   invalidateMarkers();
 });
 
-describe("finding the marker", () => {
+describe.skipIf(!HAS_FIXTURES)("finding the marker", () => {
   it("returns nothing when there is no marker", async () => {
     const { ctx } = fakeHarness();
     mkdirSync(ROOT, { recursive: true });
@@ -99,7 +99,7 @@ describe("finding the marker", () => {
   });
 });
 
-describe("the switch reaches the guard", () => {
+describe.skipIf(!HAS_FIXTURES)("the switch reaches the guard", () => {
   const inFixture = (h: ReturnType<typeof fakeHarness>, command: string, cwd: string) =>
     h.session("s1", cwd).exec("bash", { command, description: "test" });
 
