@@ -35,6 +35,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 
+import { ErrorCode } from "./errors.ts";
 import { applyHunks, listHunks } from "./hunk.ts";
 import type { Settings } from "./settings.ts";
 import { runJj } from "./shell.ts";
@@ -103,7 +104,7 @@ async function jj(
     if (result.exitCode !== 0) {
       return {
         error: {
-          code: "JJ_EXEC_FAILED",
+          code: ErrorCode.JJ_EXEC_FAILED,
           message: `jj exited ${String(result.exitCode)}: ${result.stderr.trim().slice(0, 300)}`,
           hint: `Run \`jj ${args.join(" ")}\` by hand to see the full output.`,
         },
@@ -113,7 +114,7 @@ async function jj(
   } catch (error) {
     return {
       error: {
-        code: "JJ_MISSING",
+        code: ErrorCode.JJ_MISSING,
         message: `${settings.jjPath} could not be started: ${String(error).slice(0, 160)}`,
         hint: "Install jj: brew install jj",
       },
@@ -152,7 +153,7 @@ export function parseJsonLines(
       return {
         ok: false,
         error: {
-          code: "JJ_OUTPUT_NOT_JSON",
+          code: ErrorCode.JJ_OUTPUT_NOT_JSON,
           message: `jj returned a line that is not JSON: ${text.slice(0, 120)}`,
           hint: `Run \`${command}\` by hand to see the raw output.`,
         },
@@ -244,7 +245,7 @@ async function identityConfigured(
 function identityRefusal(): unknown {
   return {
     error: {
-      code: "JJ_IDENTITY_UNCONFIGURED",
+      code: ErrorCode.JJ_IDENTITY_UNCONFIGURED,
       message:
         "jj user.name/user.email are not configured, so this would create a commit with the empty identity that cannot be pushed.",
       hint: 'Configure it first: jj config set --user user.name "Your Name" && jj config set --user user.email "you@example.com"',
@@ -315,7 +316,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (_args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const revisions = await jjJson(ctx, settings, cwd, [
         "log",
         "--no-graph",
@@ -340,7 +341,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const revset = typeof args.revset === "string" ? args.revset : "::@";
       const argv = ["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
@@ -358,7 +359,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const revset = typeof args.revset === "string" ? args.revset : "@";
       const raw = await jj(ctx, settings, cwd, ["diff", "--summary", "-r", revset]);
       if (typeof raw !== "string") return raw; // error object
@@ -376,7 +377,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const argv = ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
       return jjJson(ctx, settings, cwd, argv);
@@ -397,7 +398,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       // `jj new` mints a commit, so an unconfigured identity makes it a trap.
       if ((await identityConfigured(ctx, settings, cwd)) === false) {
         return identityRefusal();
@@ -420,7 +421,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const argv = ["describe", "-m", String(args.message)];
       if (typeof args.revset === "string") argv.push("-r", args.revset);
       return jj(ctx, settings, cwd, argv);
@@ -445,7 +446,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const argv = ["squash"];
       if (typeof args.from === "string") argv.push("--from", args.from);
       if (typeof args.into === "string") argv.push("--into", args.into);
@@ -479,7 +480,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       return jj(
         ctx,
         settings,
@@ -504,7 +505,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       return jj(ctx, settings, cwd, ["op", "restore", String(args.opId)]);
     },
   });
@@ -523,7 +524,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const outcome = await listHunks(ctx, settings, {
         cwd,
         ...(typeof args.query === "string" ? { query: args.query } : {}),
@@ -556,7 +557,7 @@ export function buildToolDefinitions(
     output: JSON_OUTPUT,
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: "WORKSPACE_ROOT_UNRESOLVED" } };
+      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const mode = String(args.mode) as "split" | "commit" | "squash";
       // `squash` moves changes into an existing commit and preserves its author;
       // `split` and `commit` create one, so they are the modes that mint the

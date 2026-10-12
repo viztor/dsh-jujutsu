@@ -23,6 +23,17 @@ export const ErrorCode = {
   JJ_REPO_BROKEN: "JJ_REPO_BROKEN",
   JJ_CONFLICTS_PRESENT: "JJ_CONFLICTS_PRESENT",
   JJ_EXEC_FAILED: "JJ_EXEC_FAILED",
+  /**
+   * A multi-revision `jj` query returned something that is not the
+   * newline-delimited JSON its template promised.
+   *
+   * This was emitted and asserted in a test without ever being declared — a code
+   * that existed only as a string literal, outside the vocabulary meant to hold
+   * every one of them. `tools.ts` explains why it matters: `json(self)` emits no
+   * separator, so a template that forgets `++ "\n"` produces output no parser
+   * can split, and the failure is silent at the `jj` end.
+   */
+  JJ_OUTPUT_NOT_JSON: "JJ_OUTPUT_NOT_JSON",
   JJ_HUNK_MISSING: "JJ_HUNK_MISSING",
   JJ_HUNK_VERSION_TOO_OLD: "JJ_HUNK_VERSION_TOO_OLD",
   JJ_HUNK_INSTALL_DECLINED: "JJ_HUNK_INSTALL_DECLINED",

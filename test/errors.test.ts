@@ -8,6 +8,9 @@
  * should be a missing key rather than a null one.
  */
 
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { ErrorCode, toolError } from "../src/errors.ts";
@@ -64,5 +67,64 @@ describe("guard-utils", () => {
     expect(readString({}, "a")).toBeUndefined();
     expect(readString(null, "a")).toBeUndefined();
     expect(readString("not a record", "a")).toBeUndefined();
+  });
+});
+
+describe("every error code comes from the vocabulary", () => {
+  it("keeps the unimplemented vocabulary to a recorded set", () => {
+    // `ErrorCode` is the vocabulary `docs/26` specifies, and the implementation
+    // has reached part of it. Fifteen of twenty-four are declared and never
+    // emitted — a promise, not a defect, but one that should not grow by accident
+    // and should not be mistaken for coverage.
+    //
+    // Recording the set makes it a ratchet: implementing one means deleting a
+    // line here, and adding a code without emitting it fails immediately.
+    const KNOWN_UNIMPLEMENTED = [
+      "NOT_JJ_WORKSPACE",
+      "JJ_VERSION_TOO_OLD",
+      "JJ_REPO_UNREADABLE",
+      "JJ_REPO_BROKEN",
+      "JJ_CONFLICTS_PRESENT",
+      "JJ_HUNK_VERSION_TOO_OLD",
+      "JJ_HUNK_INSTALL_DECLINED",
+      "JJ_HUNK_INSTALL_FAILED",
+      "CARGO_MISSING",
+      "REVSET_INVALID",
+      "REVSET_NOT_SINGLE",
+      "HUNK_SPEC_INVALID",
+      "HUNK_SPEC_STALE",
+      "SHELL_EXEC_FAILED",
+      "FS_ERROR",
+    ];
+    const codes = [...readFileSync("src/errors.ts", "utf8").matchAll(/^ {2}([A-Z_]+):/gm)].map(
+      (m) => m[1]!,
+    );
+    const sources = readdirSync("src")
+      .filter((f) => f.endsWith(".ts") && f !== "errors.ts")
+      .map((f) => readFileSync(join("src", f), "utf8"))
+      .join("\n");
+    const unused = codes.filter((code) => !sources.includes(`ErrorCode.${code}`)).sort();
+    expect(unused).toEqual([...KNOWN_UNIMPLEMENTED].sort());
+  });
+
+  it("emits no code that is not declared", () => {
+    // The failure this exists for: `JJ_OUTPUT_NOT_JSON` was emitted in `tools.ts`
+    // and asserted in a test, and was in no vocabulary at all. A bare string
+    // cannot be checked against anything, so it drifted out of `docs/26` and out
+    // of `ErrorCode` and nothing noticed.
+    const declared = new Set(
+      [...readFileSync("src/errors.ts", "utf8").matchAll(/^ {2}([A-Z_]+):/gm)].map((m) => m[1]!),
+    );
+    const offenders: string[] = [];
+    for (const file of readdirSync("src").filter((f) => f.endsWith(".ts") && f !== "errors.ts")) {
+      const source = readFileSync(join("src", file), "utf8");
+      for (const match of source.matchAll(/code: "([A-Z_]+)"/g)) {
+        offenders.push(`${file} emits the bare string ${match[1]}`);
+      }
+      for (const match of source.matchAll(/code: ErrorCode\.([A-Z_]+)/g)) {
+        if (!declared.has(match[1]!)) offenders.push(`${file} emits undeclared ${match[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
