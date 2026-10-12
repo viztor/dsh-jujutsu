@@ -65,6 +65,9 @@ function run(command: string, args: string[], cwd: string): string {
 {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     version: string;
+    repository: { url: string };
+    homepage: string;
+    bugs: { url: string };
   };
   const manifest = JSON.parse(
     readFileSync(join(ROOT, ".release-please-manifest.json"), "utf8"),
@@ -79,6 +82,13 @@ function run(command: string, args: string[], cwd: string): string {
     manifest["."] === pkg.version,
     `manifest has ${String(manifest["."])}, package.json has ${pkg.version}`,
   );
+
+  // Three fields, one repository, written by hand three times. npm renders all
+  // three on the package page, so a disagreement is visible to every reader.
+  const slug = pkg.repository.url.replace(/^git\+|\.git$/g, "");
+  check("homepage points at the repository", pkg.homepage.startsWith(slug), pkg.homepage);
+  check("bugs points at the repository's issues", pkg.bugs.url.startsWith(slug), pkg.bugs.url);
+
   check(
     "release-please is configured for the package root",
     Object.keys(config.packages).includes("."),

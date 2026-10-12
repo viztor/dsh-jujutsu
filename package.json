@@ -12,6 +12,10 @@
     "jj-hunk",
     "jujutsu"
   ],
+  "homepage": "https://github.com/viztor/dsh-jujutsu#readme",
+  "bugs": {
+    "url": "https://github.com/viztor/dsh-jujutsu/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
