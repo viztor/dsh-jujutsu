@@ -78,16 +78,16 @@ still works).
 
 Open **Plugins → Jujutsu**. Most settings are on that page:
 
-| Setting                         | Default | What it changes                                                                      |
-| ------------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| Guard                           | `deny`  | `off` leaves the guard mounted but inert — useful to see what it _would_ have caught |
-| Read-only Git                   | `ask`   | What to do with `git status`, `git log`, …                                           |
-| Writing Git                     | `ask`   | What to do with `git commit`, `git push`, …                                          |
-| Remember approvals              | on      | Stop re-asking about a verb you already approved, for this session                   |
-| Mention missing version control | on      | Tell the model when a directory has no repository                                    |
-| Prefer Jujutsu                  | on      | Suggest `jj git init` rather than `git init`                                         |
-| Explain Jujutsu in the prompt   | on      | Off means the guard still refuses Git but the model is not told why                  |
-| Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                           |
+| Setting                         | Default | What it changes                                                                    |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| Guard                           | on      | Off leaves the guard mounted but inert — useful to see what it _would_ have caught |
+| Read-only Git                   | `ask`   | What to do with `git status`, `git log`, …                                         |
+| Writing Git                     | `ask`   | What to do with `git commit`, `git push`, …                                        |
+| Remember approvals              | on      | Stop re-asking about a verb you already approved, for this session                 |
+| Mention missing version control | on      | Tell the model when a directory has no repository                                  |
+| Prefer Jujutsu                  | on      | Suggest `jj git init` rather than `git init`                                       |
+| Explain Jujutsu in the prompt   | on      | Off means the guard still refuses Git but the model is not told why                |
+| Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                         |
 
 ### Advanced: where the binaries are found
 

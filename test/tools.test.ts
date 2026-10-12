@@ -246,8 +246,12 @@ describe("the push trap is surfaced where it can still be avoided", () => {
       | { description: string; parameters: Record<string, { description?: string }> }
       | undefined;
     expect(def).toBeDefined();
-    expect(def!.description).toContain("refuses to push");
-    expect(def!.parameters.message?.description ?? "").toContain("cannot be pushed");
+    // The warning belongs on the tool, not on the `message` parameter: the model
+    // that needs it is the one *omitting* a message, and a parameter description
+    // only reaches a model already passing that parameter. Putting it on both
+    // states one fact twice, which is what this test used to require.
+    expect(def!.description).toContain("cannot be pushed");
+    expect(def!.parameters.message?.description ?? "").not.toContain("pushed");
   });
 });
 

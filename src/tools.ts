@@ -310,7 +310,7 @@ export function buildToolDefinitions(
   register({
     name: "jj_status",
     description:
-      "Show the Jujutsu working copy. `@` is always a commit and always dirty — there is no staging area and nothing to add.",
+      "Show the Jujutsu working copy: the current revision, its parent, and whether there are unresolved conflicts.",
     parameters: {},
     output: JSON_OUTPUT,
     execute: async (_args: ToolArgs, exec: unknown) => {
@@ -332,8 +332,7 @@ export function buildToolDefinitions(
 
   register({
     name: "jj_log",
-    description:
-      "Show revision history as JSON. Address revisions by change ID, which survives rewrites; commit IDs do not.",
+    description: "Show revision history as JSON, newest first.",
     parameters: {
       revset: { type: "string", description: "A revset, e.g. `::@` or `all()`." },
       limit: { type: "integer", description: "Maximum revisions to return." },
@@ -387,13 +386,12 @@ export function buildToolDefinitions(
   register({
     name: "jj_new",
     description:
-      "Start a new change on top of a revision. This is how a change is finalised — not `git commit`. Pass a message: jj refuses to push a change with no description.",
+      "Start a new change on top of a revision. This is how a change is finalised — not `git commit`. Omitting a message creates a change that cannot be pushed.",
     parameters: {
       revset: { type: "string", description: "Parent revision. Defaults to `@`." },
       message: {
         type: "string",
-        description:
-          "Description for the new change. Strongly recommended — a change with no description cannot be pushed.",
+        description: "Description for the new change.",
       },
     },
     output: JSON_OUTPUT,
@@ -457,8 +455,7 @@ export function buildToolDefinitions(
 
   register({
     name: "jj_bookmark",
-    description:
-      "Manage bookmarks — Jujutsu's named branches, and the only thing GitHub can see. Bookmarks are the publish boundary.",
+    description: "Manage bookmarks — Jujutsu's named branches, and the only thing GitHub can see.",
     parameters: {
       action: {
         type: "string",
@@ -476,8 +473,7 @@ export function buildToolDefinitions(
       },
       revset: {
         type: "string",
-        description:
-          "Target revision. Applies to `create` and `set` (as `-r`) and to `move` (as `--to`).",
+        description: "Target revision. Used by `create`, `set` and `move`; ignored by the rest.",
       },
     },
     output: JSON_OUTPUT,
@@ -516,7 +512,7 @@ export function buildToolDefinitions(
   register({
     name: "jj_hunk_list",
     description:
-      "List the hunks a selection would touch. Always call this before jj_hunk_apply: hunk IDs change whenever the revision or working copy changes, so a query is the only safe selection.",
+      "List the hunks a selection would touch, so a selection can be inspected before it is applied.",
     parameters: {
       query: {
         type: "string",
@@ -539,8 +535,7 @@ export function buildToolDefinitions(
 
   register({
     name: "jj_hunk_apply",
-    description:
-      "Split, commit or squash a selected set of hunks without an interactive editor. Pass a query, never saved hunk IDs.",
+    description: "Split, commit or squash a selected set of hunks without an interactive editor.",
     parameters: {
       mode: {
         type: "string",
@@ -551,7 +546,8 @@ export function buildToolDefinitions(
       },
       query: {
         type: "string",
-        description: 'A hunkset expression, e.g. `added(content:"timeout")`.',
+        description:
+          'A hunkset expression, e.g. `added(content:"timeout")`. Pass the expression rather than saved hunk IDs: IDs change whenever the revision or the working copy changes, so selecting by query is the only stable way.',
         required: true,
       },
       message: { type: "string", description: "Commit message. Required for split and commit." },
