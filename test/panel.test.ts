@@ -57,6 +57,12 @@ function loadPanel(): Record<string, any> {
         actions() {
           return { edit() {}, resetField() {}, save() {}, discard() {} };
         }
+        bind(project: () => unknown) {
+          // The real one republishes on scope and draft changes; a one-shot
+          // render only needs the initial projection.
+          return { subscribe: () => () => {}, getSnapshot: project };
+        }
+        dispose() {}
       },
       settingsTextField: (f: string) => ({
         field: f,
@@ -67,6 +73,9 @@ function loadPanel(): Record<string, any> {
     react: {
       createElement: (type: unknown, props: unknown, ...kids: unknown[]) => ({ type, props, kids }),
       useState: (initial: unknown) => [initial, () => {}],
+      // The panel subscribes to a bound store. Calling `getSnapshot` is the
+      // whole of what a one-shot render needs from this.
+      useSyncExternalStore: (_sub: unknown, get: () => unknown) => get(),
     },
   };
   return factory((id: string) => stubs[id]);

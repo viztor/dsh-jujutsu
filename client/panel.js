@@ -320,9 +320,8 @@
      * what happened here, and it is why "registered" was never the same as
      * "working".
      */
-    function control(name, model, actions, shell, t) {
+    function control(name, state, actions, shell, t) {
       var meta = FIELDS[name];
-      var state = model.field(name);
       return h(primitives.ConfigField, {
         key: name,
         label: t(meta.labelKey),
@@ -373,24 +372,51 @@
         },
         h("p", { key: "blurb" }, t(props.group.blurbKey)),
         props.group.fields.map(function (name) {
-          return control(name, props.model, props.actions, props.shell, t);
+          return control(name, props.fields[name], props.actions, props.shell, t);
         }),
       );
     }
 
-    /** The panel: the form frame, then one disclosure per group. */
+    /**
+     * The panel: the form frame, then one disclosure per group.
+     *
+     * ## Why this subscribes instead of reading the model
+     *
+     * `SettingsFormShell.available` is documented as "false while the namespace
+     * is not served to this client; **the card renders nothing**". The namespace
+     * is not served at the instant the card first mounts, so a panel that reads
+     * `model.shell()` once renders nothing — and, with no subscription, never
+     * re-renders. The result is a card that is registered, does not throw, and
+     * is permanently blank.
+     *
+     * That is exactly what happened here: the slot reported `active: true` (so
+     * the render did not crash) while the page showed no form at all. The
+     * harness's own cards avoid it by binding a projection and reading it
+     * through `useSyncExternalStore`, so the card re-renders the moment the
+     * namespace arrives. `bind` is what makes `field()`/`shell()` reactive; on
+     * its own the model is a plain read.
+     */
     function Panel(props) {
       var t = translator(props);
-      var model = props.model;
-      var shell = model.shell();
-      // `shell()` is state only; the verbs live in `actions()`. `SettingsForm`
-      // takes `onSave`/`onDiscard`, which are NOT fields of the shell.
-      var actions = model.actions();
+      var state = react.useSyncExternalStore(
+        props.store.subscribe,
+        props.store.getSnapshot,
+        props.store.getSnapshot,
+      );
+      var shell = state.shell;
+      // The verbs arrive SPREAD on the injected props (`...model.actions()`),
+      // matching the harness's own cards, not nested under an `actions` key.
+      var actions = {
+        edit: props.edit,
+        resetField: props.resetField,
+        save: props.save,
+        discard: props.discard,
+      };
       var blocks = GROUPS.map(function (group) {
         return h(Group, {
           key: group.id,
           group: group,
-          model: model,
+          fields: state.fields,
           actions: actions,
           shell: shell,
           t: t,
@@ -428,7 +454,33 @@
       // `{ getSnapshot, subscribe, mutate }` — which is exactly the scope
       // `SettingsFormModel` takes.
       var scope = ctx.configForms.get(NS);
+      // No scope, no card. Registering one anyway produces an entry whose
+      // `available` is false forever, which renders nothing and looks identical
+      // to a working card that simply has no fields.
+      if (scope === undefined) return;
+
       var model = new primitives.SettingsFormModel(scope, buildSpecs(), []);
+      var specs = buildSpecs();
+
+      // `bind` is what makes the model reactive: it republishes whenever the
+      // scope or a draft changes. Without it `field()`/`shell()` are one-shot
+      // reads taken before the namespace is served, and the card stays blank.
+      var store = model.bind(function () {
+        return {
+          fields: Object.fromEntries(
+            specs.map(function (spec) {
+              return [spec.field, model.field(spec.field)];
+            }),
+          ),
+          shell: model.shell(),
+        };
+      });
+
+      ctx.effect(function () {
+        return function () {
+          model.dispose();
+        };
+      }, "dsh-jujutsu: form");
 
       ctx.effect(function () {
         var stop = ctx.configForms.whileServed([NS], function () {
@@ -438,8 +490,11 @@
                 name: "plugins.bundle.config",
                 key: NS,
                 locale: NS,
+                // The verbs ride on the injected props, matching the harness's
+                // own cards: `SettingsForm` takes `onSave`/`onDiscard`, and
+                // `ConfigField` takes `onChange`/`onReset`.
                 inject: function () {
-                  return { model: model };
+                  return Object.assign({ store: store }, model.actions());
                 },
               },
               Panel,
