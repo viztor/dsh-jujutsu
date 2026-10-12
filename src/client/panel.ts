@@ -278,7 +278,7 @@ const STRINGS: Record<string, Record<string, string>> = {
     groupBinariesBlurb: "Where jj and jj-hunk are found.",
     guardLabel: "Guard",
     guardHint:
-      "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
+      "On refuses Git commands inside a Jujutsu workspace. Off leaves the guard mounted but inert -- useful to watch what it would have caught.",
     readOnlyGitLabel: "Read-only Git",
     readOnlyGitHint:
       "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
@@ -325,7 +325,7 @@ const STRINGS: Record<string, Record<string, string>> = {
     groupBinariesBlurb: "jj 与 jj-hunk 的查找位置。",
     guardLabel: "拦截",
     guardHint:
-      "deny 会拒绝 Jujutsu 工作区内的 Git 命令；off 仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
+      "开启后拒绝 Jujutsu 工作区内的 Git 命令；关闭仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
     readOnlyGitLabel: "只读 Git",
     readOnlyGitHint:
       "对只读取的 Git 命令如何处理。始终只读：status、log、diff、show、blame、rev-parse、describe。仅在列举形式下只读：branch、tag、remote、config、stash——`git branch` 是读取，`git branch -d` 会写入。ask 会询问；allow 适合希望模型直接查看 Git 的用户。",
@@ -365,7 +365,7 @@ interface FieldMeta {
 }
 
 const FIELDS: Record<string, FieldMeta> = {
-  guard: { kind: "enum", labelKey: "guardLabel", hintKey: "guardHint", choices: ["deny", "off"] },
+  guard: { kind: "boolean", labelKey: "guardLabel", hintKey: "guardHint" },
   readOnlyGit: {
     kind: "enum",
     labelKey: "readOnlyGitLabel",

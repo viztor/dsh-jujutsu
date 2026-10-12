@@ -74,7 +74,7 @@ export function markAsked(exec: ToolExecution, refusal: Refusal): void {
 
 /** Register the explainer. */
 export function applyExplain(ctx: Context, settings: Settings): void {
-  if (settings.guard === "off") return;
+  if (!settings.guard) return;
 
   ctx.on("tools/post-execute", async (exec, result, next) => {
     try {

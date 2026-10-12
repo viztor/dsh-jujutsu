@@ -696,3 +696,36 @@ describe("the read-only hint answers how read-only is decided", () => {
     }
   });
 });
+
+describe("a two-state setting is a boolean, not a two-option enum", () => {
+  it("draws no enum with fewer than three choices", () => {
+    // Caught by looking at the page: Guard rendered as a segmented control
+    // offering "Deny" and "Off" -- two states presented as if they were choices
+    // of equal weight, when the setting is on or off. A two-option enum is a
+    // boolean wearing the wrong control, and it reads as a decision the user has
+    // to make rather than a switch they flip.
+    const { FIELDS } = loadPanel();
+    const tooSmall = Object.entries(FIELDS as Record<string, { choices?: string[] }>)
+      .filter(([, meta]) => meta.choices !== undefined && meta.choices.length < 3)
+      .map(([name]) => name);
+    expect(tooSmall).toEqual([]);
+  });
+
+  it("declares guard as a boolean in the schema", () => {
+    // The panel could be right and the schema wrong, or the reverse. This is the
+    // other half: `guard` is `z.boolean()`, not an enum of deny/off.
+    const schema = readFileSync("src/config.ts", "utf8");
+    expect(schema).toMatch(/^ {2}guard: z\n?\s*\.boolean\(\)/m);
+    expect(schema).not.toContain('z.const("off")');
+  });
+
+  it("reads guard as a boolean in both places that check it", () => {
+    // `=== "off"` on a boolean is always false, so the guard would never be
+    // inert and the setting would silently do nothing.
+    for (const file of ["src/guard.ts", "src/explain.ts"]) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toContain('settings.guard === "off"');
+      expect(source, file).toContain("if (!settings.guard) return;");
+    }
+  });
+});

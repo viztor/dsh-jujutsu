@@ -32,23 +32,23 @@ import z from "@deepseek-ai/schemastery";
 
 export const Config = z.object({
   /** `deny` enforces; `off` installs the listeners but always calls `next()`. */
+  /**
+   * The master guard switch. Boolean rather than an enum of `deny`/`off`:
+   * there are two states and no third, and an enum of two is a boolean that
+   * renders as a segmented control — which is what it did, showing "Deny" and
+   * "Off" as if they were choices of equal weight rather than on and off.
+   *
+   * `off` leaves the listener registered but inert, so it is a way to watch what
+   * the guard *would* have caught without losing the protection for the session.
+   */
   guard: z
-    .union([z.const("deny"), z.const("off")])
-    .default("deny")
+    .boolean()
+    .default(true)
     .description(
-      "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
+      "On refuses Git commands inside a Jujutsu workspace. Off leaves the guard mounted but inert -- useful to watch what it would have caught.",
     )
     .volatile(),
 
-  /**
-   * Read-only Git (`status`, `log`, `diff`, `show`, `blame`, and the *listing*
-   * forms of `branch`/`tag`/`config`/`remote`).
-   *
-   * Defaults to `ask`, not `allow`: `git status` in a colocated repo reports a
-   * *different* state than `jj status` does, so the model is actively misled
-   * (docs/33-probe-results-jj.md). Flags win over the verb — only positively
-   * identified listing forms are read-only (docs/14-decision-log.md §R6).
-   */
   readOnlyGit: z
     .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")

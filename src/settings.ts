@@ -16,7 +16,7 @@
 import { isRecord } from "./guard-utils.ts";
 
 export interface Settings {
-  readonly guard: "deny" | "off";
+  readonly guard: boolean;
   readonly readOnlyGit: "deny" | "ask" | "allow";
   readonly bypass: "ask" | "deny" | "allow";
   readonly rememberBypass: boolean;
@@ -31,7 +31,6 @@ export interface Settings {
   readonly preferJj: boolean;
 }
 
-const GUARD = ["deny", "off"] as const;
 const READ_ONLY = ["deny", "ask", "allow"] as const;
 const INSTALL = ["ask", "never", "auto"] as const;
 
@@ -58,7 +57,7 @@ function string(value: unknown, fallback: string): string {
 export function resolveSettings(raw: unknown): Settings {
   const row = isRecord(raw) ? raw : {};
   return {
-    guard: oneOf(row.guard, GUARD, "deny"),
+    guard: row.guard !== false,
     readOnlyGit: oneOf(row.readOnlyGit, READ_ONLY, "ask"),
     bypass: oneOf(row.bypass, READ_ONLY, "ask"),
     rememberBypass: boolean(row.rememberBypass, true),

@@ -58,7 +58,7 @@ interface ApprovalLike {
 
 /** Register the guard. */
 export function applyGuard(ctx: Context, settings: Settings): void {
-  if (settings.guard === "off") return;
+  if (!settings.guard) return;
 
   // A `jj git init` or `jj workspace add` turns a plain directory into a
   // workspace. Detection is cached per root, so a cached "none" has to be
