@@ -27,18 +27,9 @@
 import { tokenize as rawTokenize } from "./invocation.ts";
 
 export { classifyInvocation } from "./invocation.ts";
-
-/** What one command resolves to. */
-export interface Invocation {
-  /** Every program the command resolves to, in order. */
-  readonly programs: readonly string[];
-  /** The subset that is the `git` program. Empty means "not a Git invocation". */
-  readonly gitInvocations: readonly string[];
-  /** `low` when the resolver had to guess; policy treats that as a question, not an allow. */
-  readonly confidence: "high" | "low";
-  /** Why the resolver is unsure, for the log and for tests. */
-  readonly notes: readonly string[];
-}
+// Re-exported, not declared: the engine returns this type, so it belongs with the
+// engine. Declaring it here made `invocation.ts` import from its own facade.
+export type { Invocation } from "./invocation.ts";
 
 /**
  * One word of a command, with the quoting and offset the tokenizer recorded.

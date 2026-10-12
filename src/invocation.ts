@@ -19,7 +19,26 @@
  * @module dsh-jujutsu/invocation
  */
 
-import type { Invocation } from "./parse.ts";
+/**
+ * What one command resolves to.
+ *
+ * Declared here rather than in `parse.ts`, which used to be its home. The
+ * dependency ran the wrong way: this module *returns* an `Invocation`, and
+ * `parse.ts` wraps this module's tokenizer — so the engine imported its own
+ * facade's type, and the two formed an import cycle. Types-only cycles are
+ * erased at compile time and harmless at runtime, which is exactly why this one
+ * survived: nothing broke, so nothing pointed at it.
+ */
+export interface Invocation {
+  /** Every program the command resolves to, in order. */
+  readonly programs: readonly string[];
+  /** The subset that is the `git` program. Empty means "not a Git invocation". */
+  readonly gitInvocations: readonly string[];
+  /** `low` when the resolver had to guess; policy treats that as a question, not an allow. */
+  readonly confidence: "high" | "low";
+  /** Why the resolver is unsure, for the log and for tests. */
+  readonly notes: readonly string[];
+}
 
 /**
  * The invocation resolver — ported verbatim from `scripts/probe-invocation.mjs`.
