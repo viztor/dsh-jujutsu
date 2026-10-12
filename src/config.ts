@@ -53,7 +53,7 @@ export const Config = z.object({
     .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .description(
-      "What to do with Git commands that only read (status, log, diff, show, blame). ask prompts; allow is for users who want the model to inspect Git directly. Mutating forms are never covered by this setting.",
+      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
     )
     .volatile(),
 
@@ -63,10 +63,10 @@ export const Config = z.object({
    * See docs/17-bypass-and-approval.md.
    */
   bypass: z
-    .union([z.const("ask"), z.const("deny"), z.const("allow")])
+    .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .description(
-      "What to do with Git commands that write (commit, push, checkout, rebase). ask requests a one-call approval; deny never asks; allow disables the guard for these.",
+      "What to do with every other Git command: commit, push, checkout, rebase, and anything the read-only setting does not list -- including the writing form of a verb it does. ask requests a one-call approval; deny never asks; allow disables the guard for these.",
     )
     .volatile(),
 

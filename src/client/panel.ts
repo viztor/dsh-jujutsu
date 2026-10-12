@@ -281,10 +281,10 @@ const STRINGS: Record<string, Record<string, string>> = {
       "deny refuses Git commands inside a Jujutsu workspace. off leaves the guard mounted but inert — useful to watch what it would have caught.",
     readOnlyGitLabel: "Read-only Git",
     readOnlyGitHint:
-      "What to do with Git commands that only read (status, log, diff, show, blame). ask prompts; allow is for users who want the model to inspect Git directly. Mutating forms are never covered by this setting.",
+      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
     bypassLabel: "Writing Git",
     bypassHint:
-      "What to do with Git commands that write (commit, push, checkout, rebase). ask requests a one-call approval; deny never asks; allow disables the guard for these.",
+      "What to do with every other Git command: commit, push, checkout, rebase, and anything the read-only setting does not list -- including the writing form of a verb it does. ask requests a one-call approval; deny never asks; allow disables the guard for these.",
     rememberBypassLabel: "Remember approvals",
     rememberBypassHint:
       "After you approve one Git command, stop asking about that same verb for the rest of the session. In memory only — it does not survive a restart.",
@@ -328,10 +328,10 @@ const STRINGS: Record<string, Record<string, string>> = {
       "deny 会拒绝 Jujutsu 工作区内的 Git 命令；off 仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
     readOnlyGitLabel: "只读 Git",
     readOnlyGitHint:
-      "对只读取的 Git 命令（status、log、diff、show、blame）如何处理。ask 会询问；allow 适合希望模型直接查看 Git 的用户。会写入的命令不受此项影响。",
+      "对只读取的 Git 命令如何处理。始终只读：status、log、diff、show、blame、rev-parse、describe。仅在列举形式下只读：branch、tag、remote、config、stash——`git branch` 是读取，`git branch -d` 会写入。ask 会询问；allow 适合希望模型直接查看 Git 的用户。",
     bypassLabel: "写入型 Git",
     bypassHint:
-      "对会写入的 Git 命令（commit、push、checkout、rebase）如何处理。ask 请求单次批准；deny 从不询问；allow 对这些命令关闭拦截。",
+      "对其它所有 Git 命令如何处理：commit、push、checkout、rebase，以及「只读 Git」未列出的任何命令——包括其中会写入的形式。ask 请求单次批准；deny 从不询问；allow 对这些命令关闭拦截。",
     rememberBypassLabel: "记住批准",
     rememberBypassHint:
       "批准过某个 Git 命令后，本次会话内不再就同一动作重复询问。仅存于内存，重启后失效。",
@@ -376,7 +376,7 @@ const FIELDS: Record<string, FieldMeta> = {
     kind: "enum",
     labelKey: "bypassLabel",
     hintKey: "bypassHint",
-    choices: ["ask", "deny", "allow"],
+    choices: ["deny", "ask", "allow"],
   },
   rememberBypass: {
     kind: "boolean",

@@ -640,3 +640,59 @@ describe("a draft the field rejects, and one the user overrode", () => {
     expect(types).not.toContain("Button");
   });
 });
+
+describe("two settings on the same scale read the same way round", () => {
+  it("orders the shared choices identically", () => {
+    // Caught by looking at the page: read-only Git showed deny|ask|allow and
+    // writing Git showed ask|deny|allow. Same three values, same meaning, two
+    // orders -- so the two controls could not be compared at a glance, which is
+    // the only thing a segmented control is for.
+    const { FIELDS } = loadPanel();
+    const enums = Object.entries(FIELDS as Record<string, { choices?: string[] }>)
+      .filter(([, meta]) => meta.choices !== undefined)
+      .map(([name, meta]) => [name, meta.choices as string[]] as const);
+
+    const shared = enums.filter(([, choices]) => choices.length === 3);
+    expect(shared.length).toBeGreaterThan(1);
+    const [first] = shared;
+    for (const [name, choices] of shared) {
+      expect(choices, `${name} vs ${first?.[0]}`).toEqual(first?.[1]);
+    }
+  });
+});
+
+describe("the read-only hint answers how read-only is decided", () => {
+  it("names every always-read-only verb", () => {
+    // The question the two settings raise first is which commands each covers.
+    // A few examples with an ellipsis does not answer it, so the hint names the
+    // whole classification -- and it has to stay in step with verbs.ts, which
+    // this asserts against the real sets rather than a copy of them.
+    const { STRINGS } = loadPanel();
+    const hint = STRINGS.en.readOnlyGitHint as string;
+    const verbs = readFileSync("src/verbs.ts", "utf8");
+    const always = verbs
+      .split("const ALWAYS_READ_ONLY: ReadonlySet<string> = new Set([")[1]
+      ?.split("])")[0]
+      ?.match(/"[a-z-]+"/g)
+      ?.map((v) => v.replaceAll('"', ""));
+    expect(always?.length).toBeGreaterThan(0);
+    for (const verb of always ?? []) {
+      expect(hint, verb).toContain(verb);
+    }
+  });
+
+  it("names every verb whose read-only-ness depends on its form", () => {
+    const { STRINGS } = loadPanel();
+    const hint = STRINGS.en.readOnlyGitHint as string;
+    const messages = readFileSync("src/messages.ts", "utf8");
+    const conditional = messages
+      .split("export const READ_ONLY_VERBS: ReadonlySet<string> = new Set([")[1]
+      ?.split("])")[0]
+      ?.match(/"[a-z-]+"/g)
+      ?.map((v) => v.replaceAll('"', ""));
+    expect(conditional?.length).toBeGreaterThan(0);
+    for (const verb of conditional ?? []) {
+      expect(hint, verb).toContain(verb);
+    }
+  });
+});
