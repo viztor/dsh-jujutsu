@@ -14,12 +14,32 @@ A package's `dsh` field is read by two independent subsystems:
 | `dsh.client`  | `dsh-client-modules` | the web client loads `lib/client.js`      |
 | `dsh.profile` | `dsh-app-boot`       | only meaningful in a profile manifest     |
 
-`dsh-jujutsu` needs **only `dsh.bundle`**. It has no UI, so no `dsh.client`,
-no `lib/client.js`, no React, no locale files.
+`dsh-jujutsu` needs **both `dsh.bundle` and `dsh.client`**. This line used to say
+the plugin needed only `dsh.bundle`, on the grounds that it shipped no browser
+half at all. That stopped being true when the settings panel landed — the panel
+is now the largest surface the plugin has, and a document about package
+conventions is exactly where a reader checks whether they need `dsh.client`, so
+being wrong here costs more than being silent.
 
 ```jsonc
-"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+"dsh": {
+  "bundle": { "patch": "./cordis.patch.yml" },
+  "client": {
+    "inject": [
+      "@deepseek-ai/dsh-client-ui-primitives",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-client-ui-plugin-manager"
+    ],
+    "platform": "web",
+    "immediately": true
+  }
+}
 ```
+
+The two halves are loaded by different machinery and never consult each other:
+`dsh-app-boot` reads `dsh.bundle`, `dsh-client-modules` reads `dsh.client`. One
+package carrying both is why the user installs once.
 
 ## Bundle patch rules
 

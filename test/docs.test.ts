@@ -12,7 +12,8 @@
  * sentences would fail on every rewording and be deleted within a month.
  */
 
-import { existsSync, globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -106,5 +107,45 @@ describe("the documented artifacts exist", () => {
     expect(pkg.dsh.bundle.patch).toBe("./cordis.patch.yml");
     const client = pkg.exports["./client"];
     expect(typeof client === "string" ? client : client?.default).toBe("./lib/client.js");
+  });
+});
+
+describe("no document denies a surface the manifest declares", () => {
+  it("does not claim the plugin has no UI", () => {
+    // `docs/16` said "it has no UI, so no `dsh.client`, no `lib/client.js`, no
+    // React, no locale files" — four claims, all four false once the panel
+    // landed. `SPEC.md` had the same shape: "Real controls require a
+    // hand-written browser-half package, which this plugin does not have."
+    //
+    // The class is worth a check rather than a fix, because a doc that denies a
+    // surface is read as authoritative by exactly the person deciding whether
+    // they need it. The manifest is the fact; the prose is the claim.
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
+      dsh?: { client?: unknown };
+    };
+    expect(pkg.dsh?.client, "the manifest declares a client half").toBeDefined();
+
+    const denies = [
+      /has no UI/i,
+      /no `dsh\.client`/i,
+      /no `lib\/client\.js`/i,
+      /which this plugin does not have/i,
+      /no React/i,
+      /no locale files/i,
+    ];
+    const offenders: string[] = [];
+    for (const file of readdirSync("docs").filter((f) => f.endsWith(".md"))) {
+      const text = readFileSync(join("docs", file), "utf8");
+      for (const pattern of denies) {
+        if (pattern.test(text)) offenders.push(`docs/${file} matches ${String(pattern)}`);
+      }
+    }
+    for (const file of ["SPEC.md", "README.md"]) {
+      const text = readFileSync(file, "utf8");
+      for (const pattern of denies) {
+        if (pattern.test(text)) offenders.push(`${file} matches ${String(pattern)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
