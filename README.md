@@ -139,8 +139,8 @@ The rest of this file is about building and verifying the plugin itself.
 ### Build and test
 
 ```bash
-pnpm run build     # tsc -p tsconfig.build.json  ->  lib/
-pnpm run ci        # tsc --noEmit + vitest
+pnpm run build     # tsc -> lib/   then   vp pack -> lib/client.js
+pnpm run ci        # typecheck, format + lint, build, then the suite
 ```
 
 **`lib/` is not optional and not committed.** The published entry is emitted
@@ -149,11 +149,21 @@ JavaScript, because Node **refuses to strip types for files under
 plugin works from a `link:` install and would not work from a tarball: a link
 resolves to the working tree, where stripping is allowed.
 
-`tsconfig.build.json` emits with `rewriteRelativeImportExtensions`, so the
-`./foo.ts` specifiers the source uses become `./foo.js` without a bundler.
+Two artifacts, built two ways, because they are loaded two ways:
+
+|                 |                                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/index.js`  | the host half. `tsc -p tsconfig.build.json`, ESM, with `rewriteRelativeImportExtensions` so the `./foo.ts` specifiers the source uses become `./foo.js` |
+| `lib/client.js` | the browser half. `vp pack` from `src/client/panel.ts`, CommonJS wrapped in `window.__ModuleLoader__.load`                                              |
+
+The client half cannot be plain `tsc` output: the web client does not `import` a
+bundle, it evaluates one as a script and hands the factory a `require`. That
+wrapper is the bundler's `banner`/`footer` in `vite.config.ts`. The route serves
+`${package}/client.js` and accepts only `/^client\..*\.js$/`, so
+`scripts/name-client-bundle.ts` renames what `vp pack` emits as `client.cjs`.
 
 ```bash
-pnpm publish       # prepublishOnly runs the build and the full suite first
+pnpm publish       # prepublishOnly runs `ci`, which builds and tests
 ```
 
 ### Layout
