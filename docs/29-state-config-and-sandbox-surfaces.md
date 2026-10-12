@@ -614,7 +614,8 @@ so plainly:
 > is declared, and the harness degrades quietly rather than saying so.
 
 So a well-declared schema is necessary and not sufficient. The panel is
-`client/panel.js`, contributed to the **`plugins.bundle.config`** slot keyed
+`src/client/panel.ts` (built to `lib/client.js`), contributed to the
+**`plugins.bundle.config`** slot keyed
 `dsh-jujutsu` — the bundle's own page, between its description and its rows.
 
 **`plugins.bundle.config`, not `plugins.row.config`.** The row slot puts a

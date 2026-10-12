@@ -30,7 +30,7 @@ is `docs/24-implementation-plan.md` §4.
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 139 tests, `pnpm run ci` green:
+Implemented and tested — 141 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                   |
 | --------------- | ---------------------------------------------------------------------------- |
@@ -135,11 +135,6 @@ behaviourally a no-op, and the corpus is what says so.
 
 ## What is deliberately absent
 
-- **No bundler.** The client half exists (`client/panel.js`, declared by
-  `dsh.client`), but it is written directly in the CJS factory format the web
-  client loads rather than compiled into one. The host half is emitted by plain
-  `tsc` — see "Building" in the root README for why emitting is mandatory and
-  why no bundler is needed.
 - **No service.** It is a policy plugin: listeners on existing waterfalls, local
   state, decisions the provider enforces (`docs/27` §3).
 - **No agent preset.** The plugin is host-plane. A preset would scope it to one

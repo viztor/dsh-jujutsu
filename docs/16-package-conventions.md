@@ -103,15 +103,33 @@ package does not need. That is no longer true: the plugin ships an admin panel,
 so it declares `dsh.client` and contributes to `plugins.bundle.config`
 ([29](29-state-config-and-sandbox-surfaces.md) §4).
 
-What is still absent, and still deliberate:
+What is absent, and why:
 
-- **No bundler.** `dsh-tinyfish` compiles its client half with `vp pack` plus a
-  renaming script. Here `client/panel.js` is written directly in the CJS factory
-  the web client loads, and the host half is emitted by plain `tsc`
-  (`tsconfig.build.json`). No `vite-plus`, no `ultracite`, no
-  `vite.live.config.ts`.
-- **No `locale/*.json`.** The panel's English copy lives in the bundle. Adding
-  translation files without a second language would be structure without use.
+- **No `vite.live.config.ts`.** There is no live suite to configure. Every claim
+  about `jj` in these documents was measured by hand against the installed
+  binary, and the end-to-end tests drive real `jj` and `jj-hunk` through the
+  plugin's own shell contract — so the network and a credential are never
+  involved.
+- **No `ultracite`.** `vp check` runs the formatter and linter as part of `ci`,
+  which is the gate that matters. The larger rule set is a separate decision from
+  having a gate at all, and it is not taken yet.
+
+Two things this file used to list as deliberately absent, both since adopted —
+recorded rather than deleted, because each was argued for at the time and the
+argument turned out to be wrong:
+
+- **"No bundler."** The client half was hand-written JavaScript in the CJS factory
+  format, on the reasoning that the web client loads a bundle as a script and so
+  it "must already be JavaScript". That was half true and used to skip the work:
+  `vp pack` emits JavaScript, and `dsh-tinyfish` authors `src/client.ts` and
+  builds `lib/client.js` the same way. The cost was every bug the panel had — all
+  three were type errors `tsc` would have refused, because nothing checked a file
+  written by hand. The client half is now `src/client/panel.ts`, built by
+  `vp pack` with the loader wrapper as the bundler's `banner`/`footer`.
+- **"No `locale/*.json`."** They exist now, for two languages, and they carry the
+  plugin's display name and one-liner — the copy the host reads through
+  `readPluginMeta` _before_ any bundle loads, which is why it cannot live in the
+  bundle.
 
 ## A reinstall reloads the patch, not the code
 

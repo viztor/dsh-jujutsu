@@ -115,7 +115,10 @@ the **installed package name**, not the exported one (the
 `dsh-opencode-patch` failure mode documented in `dsh-tinyfish/docs/dsh-contracts.md`).
 
 `dsh.client` declares the admin panel, and `exports["./client"]` points at
-`client/panel.js` — a plain-JavaScript bundle, so the browser half needs no build.
+`lib/client.js` — built by `vp pack` from `src/client/panel.ts`, with the
+`window.__ModuleLoader__.load` wrapper as the bundler's `banner`/`footer`. The
+harness's route serves `${package}/client.js` and accepts only `/^client\..*\.js$/`,
+so `scripts/name-client-bundle.ts` renames the emitted `client.cjs`.
 The host half _is_ built: `main` is `lib/index.js`, because Node refuses to strip
 types for files under `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`),
 so shipping `src/index.ts` as the entry yields a package that cannot load once installed.

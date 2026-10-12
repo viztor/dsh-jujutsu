@@ -12,7 +12,7 @@
  * sentences would fail on every rewording and be deleted within a month.
  */
 
-import { globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
@@ -72,5 +72,39 @@ describe("the module map names every module", () => {
       .map((f) => f.replace("src/", ""))
       .filter((name) => !map.includes(name));
     expect(missing).toEqual([]);
+  });
+});
+
+describe("the documented artifacts exist", () => {
+  it("names files the build actually produces", () => {
+    // Three documents claimed `client/panel.js` for two commits after it stopped
+    // existing, and `src/README.md` argued at length that there was no bundler
+    // while `vp pack` was building the client half. Prose about paths is the
+    // fastest thing in a repository to go stale, and nothing was checking it.
+    const shipped = [
+      "lib/index.js", // the host bundle `main` points at
+      "lib/index.d.ts", // its declarations
+      "lib/client.js", // the browser half `exports["./client"]` points at
+      "locale/en.json", // read by readPluginMeta before any bundle loads
+      "locale/zh.json",
+      "icon.svg",
+      "cordis.patch.yml", // the bundle patch `dsh.bundle` declares
+    ];
+    const missing = shipped.filter((rel) => !existsSync(rel));
+    expect(missing).toEqual([]);
+  });
+
+  it("points the manifest at those files", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
+      main: string;
+      types: string;
+      exports: Record<string, { default?: string } | string>;
+      dsh: { bundle: { patch: string } };
+    };
+    expect(pkg.main).toBe("lib/index.js");
+    expect(pkg.types).toBe("lib/index.d.ts");
+    expect(pkg.dsh.bundle.patch).toBe("./cordis.patch.yml");
+    const client = pkg.exports["./client"];
+    expect(typeof client === "string" ? client : client?.default).toBe("./lib/client.js");
   });
 });

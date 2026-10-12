@@ -161,7 +161,7 @@ pnpm publish       # prepublishOnly runs the build and the full suite first
 |                      |                                                                                        |
 | -------------------- | -------------------------------------------------------------------------------------- |
 | `src/`               | The host half — guard, tools, prompt, detection. See [`src/README.md`](src/README.md). |
-| `client/`            | The panel. Built-in harness components only.                                           |
+| `src/client/`        | The panel, built to `lib/client.js` by `vp pack`. Harness primitives only.             |
 | `locale/`            | Display name and one-liner, per language.                                              |
 | `SPEC.md`            | The build specification.                                                               |
 | `docs/`              | 36 documents: verified contracts, measurements, decisions.                             |
@@ -175,7 +175,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **139 tests**, `pnpm run ci` green.
+observed working in a live session. **141 tests**, `pnpm run ci` green.
 
 ### Where this came from
 
