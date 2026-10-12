@@ -583,28 +583,29 @@ Every field in §6 must therefore carry `.volatile()`.
 `.volatile()` also means "live-editable without remount" and "path-addressable";
 a non-volatile path throws `Config field "x" is not volatile`.
 
-**But do not claim the UI renders controls.** `autoGenerate` has **no shipped
-consumer** — there is no schema→controls generator. Real controls require a
-hand-written browser-half package, which this plugin does not have. So: mark the
-fields volatile, and expect the row to appear as structured config rather than
-as a designed settings page.
+**But do not claim the UI renders controls from the schema alone.** `autoGenerate`
+has **no shipped consumer** — there is no schema→controls generator. Real controls
+require a hand-written browser half, and this plugin now has one:
+`src/client/panel.ts`, built to `lib/client.js`, registered on
+`plugins.bundle.config`. It draws each field as a `Switch` or a
+`SegmentedControl` chosen by the field's kind, and reads the same `Config` rather
+than duplicating the field list. Marking the fields volatile is still required —
+it is what makes them live-editable and path-addressable.
 
 ## 6. Config schema
 
 ```ts
 export const Config = z.object({
-  enabled: z.boolean().default(true).volatile(),
-  guard: z
-    .union([z.const("deny"), z.const("off")])
-    .default("deny")
-    .volatile(),
+  // A boolean, not an enum of deny/off: two states, and an enum of two renders
+  // as a segmented control offering "Deny" and "Off" as if they were peers.
+  guard: z.boolean().default(true).volatile(),
   // D2 — read-only Git is denied by default, with an explicit bypass
   readOnlyGit: z
     .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .volatile(),
   bypass: z
-    .union([z.const("ask"), z.const("deny"), z.const("allow")])
+    .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .volatile(),
   rememberBypass: z.boolean().default(true).volatile(),
