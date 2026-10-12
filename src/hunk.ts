@@ -184,7 +184,13 @@ async function invoke(
     return fail(
       ErrorCode.JJ_HUNK_MISSING,
       `${settings.jjHunkPath} could not be started: ${String(error).slice(0, 160)}`,
-      `Install it with: cargo install --git https://github.com/laulauland/jj-hunk jj-hunk`,
+      // Pinned to a tag, which `docs/19` requires and `config.ts` already
+      // promises ("ask offers a pinned cargo install"). An unpinned `--git`
+      // install builds whatever `main` is at that moment, so two users following
+      // the same instruction a week apart get different binaries — and the
+      // published crate is two minor versions behind, with a different CLI, so
+      // `cargo install jj-hunk` is not an option either.
+      `Install it with: cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`,
     );
   }
 }

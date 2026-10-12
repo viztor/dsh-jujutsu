@@ -69,20 +69,27 @@ jobs:
 
       # `jj-hunk` ships only on crates.io — no prebuilt binary — so it has to be
       # compiled. It is the plugin's other headline feature and `e2e.test.ts`
-      # drives it for real, so the three minutes are worth paying rather than
-      # skipping the bridge in the only environment that is not the author's.
+      # drives it for real, so the compile is worth paying rather than skipping
+      # the bridge in the only environment that is not the author's.
       #
-      # Cached on the crate version: a cache miss costs the compile, a hit costs
-      # seconds, and the key changes only when the pin does.
+      # **From git, not from crates.io.** The published crate is 0.3.0 and its CLI
+      # is different — `jj-hunk list --format <FORMAT>` against this plugin's
+      # `--query` — so `cargo install jj-hunk` installs a binary that rejects every
+      # call the bridge makes. `docs/19` records the git source for exactly this
+      # reason; the crate has not caught up.
+      #
+      # Pinned to a tag, because a branch-tracking install builds whatever `main`
+      # is at that moment.
       - name: Cache jj-hunk
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/jj-hunk
-          key: jj-hunk-0.5.1-${{ runner.os }}
+          key: jj-hunk-git-v0.5.1-${{ runner.os }}
 
       - name: Install jj-hunk
         run: |
-          command -v jj-hunk >/dev/null 2>&1 || cargo install jj-hunk --locked
+          command -v jj-hunk >/dev/null 2>&1 ||
+            cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
           jj-hunk --help >/dev/null && echo "jj-hunk ready"
 
       # `ci` is the whole gate in one command — typecheck, `vp check` for format
