@@ -398,22 +398,32 @@ decided.
 ## e. How to run it
 
 ```bash
-# 1. fixtures — verified, exit 0
-./test/fixtures/build-fixtures.sh              # default root /tmp/dsh-jujutsu-fixtures
-./test/fixtures/build-fixtures.sh /tmp/other   # any root
-
-# 2. environment for anything that runs jj against the fixtures
-export JJ_CONFIG="/dev/null:/tmp/dsh-jujutsu-fixtures/jj-config.toml"
-
-# 3. suites — NOT YET RUNNABLE
-vp test                # L1 + L2 + L3 (docs/16 convention, copied from dsh-tinyfish)
-vp test test/verbs     # L1 only
+pnpm install
+pnpm run ci          # typecheck, vp check, build, the suite, the package checks
 ```
 
-**Step 3 is UNVERIFIED.** The tree has no `package.json` and no
-`node_modules`, so no runner exists yet; `vp test` is the convention
-[16](16-package-conventions.md) records from `dsh-tinyfish`, not a command that
-has been executed here. Pin the real runner before quoting this section.
+The fixtures are **not** a step you run. `test/global-setup.ts` builds them before
+the suite, by calling the script below. That changed because of a real failure:
+the fixtures used to be built by hand, so they existed on the machine where
+somebody had run the script and nowhere else — and nine guard tests failed on
+every CI push for a week with `expected 'allow' to be 'deny'`, a message that
+blames the guard rather than the missing directory.
+
+The script is still runnable directly, and useful when a fixture looks wrong:
+
+```bash
+./test/fixtures/build-fixtures.sh              # default root /tmp/dsh-jujutsu-fixtures
+./test/fixtures/build-fixtures.sh /tmp/other   # any root
+```
+
+`jj` and `jj-hunk` must be on `PATH` for the tests that drive them. When they are
+not, those tests **skip** and the setup prints a line saying so — which is right
+on a laptop and wrong in CI, so the workflows set `DSH_JUJUTSU_REQUIRE_TOOLS=1`
+and turn the skip into an error. A green CI therefore means the binaries ran.
+
+An earlier revision of this section said the suites were "NOT YET RUNNABLE"
+because the tree had no `package.json`. That was true when it was written and
+false by the time anyone read it again; the tree has one, and 193 tests.
 
 ### A green run
 
@@ -462,19 +472,30 @@ node scripts/probe-invocation.mjs -c 'env FOO=1 git push'
 
 ## f. What this plan cannot prove
 
-| Gap                                                                              | Why                                                                                                                                                    | What would be needed                                                                                                                                                                   |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Does `{kind:'ask'}` actually prompt?                                             | [17 §Verification status](17-bypass-and-approval.md) records the end-to-end prompt-then-run flow as **UNVERIFIED**. No fixture can compose an answerer | A live DSH session with a real `ctx.get('approval')` answerer, one `git commit` call, and a human clicking yes — then asserting the command really ran (the bypass must not translate) |
-| Does the harness turn `{kind:'deny'}` into `Error: <reason>`?                    | Read from `dsh-tools` source ([11 §1](11-verified-dsh-api-contract.md)), never executed                                                                | A session-level test asserting the model-visible tool result text                                                                                                                      |
-| Does the injected context reach the model?                                       | [22](22-context-injection.md) marks it **UNVERIFIED**                                                                                                  | A real assembly with a provider registered, asserting the block appears in the request                                                                                                 |
-| Does `tools.guard` (monotonic) interact correctly with our `pre-execute` bypass? | [17](17-bypass-and-approval.md) requires a future guard to consult the same allowlist; none exists yet                                                 | Add the guard, then a test that a denied call cannot be force-allowed by another plugin                                                                                                |
-| Does the model recover in one step from a denial?                                | This is the highest-severity failure class ([SPEC §8](../SPEC.md)) and is a property of the message plus the model                                     | A scripted model run: deny `git commit`, assert the next call is `jj commit` without a retry of the same command                                                                       |
-| Real `jj git push` / `fetch` against a remote                                    | [13](13-empirical-verification.md) had no remote                                                                                                       | A local bare remote + a push test; `gh` assertions beyond ref resolution need auth                                                                                                     |
-| Windows / sandbox executor differences                                           | Nothing here ran under `dsh-bash-sandbox`                                                                                                              | A sandbox-executor run of the L3 suite                                                                                                                                                 |
-| Parser behaviour on shell constructs the probe does not model                    | The probe is explicit: no heredocs, process substitution, `${x:-y}`, `coproc`; the parser is a prototype, not production code                          | Either accept the gap (the model emits `git commit`, not `coproc`) or adopt a real shell AST                                                                                           |
+| Gap                                                                              | Why                                                                                                                                                                                                              | What would be needed                                                                                                                                                                   |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does `{kind:'ask'}` actually prompt?                                             | [17 §Verification status](17-bypass-and-approval.md) records the end-to-end prompt-then-run flow as **UNVERIFIED**. No fixture can compose an answerer                                                           | A live DSH session with a real `ctx.get('approval')` answerer, one `git commit` call, and a human clicking yes — then asserting the command really ran (the bypass must not translate) |
+| ~~Does the harness turn `{kind:'deny'}` into `Error: <reason>`?~~                | **VERIFIED LIVE.** A real session produced `Refused: git status describes a Git working tree that does not exist here. Run: jj status` for a refused call, and the same shape for a mutating one.                | —                                                                                                                                                                                      |
+| ~~Does the injected context reach the model?~~                                   | **VERIFIED LIVE.** The harness reports the assembled context each turn: `Workspace root: …`, `Layout: colocated with Git (.git and .jj both present)`, `Working copy @: …`, `Hunk selection: jj-hunk available`. | —                                                                                                                                                                                      |
+| Does `tools.guard` (monotonic) interact correctly with our `pre-execute` bypass? | [17](17-bypass-and-approval.md) requires a future guard to consult the same allowlist; none exists yet                                                                                                           | Add the guard, then a test that a denied call cannot be force-allowed by another plugin                                                                                                |
+| ~~Does the model recover in one step from a denial?~~                            | **VERIFIED LIVE.** This document was edited through a session in which every Git command was refused and every refusal was followed by the `jj` equivalent, with no retry of the refused form.                   | —                                                                                                                                                                                      |
+| ~~Real `jj git push` / `fetch` against a remote~~                                | **VERIFIED LIVE.** This repository is colocated and publishes with `jj git push --bookmark main` to `origin`; the commits are readable through the GitHub API afterwards.                                        | —                                                                                                                                                                                      |
+| Windows / sandbox executor differences                                           | Nothing here ran under `dsh-bash-sandbox`                                                                                                                                                                        | A sandbox-executor run of the L3 suite                                                                                                                                                 |
+| Parser behaviour on shell constructs the probe does not model                    | The probe is explicit: no heredocs, process substitution, `${x:-y}`, `coproc`; the parser is a prototype, not production code                                                                                    | Either accept the gap (the model emits `git commit`, not `coproc`) or adopt a real shell AST                                                                                           |
 
-The honest summary: this plan proves **the guard's decisions and the fixtures'
-shapes**. It does not prove **the harness's half** of the contract. The first
-spike after the fixtures should be the `{kind:'ask'}` prompt, because every
-bypass decision in [17](17-bypass-and-approval.md) depends on it and nothing
-here touches it.
+The honest summary, revised. This plan proves **the guard's decisions and the
+fixtures' shapes**. Four of the gaps below have since been closed by watching a
+real session rather than by adding a test, which is the only way some of them
+could ever close: the harness's half of the contract is observable from inside a
+session and not from a fixture.
+
+What remains is genuinely open. **The `{kind:'ask'}` prompt is the first one**,
+because every bypass decision in [17](17-bypass-and-approval.md) depends on it and
+nothing here touches it — a refusal is observable from inside a session, but an
+approval needs a human to answer, which no session this document was written in
+could do.
+
+The other three are narrow: the monotonic `tools.guard` interaction needs a second
+plugin that does not exist, the sandbox-executor differences need a run under
+`dsh-bash-sandbox`, and the parser's shell-construct gap is a deliberate limit of a
+prototype that is explicit about it.
