@@ -37,6 +37,10 @@ function loadPanel(): Record<string, any> {
     "@deepseek-ai/dsh-client-ui-primitives": {
       SettingsForm: "SettingsForm",
       SettingsValueField: "SettingsValueField",
+      Switch: "Switch",
+      SegmentedControl: "SegmentedControl",
+      Tag: "Tag",
+      Button: "Button",
       DisclosureRow: "DisclosureRow",
       // Mirrors the real classes exactly, because the bug this guards against
       // was reading handlers off the wrong one. `SettingsFormShell` is state
@@ -173,19 +177,21 @@ describe("the panel covers the schema", () => {
 });
 
 describe("built-in components only", () => {
-  it("renders every field through SettingsValueField", () => {
+  it("gives each field the control its kind deserves", () => {
+    // A boolean shown as a text box reading `true` -- with a hint explaining
+    // that `true` is what you type -- is worse than no control at all. Switch
+    // for booleans, SegmentedControl for enums, SettingsValueField for text.
     const { Panel, panel } = panelComponent();
     const types = typesOf(Panel({ view: "page" }));
-    const controls = types.filter((x) => x === "SettingsValueField");
-    expect(controls).toHaveLength(Object.keys(panel.FIELDS).length);
-    for (const handRolled of [
-      "Switch",
-      "SegmentedControl",
-      "ConfigField",
-      "section",
-      "h3",
-      "input",
-    ]) {
+    const fields = Object.values(panel.FIELDS as Record<string, { kind: string }>);
+    const byKind = (kind: string) => fields.filter((f) => f.kind === kind).length;
+
+    expect(types.filter((x) => x === "SettingsValueField")).toHaveLength(byKind("text"));
+    expect(types.filter((x) => x === "Switch")).toHaveLength(byKind("boolean"));
+    expect(types.filter((x) => x === "SegmentedControl")).toHaveLength(byKind("enum"));
+
+    // And no hand-rolled control anywhere.
+    for (const handRolled of ["ConfigField", "section", "h3", "input", "select"]) {
       expect(types, handRolled).not.toContain(handRolled);
     }
   });
@@ -196,8 +202,18 @@ describe("built-in components only", () => {
     expect(types.filter((x) => x === "DisclosureRow")).toHaveLength(panel.GROUPS.length);
   });
 
-  it("draws no inline styles", () => {
-    expect(PANEL).not.toContain("style: {");
+  it("styles itself only with the harness's theme tokens", () => {
+    // A client bundle has no stylesheet of its own -- the primitives ship CSS
+    // modules and a plugin cannot -- so a card's own chrome must style itself
+    // inline. What matters is that every value is a theme token rather than a
+    // hardcoded colour, so the shell follows light/dark and any restyle.
+    const styles = [...PANEL.matchAll(/style:\s*\{/g)];
+    expect(styles.length).toBeGreaterThan(0);
+    const colours = [...PANEL.matchAll(/color:\s*"([^"]+)"/g)].map((m) => m[1] as string);
+    expect(colours.length).toBeGreaterThan(0);
+    for (const colour of colours) {
+      expect(colour, colour).toContain("var(--dsw-");
+    }
   });
 });
 
@@ -428,6 +444,9 @@ describe("the panel uses only what the primitives export", () => {
     "SettingsFormModel",
     "SettingsSecretField",
     "SettingsValueField",
+    "Switch",
+    "SegmentedControl",
+    "Tag",
     "settingsNumberField",
     "settingsTextField",
   ]);

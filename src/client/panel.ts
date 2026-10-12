@@ -137,6 +137,50 @@ interface DisclosureRowProps {
   children?: unknown;
 }
 
+/** A labelled toggle. */
+interface SwitchProps {
+  checked: boolean;
+  onChange(next: boolean): void;
+  /** Localized accessible name, owned by the render site. */
+  label: string;
+  disabled?: boolean;
+  title?: string;
+}
+
+/** One segment of a `SegmentedControl`. */
+interface SegmentedControlOption<Value extends string> {
+  value: Value;
+  /** Localized segment text. */
+  label: string;
+  disabled?: boolean;
+  title?: string;
+}
+
+/** A controlled tablist. */
+interface SegmentedControlProps<Value extends string> {
+  /** Base id: each segment is `<id>-<value>`. */
+  id: string;
+  value: Value;
+  options: readonly SegmentedControlOption<Value>[];
+  onChange(next: Value): void;
+  /** Localized accessible name of the tablist. */
+  label: string;
+  disabled?: boolean;
+}
+
+interface TagProps {
+  tone?: string;
+  children?: unknown;
+}
+
+interface ButtonProps {
+  disabled?: boolean;
+  onClick?(): void;
+  size?: string;
+  variant?: string;
+  children?: unknown;
+}
+
 interface SettingsFormProps {
   labels: {
     save: string;
@@ -173,6 +217,13 @@ interface ClientPrimitivesModule {
    * entry, leaving a page with no form and no explanation.
    */
   SettingsValueField: (props: SettingsValueFieldProps) => unknown;
+  /** The toggle for boolean fields. */
+  Switch: (props: SwitchProps) => unknown;
+  /** The tablist for enum fields, whose options carry localized labels. */
+  SegmentedControl: <Value extends string>(props: SegmentedControlProps<Value>) => unknown;
+  /** The override badge and the reset control the shell composes. */
+  Tag: (props: TagProps) => unknown;
+  Button: (props: ButtonProps) => unknown;
   DisclosureRow: (props: DisclosureRowProps) => unknown;
   SettingsForm: (props: SettingsFormProps) => unknown;
   SettingsFormModel: new (
@@ -250,6 +301,14 @@ const STRINGS: Record<string, Record<string, string>> = {
     overridden: "Overridden",
     inherited: "Inherited",
     invalid: "Not a value this field accepts",
+    // Localized segment text. The harness's SegmentedControl takes a label per
+    // option precisely so these are words rather than raw config values.
+    valueDeny: "Deny",
+    valueOff: "Off",
+    valueAsk: "Ask",
+    valueAllow: "Allow",
+    valueNever: "Never",
+    valueAuto: "Auto",
 
     groupGuard: "Guard",
     groupGuardBlurb: "What happens when the model reaches for Git inside a Jujutsu workspace.",
@@ -310,6 +369,12 @@ const STRINGS: Record<string, Record<string, string>> = {
     overridden: "已覆盖",
     inherited: "继承值",
     invalid: "不是该字段接受的值",
+    valueDeny: "拒绝",
+    valueOff: "关闭",
+    valueAsk: "询问",
+    valueAllow: "允许",
+    valueNever: "从不",
+    valueAuto: "自动",
 
     groupGuard: "拦截",
     groupGuardBlurb: "当模型在 Jujutsu 工作区内尝试使用 Git 时的行为。",
@@ -364,6 +429,12 @@ interface FieldMeta {
   readonly kind: "boolean" | "enum" | "text";
   readonly labelKey: string;
   readonly hintKey: string;
+  /**
+   * For `enum`: the accepted values, in display order.
+   *
+   * Each is paired with a `value<Name>` string key rather than shown raw, so a
+   * segment reads "Allow" (or "允许") instead of `allow`.
+   */
   readonly choices?: readonly string[];
 }
 
@@ -506,13 +577,108 @@ function translator(props: PanelProps): (key: string) => string {
 }
 
 /**
- * One field, rendered by `SettingsValueField`.
+ * Shared chrome for a non-text control: label, override badge with its reset,
+ * the control, and one message line.
  *
- * The control is a text box for every kind, enums included. That is the
- * harness's design rather than a limitation here: the field's *spec* decides
- * which drafts it accepts, and the control never rewrites what the user typed.
- * The accepted values are listed in the hint instead, which is why every field
- * carries one.
+ * The primitives ship `SettingsValueField` for text and deliberately stop there
+ * — a card owns its boolean and enum fields, because only the card knows what
+ * its values *mean*. So the chrome is built once here from the primitives'
+ * `Tag` and `Button`, and each control supplies only what differs.
+ */
+function fieldShell(
+  meta: FieldMeta,
+  state: SettingsFieldState,
+  controlNode: unknown,
+  props: PanelProps,
+  shell: SettingsFormShell,
+  t: (key: string) => string,
+): unknown {
+  const hint = t(meta.hintKey);
+  const hasMessage = state.invalid || hint !== "";
+  // Inline styles, because a client bundle has no stylesheet of its own: the
+  // primitives ship CSS modules and a plugin cannot. Every value is a harness
+  // theme token, so the shell follows light/dark and any restyle rather than
+  // hardcoding a palette. The sibling package's card does the same.
+  return h(
+    "div",
+    {
+      key: meta.labelKey,
+      style: { display: "flex", flexDirection: "column", gap: "6px", padding: "12px 0" },
+    },
+    h(
+      "div",
+      { style: { alignItems: "center", display: "flex", gap: "8px" } },
+      h(
+        "div",
+        { style: { alignItems: "center", display: "flex", flex: "1", gap: "4px", minWidth: 0 } },
+        h(
+          "label",
+          {
+            htmlFor: `dsh-jujutsu-${meta.labelKey}`,
+            style: {
+              color: "var(--dsw-alias-label-primary)",
+              flex: "0 1 auto",
+              fontSize: "13px",
+              fontWeight: 500,
+              lineHeight: 1.5,
+            },
+          },
+          t(meta.labelKey),
+        ),
+        state.overridden
+          ? h(
+              "span",
+              { style: { alignItems: "center", display: "inline-flex", gap: "8px" } },
+              h(primitives.Tag, { tone: "neutral" }, t("overridden")),
+              h(
+                primitives.Button,
+                {
+                  disabled: shell.writable !== true,
+                  onClick: () => props.resetField(meta.labelKey),
+                  size: "sm",
+                  variant: "ghost",
+                },
+                t("reset"),
+              ),
+            )
+          : null,
+      ),
+      controlNode,
+    ),
+    hasMessage
+      ? h(
+          "p",
+          {
+            style: {
+              color: state.invalid
+                ? "var(--dsw-alias-state-error-primary)"
+                : "var(--dsw-alias-label-tertiary)",
+              fontSize: "12px",
+              lineHeight: 1.5,
+              margin: 0,
+            },
+          },
+          state.invalid ? t("invalid") : hint,
+        )
+      : null,
+  );
+}
+
+/** The `value<Name>` string key for an accepted value, e.g. `deny` -> `valueDeny`. */
+function valueKey(value: string): string {
+  return `value${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+/**
+ * One field, as the control its kind deserves.
+ *
+ * Booleans get a `Switch` and enums a `SegmentedControl`; only free text uses
+ * `SettingsValueField`. Showing a boolean as a text box reading `true` — and
+ * then explaining in the hint that `true` is what you type — is worse than not
+ * having a control at all, and the enum values are words now rather than config
+ * tokens.
+ *
+ * Every control is a harness primitive. Nothing here draws an input.
  */
 function control(
   name: string,
@@ -522,10 +688,50 @@ function control(
   t: (key: string) => string,
 ): unknown {
   const meta = FIELDS[name] as FieldMeta;
+  const id = `dsh-jujutsu-${meta.labelKey}`;
+  const disabled = shell.writable !== true;
+
+  if (meta.kind === "boolean") {
+    return fieldShell(
+      meta,
+      state,
+      h(primitives.Switch, {
+        checked: state.text === "true",
+        disabled,
+        label: t(meta.labelKey),
+        onChange: (next: boolean) => props.edit(name, String(next)),
+      }),
+      props,
+      shell,
+      t,
+    );
+  }
+
+  if (meta.kind === "enum") {
+    const choices = meta.choices ?? [];
+    return fieldShell(
+      meta,
+      state,
+      h(primitives.SegmentedControl, {
+        id,
+        value: state.text,
+        disabled,
+        label: t(meta.labelKey),
+        options: choices.map((value) => ({
+          value,
+          label: t(valueKey(value)),
+        })),
+        onChange: (next: string) => props.edit(name, next),
+      }),
+      props,
+      shell,
+      t,
+    );
+  }
+
   return h(primitives.SettingsValueField, {
     key: name,
-    // Stable and unique per field, so the label's `htmlFor` finds its control.
-    id: `dsh-jujutsu-${name}`,
+    id,
     label: t(meta.labelKey),
     hint: t(meta.hintKey),
     text: state.text,
@@ -534,7 +740,7 @@ function control(
     overriddenLabel: t("overridden"),
     resetLabel: t("reset"),
     invalidLabel: t("invalid"),
-    disabled: shell.writable !== true,
+    disabled,
     onEdit: (text: string) => props.edit(name, text),
     onReset: () => props.resetField(name),
   } satisfies SettingsValueFieldProps & { key: string });
@@ -611,10 +817,14 @@ function renderGroup(props: GroupProps): unknown {
 function render(props: PanelProps): unknown {
   const REQUIRED = [
     "SettingsValueField",
-    "DisclosureRow",
     "SettingsForm",
     "SettingsFormModel",
     "settingsTextField",
+    "DisclosureRow",
+    "Switch",
+    "SegmentedControl",
+    "Tag",
+    "Button",
   ] as const;
   const absent = REQUIRED.filter((name) => primitives[name] === undefined);
   if (absent.length > 0) {
