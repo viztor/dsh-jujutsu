@@ -16,7 +16,11 @@ import { invalidateMarkers } from "../src/marker.ts";
 import { FIXTURES, fakeHarness } from "./helpers.ts";
 
 /** A `bash` call in the colocated fixture. */
-function bash(harness: ReturnType<typeof fakeHarness>, command: string, cwd = `${FIXTURES}/jj-colocated`) {
+function bash(
+  harness: ReturnType<typeof fakeHarness>,
+  command: string,
+  cwd = `${FIXTURES}/jj-colocated`,
+) {
   return harness.session("s1", cwd).exec("bash", { command, description: "test" });
 }
 
@@ -80,17 +84,15 @@ describe("the guard refuses Git inside a jj workspace", () => {
 describe("the guard is invisible outside a jj workspace", () => {
   it("allows Git in a plain Git repo", async () => {
     const h = harnessWith();
-    const decision = await h.preExecute(
-      bash(h, "git commit -m x", `${FIXTURES}/plain-git`),
-    );
+    const decision = await h.preExecute(bash(h, "git commit -m x", `${FIXTURES}/plain-git`));
     expect(decision.kind).toBe("allow");
   });
 
   it("allows Git in a directory that is not a repo", async () => {
     const h = harnessWith();
-    expect(
-      (await h.preExecute(bash(h, "git status", `${FIXTURES}/not-a-repo`))).kind,
-    ).toBe("allow");
+    expect((await h.preExecute(bash(h, "git status", `${FIXTURES}/not-a-repo`))).kind).toBe(
+      "allow",
+    );
   });
 
   it("allows non-Git commands", async () => {
@@ -186,9 +188,7 @@ describe("the approval policy", () => {
     apply(harness.ctx, { guard: "deny" });
     // `overrideOf` returns undefined, so the deployment default must be read —
     // the three-term expression. A two-term read would conclude "ask" here.
-    expect((await harness.preExecute(bash(harness, "git commit -m x"))).kind).toBe(
-      "deny",
-    );
+    expect((await harness.preExecute(bash(harness, "git commit -m x"))).kind).toBe("deny");
   });
 });
 
@@ -240,9 +240,7 @@ describe("fail open", () => {
       };
     };
     apply(harness.ctx, { guard: "deny" });
-    expect((await harness.preExecute(bash(harness, "git commit -m x"))).kind).toBe(
-      "allow",
-    );
+    expect((await harness.preExecute(bash(harness, "git commit -m x"))).kind).toBe("allow");
   });
 });
 
@@ -268,9 +266,7 @@ describe("destructive paths — expansions must not over-trigger", () => {
       "rm -rf ${OUT}/dist",
       "rm -rf $(mktemp -d)",
     ]) {
-      expect((await harness.preExecute(at(harness, command))).kind, command).toBe(
-        "allow",
-      );
+      expect((await harness.preExecute(at(harness, command))).kind, command).toBe("allow");
     }
   });
 
@@ -288,9 +284,7 @@ describe("destructive paths — expansions must not over-trigger", () => {
 
   it("does not fire on a computed path that merely starts like one", async () => {
     const harness = h();
-    expect((await harness.preExecute(at(harness, "rm -rf $DIR/.gitignore"))).kind).toBe(
-      "allow",
-    );
+    expect((await harness.preExecute(at(harness, "rm -rf $DIR/.gitignore"))).kind).toBe("allow");
   });
 });
 

@@ -17,7 +17,7 @@ If that is right, then:
 
 - the guard must not fight `jj git export` (a `git`-free command, fine), but
 - it must allow whatever keeps `.git` fresh, and
-- it should probably *run* the export before build/`gh` commands rather than
+- it should probably _run_ the export before build/`gh` commands rather than
   deny them — see [10](10-workflow-compatibility.md).
 
 **Decision needed.** Write it down before writing the guard, because the guard's
@@ -58,7 +58,7 @@ soundness:
 
 **Decision needed:** how much evasion are we defending against? An agent is not
 adversarial; it is a cooperative model that emitted `git commit` out of habit.
-Option 1 plus a clear message probably suffices, and it fails *open* rather
+Option 1 plus a clear message probably suffices, and it fails _open_ rather
 than breaking the user's environment.
 
 ## C. `jj-hunk` provisioning
@@ -108,7 +108,7 @@ area but removes a whole class of parsing bugs.
 
 A wrong denial is worse than a missed one: it blocks the user's work and the
 model then flails. Every rule needs an escape hatch, and the denial text has to
-be *actionable* — naming the exact replacement command, as the conversation
+be _actionable_ — naming the exact replacement command, as the conversation
 insists (turn 3).
 
 Also consider: should the guard cover `read`/`write`/`edit` too, e.g. refusing

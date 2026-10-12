@@ -1,7 +1,7 @@
 # 22 — Context injection and session steering
 
-**Your question:** *what does DeepSeek Harness provide in its latest release for
-injection point?*
+**Your question:** _what does DeepSeek Harness provide in its latest release for
+injection point?_
 
 **Answer:** `ctx.systemPrompt` — a registry with four registration kinds, a
 central order table, and one event waterfall. It is the same seam the harness's
@@ -22,14 +22,14 @@ one.
 > Registry for ordered system sections, dynamic context, tool schemas, and
 > prompt variables.
 
-| Method | What it registers |
-|---|---|
-| `section({name, order, text, interpolate?, complete?})` | an ordered **system-prompt section** |
-| `context({name, order, text})` | **dynamic model context, "materialized as a durable user-role snapshot"** |
-| `tools(provider)` | a tool-schema provider, evaluated per assembly |
-| `variable(name, provider)` | a `{{variable}}` reference, `[a-z][a-z0-9_]*` |
-| `suppressRuntimeContext()` | suppresses every runtime-context contribution in the scope |
-| `getSectionOrder(name)` / `getContextOrder(name)` | resolves the centrally owned placement for a named slot |
+| Method                                                  | What it registers                                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `section({name, order, text, interpolate?, complete?})` | an ordered **system-prompt section**                                      |
+| `context({name, order, text})`                          | **dynamic model context, "materialized as a durable user-role snapshot"** |
+| `tools(provider)`                                       | a tool-schema provider, evaluated per assembly                            |
+| `variable(name, provider)`                              | a `{{variable}}` reference, `[a-z][a-z0-9_]*`                             |
+| `suppressRuntimeContext()`                              | suppresses every runtime-context contribution in the scope                |
+| `getSectionOrder(name)` / `getContextOrder(name)`       | resolves the centrally owned placement for a named slot                   |
 
 Each returns the exact Cordis effect disposer. Registration and disposal emit
 `system-prompt/change`. `text` on both `section` and `context` may be a
@@ -39,8 +39,8 @@ dynamic.
 Two events are declared (`dsh-system-prompt/lib/types/index.d.ts`):
 
 - `system-prompt/assemble` — an **expert waterfall** over the assembled
-  sections, contexts, tools and variables. *"The returned value is
-  authoritative."* A registered `complete` section is restored afterwards, so a
+  sections, contexts, tools and variables. _"The returned value is
+  authoritative."_ A registered `complete` section is restored afterwards, so a
   listener cannot replace the whole prompt.
 - `system-prompt/change` — emitted when any provider changes.
 
@@ -51,31 +51,31 @@ typed against them (`PromptSectionOrderName = keyof typeof SECTION_ORDERS`).
 The shipped pattern is to resolve the slot rather than hardcode:
 
 ```js
-order: ctx.systemPrompt.getSectionOrder("TOOL_BASH")   // → 1000
+order: ctx.systemPrompt.getSectionOrder("TOOL_BASH"); // → 1000
 ```
 
 `SECTION_ORDERS` (abridged to what matters here):
 
-| Slot | Order |
-|---|---|
-| `HARNESS_IDENTITY` | -1000 |
-| `DEPLOYMENT_PERSONA_PREFIX` | 0 |
-| `PLAN_POLICY` / `TEAM_POLICY` | 500 / 600 |
-| `FILE_REFERENCE` | 900 |
-| `TOOL_BASH` | 1000 |
+| Slot                                     | Order              |
+| ---------------------------------------- | ------------------ |
+| `HARNESS_IDENTITY`                       | -1000              |
+| `DEPLOYMENT_PERSONA_PREFIX`              | 0                  |
+| `PLAN_POLICY` / `TEAM_POLICY`            | 500 / 600          |
+| `FILE_REFERENCE`                         | 900                |
+| `TOOL_BASH`                              | 1000               |
 | `TOOL_READ` / `TOOL_WRITE` / `TOOL_EDIT` | 1100 / 1200 / 1300 |
-| `TOOL_GLOB` / `TOOL_GREP` | 1400 / 1500 |
-| `MCP_SERVERS` | 3100 |
-| `TOOLS_SDK` | 5000 |
-| `DEPLOYMENT_PERSONA_SUFFIX` | 10200 |
+| `TOOL_GLOB` / `TOOL_GREP`                | 1400 / 1500        |
+| `MCP_SERVERS`                            | 3100               |
+| `TOOLS_SDK`                              | 5000               |
+| `DEPLOYMENT_PERSONA_SUFFIX`              | 10200              |
 
 `CONTEXT_ORDERS` has exactly three slots, all owned by harness subsystems:
 
-| Slot | Order | Owner |
-|---|---|---|
-| `SANDBOX_POLICY` | 110 | `dsh-sandbox-policy` |
-| `APPROVAL_POLICY` | 115 | `dsh-user-approval` |
-| `SUBAGENT_DELEGATION` | 120 | `dsh-subagent` |
+| Slot                  | Order | Owner                |
+| --------------------- | ----- | -------------------- |
+| `SANDBOX_POLICY`      | 110   | `dsh-sandbox-policy` |
+| `APPROVAL_POLICY`     | 115   | `dsh-user-approval`  |
+| `SUBAGENT_DELEGATION` | 120   | `dsh-subagent`       |
 
 **There is no spare slot for a third-party plugin.** This is the one place the
 design has to step outside the central table: `dsh-jujutsu` takes the next
@@ -95,7 +95,7 @@ ctx.inject(["systemPrompt"], (scope) => {
       const agent = context.agent;
       if (agent === void 0) return "";
       return effective(agent) === "never" ? NEVER_SENTENCE : ASK_SENTENCE;
-    }
+    },
   });
 });
 ```
@@ -110,20 +110,20 @@ Four things to take from it:
    `AssembleContext` is merge-extensible and only declares `scope` and
    `signal`; `agent` is contributed by another module and is what the shipping
    code actually uses. **VERIFIED by usage**, not by the base type.)
-4. **Empty string contributes nothing** — *"Empty text contributes nothing."*
+4. **Empty string contributes nothing** — _"Empty text contributes nothing."_
    This is the escape hatch that makes conditional injection free.
 
 ## 4. The other injection surfaces
 
-| Surface | What it is | Use for us? |
-|---|---|---|
-| `ctx.systemPrompt.context` | durable user-role snapshot, per assembly | **yes — primary** |
-| `ctx.systemPrompt.section` | ordered system-prompt text | **yes — the rule** |
-| `ctx.systemPrompt.variable` | `{{var}}` interpolation | only if a section needs a value |
-| `ctx.systemPrompt.tools` | tool-schema provider | **no** — see below |
-| `ctx.tools.register(defineTool({…}))` | the tool registry | **yes — the eleven tools** |
-| `dsh-agent-instructions` | loads `AGENTS.md`-compatible files: baseline instructions enter durable context before the first request; fs tool touches project nested/changed instructions into the inbox | **no** — it is a file loader, not a contribution point |
-| `agent.steer(createUserMessage(…))` | pushes a message into the agent's next step | **no** for the denial — see §6. `agent.inject` **is** verified-delivered (below) |
+| Surface                               | What it is                                                                                                                                                                   | Use for us?                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `ctx.systemPrompt.context`            | durable user-role snapshot, per assembly                                                                                                                                     | **yes — primary**                                                                |
+| `ctx.systemPrompt.section`            | ordered system-prompt text                                                                                                                                                   | **yes — the rule**                                                               |
+| `ctx.systemPrompt.variable`           | `{{var}}` interpolation                                                                                                                                                      | only if a section needs a value                                                  |
+| `ctx.systemPrompt.tools`              | tool-schema provider                                                                                                                                                         | **no** — see below                                                               |
+| `ctx.tools.register(defineTool({…}))` | the tool registry                                                                                                                                                            | **yes — the eleven tools**                                                       |
+| `dsh-agent-instructions`              | loads `AGENTS.md`-compatible files: baseline instructions enter durable context before the first request; fs tool touches project nested/changed instructions into the inbox | **no** — it is a file loader, not a contribution point                           |
+| `agent.steer(createUserMessage(…))`   | pushes a message into the agent's next step                                                                                                                                  | **no** for the denial — see §6. `agent.inject` **is** verified-delivered (below) |
 
 On `systemPrompt.tools`: the single tool-schema provider belongs to `dsh-tools`
 itself (`dsh-tools/lib/index.js:2707` — `ctx.systemPrompt.tools(context =>
@@ -143,7 +143,7 @@ ctx.inject(["systemPrompt", "fs"], (scope) => {
   scope.systemPrompt.section({
     name: "jujutsu:bash-policy",
     order: scope.systemPrompt.getSectionOrder("TOOL_BASH"),
-    text: (context) => renderBashPolicy(workspaceOf(context)),  // "" outside a jj workspace
+    text: (context) => renderBashPolicy(workspaceOf(context)), // "" outside a jj workspace
   });
 });
 ```
@@ -162,12 +162,12 @@ stable handle; bookmarks are the publish boundary.
 ```js
 scope.systemPrompt.context({
   name: "jujutsu:workspace",
-  order: 130,                          // next free slot after 110/115/120
+  order: 130, // next free slot after 110/115/120
   text: (context) => {
     const agent = context.agent;
     if (agent === undefined) return "";
-    const root = agent.session.header.cwd;      // the canonical workspace root
-    const kind = detectSync(root);              // 'jj' | 'jj-colocated' | 'none'
+    const root = agent.session.header.cwd; // the canonical workspace root
+    const kind = detectSync(root); // 'jj' | 'jj-colocated' | 'none'
     return kind === "none" ? "" : renderState(root, kind);
   },
 });
@@ -208,6 +208,7 @@ as [18](18-tool-surface.md) says.
   in-band beats out-of-band when the model is already looking at the call.
   If the session ends instead of continuing, `cancel()` clears the inbox
   (`:815-820`) — so never rely on it for anything that must survive.
+
 - **Do not set `complete: true`.** Only one complete section is permitted, and
   it replaces the entire system prompt. Claiming it would break the harness.
 - **Do not inject a `jj` manual.** Budget: ~200 words total across both
@@ -222,9 +223,10 @@ as [18](18-tool-surface.md) says.
   [28](28-teaching-and-interaction-surfaces.md) §1 and `SPEC.md` §5.9. **But not
   for the token saving an earlier draft claimed** — measured, the split is
   token-neutral (≈57 saved against a 30–77-token catalog line). The real reason
-  is that a skill lets the manual be *complete* instead of capped at 38 words.
-  Rule and state cannot move: a skill loads only *after* the model decides it
+  is that a skill lets the manual be _complete_ instead of capped at 38 words.
+  Rule and state cannot move: a skill loads only _after_ the model decides it
   needs one, which is too late to stop the first `git commit`.
+
 - **Do not repeat the tool descriptions.** A model that reads the same
   explanation in the prompt and in eleven schemas pays twice and learns once.
 - **Do not touch `system-prompt/assemble`.** It is an expert waterfall over the
@@ -233,13 +235,13 @@ as [18](18-tool-surface.md) says.
 
 ## 7. Verification status
 
-| Claim | Status |
-|---|---|
-| `ctx.systemPrompt` exists with `section`/`context`/`tools`/`variable` | **VERIFIED** — `dsh-system-prompt/lib/types/index.d.ts` |
-| `context` is materialised as a durable user-role snapshot | **VERIFIED** — its own doc comment |
-| `getSectionOrder` / `getContextOrder` and the order tables | **VERIFIED** — same file |
-| `ctx.inject(["systemPrompt"], scope => …)` + provider receiving `context.agent` | **VERIFIED by usage** — `dsh-user-approval/lib/index.js:78` |
-| Tools go through `ctx.tools.register`, not `systemPrompt.tools` | **VERIFIED** — `dsh-tool-bash/lib/index.js:698`, `dsh-tools/lib/index.js:2707` |
-| Order `130` is free and does not collide | **VERIFIED** — `CONTEXT_ORDERS` has only 110/115/120 |
-| The injected text actually reaches the model | **UNVERIFIED** — not exercised end to end |
-| `agent.session.header.cwd` is populated for a real assembly | **VERIFIED elsewhere** (`dsh-tool-fs` session-cwd), not in this path |
+| Claim                                                                           | Status                                                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ctx.systemPrompt` exists with `section`/`context`/`tools`/`variable`           | **VERIFIED** — `dsh-system-prompt/lib/types/index.d.ts`                        |
+| `context` is materialised as a durable user-role snapshot                       | **VERIFIED** — its own doc comment                                             |
+| `getSectionOrder` / `getContextOrder` and the order tables                      | **VERIFIED** — same file                                                       |
+| `ctx.inject(["systemPrompt"], scope => …)` + provider receiving `context.agent` | **VERIFIED by usage** — `dsh-user-approval/lib/index.js:78`                    |
+| Tools go through `ctx.tools.register`, not `systemPrompt.tools`                 | **VERIFIED** — `dsh-tool-bash/lib/index.js:698`, `dsh-tools/lib/index.js:2707` |
+| Order `130` is free and does not collide                                        | **VERIFIED** — `CONTEXT_ORDERS` has only 110/115/120                           |
+| The injected text actually reaches the model                                    | **UNVERIFIED** — not exercised end to end                                      |
+| `agent.session.header.cwd` is populated for a real assembly                     | **VERIFIED elsewhere** (`dsh-tool-fs` session-cwd), not in this path           |

@@ -6,17 +6,17 @@ package-relative citations.
 
 ## 1. The verified interfaces this builds on
 
-| Need | Interface | Source |
-|---|---|---|
-| Intercept a tool call | `ctx.on('tools/pre-execute', async (exec, next) => PreToolDecision)` | `dsh-tools/lib/types/index.d.ts:47` |
-| Deny / ask / allow | `{kind:'deny',reason}` · `{kind:'ask',reason,displayReason}` · `{kind:'allow'}` | same, `:445` |
-| The call record | `exec.name`, `exec.arguments`, `exec.agent`, `exec.signal` | same, `:216` |
-| Workspace root | `exec.agent?.session.header.cwd` | `dsh-tool-fs/lib/types/session-cwd` |
-| Read the filesystem | `ctx.fs.stat(target)` → `FsInfo \| undefined` (**no `exists`**) | `dsh-fs/lib/types/index.d.ts:138` |
-| Run a process | `await (await ctx.shell.execute(ctx.shell.resolve(req))).result()` | `dsh-tool-bash/lib/index.js:683` |
-| Register a tool | `ctx.tools.register(defineTool({name, description, parameters}))` | `dsh-tool-bash/lib/index.js:487`, `:698` |
-| Inject context | `ctx.inject(['systemPrompt'], s => s.systemPrompt.context({…}))` | `dsh-user-approval/lib/index.js:78` |
-| Read the approval policy | `ctx.get('approval')?.overrideOf(session)` | `dsh-user-approval/lib/types/index.d.ts:149` |
+| Need                     | Interface                                                                       | Source                                       |
+| ------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------- |
+| Intercept a tool call    | `ctx.on('tools/pre-execute', async (exec, next) => PreToolDecision)`            | `dsh-tools/lib/types/index.d.ts:47`          |
+| Deny / ask / allow       | `{kind:'deny',reason}` · `{kind:'ask',reason,displayReason}` · `{kind:'allow'}` | same, `:445`                                 |
+| The call record          | `exec.name`, `exec.arguments`, `exec.agent`, `exec.signal`                      | same, `:216`                                 |
+| Workspace root           | `exec.agent?.session.header.cwd`                                                | `dsh-tool-fs/lib/types/session-cwd`          |
+| Read the filesystem      | `ctx.fs.stat(target)` → `FsInfo \| undefined` (**no `exists`**)                 | `dsh-fs/lib/types/index.d.ts:138`            |
+| Run a process            | `await (await ctx.shell.execute(ctx.shell.resolve(req))).result()`              | `dsh-tool-bash/lib/index.js:683`             |
+| Register a tool          | `ctx.tools.register(defineTool({name, description, parameters}))`               | `dsh-tool-bash/lib/index.js:487`, `:698`     |
+| Inject context           | `ctx.inject(['systemPrompt'], s => s.systemPrompt.context({…}))`                | `dsh-user-approval/lib/index.js:78`          |
+| Read the approval policy | `ctx.get('approval')?.overrideOf(session)`                                      | `dsh-user-approval/lib/types/index.d.ts:149` |
 
 ### Three consequences that shape the code
 
@@ -36,7 +36,7 @@ interface ShellRunResult {
   timedOut: boolean;
   aborted: boolean;
   timeoutMs: number;
-  stdout: CollectedOutput;   // { text, truncated, spillPath? }
+  stdout: CollectedOutput; // { text, truncated, spillPath? }
   stderr: CollectedOutput;
   sandbox?: ShellSandboxInfo;
 }
@@ -48,22 +48,23 @@ first-cause classified and mutually exclusive. A `truncated` stream means
 best-effort parse.
 
 **`bash` has a `workdir` parameter.** This corrects an earlier assumption in
-this repo. Its own description tells the model to *"pass `workdir` instead of
-using `cd`"*, and the tool resolves it with `resolveWorkdir(modelWorkdir, exec,
+this repo. Its own description tells the model to _"pass `workdir` instead of
+using `cd`"_, and the tool resolves it with `resolveWorkdir(modelWorkdir, exec,
 policyWorkspaceRoot)` (`dsh-tool-bash/lib/index.js:293`) — where **a resolved
 sandbox-policy root wins over the session cwd**, and a relative workdir is
 joined by string concatenation. **Detection must mirror it:**
 
 ```ts
 const sessionCwd = policyWorkspaceRoot ?? exec.agent?.session.header.cwd;
-const cwd = exec.arguments.workdir === undefined
-  ? sessionCwd
-  : isAbsolute(exec.arguments.workdir)
-    ? exec.arguments.workdir
-    : resolve(sessionCwd ?? '', exec.arguments.workdir);
+const cwd =
+  exec.arguments.workdir === undefined
+    ? sessionCwd
+    : isAbsolute(exec.arguments.workdir)
+      ? exec.arguments.workdir
+      : resolve(sessionCwd ?? "", exec.arguments.workdir);
 ```
 
-Skipping this means a `git` command in a *different* `jj` repo slips through,
+Skipping this means a `git` command in a _different_ `jj` repo slips through,
 and — worse — a Git command in a non-`jj` sibling gets refused because the
 session root is a `jj` repo.
 
@@ -131,13 +132,13 @@ prepend the configured binary path.
 ### 3.2 `detect.ts`
 
 ```ts
-export type WorkspaceKind = 'jj-native' | 'jj-colocated' | 'none';
+export type WorkspaceKind = "jj-native" | "jj-colocated" | "none";
 
 export interface Detection {
   kind: WorkspaceKind;
   root: string;
   hasGitDir: boolean;
-  hasGitFile: boolean;   // secondary workspace / git worktree
+  hasGitFile: boolean; // secondary workspace / git worktree
 }
 
 export async function detect(ctx: Context, root: string): Promise<Detection>;
@@ -158,7 +159,7 @@ against a 64-command corpus). Keep its contract:
 export interface Invocation {
   programs: string[];
   gitInvocations: string[];
-  confidence: 'high' | 'low';
+  confidence: "high" | "low";
   notes: string[];
 }
 export function classifyInvocation(command: string): Invocation;
@@ -172,14 +173,14 @@ part worth preserving.
 
 ```ts
 export type Verdict =
-  | { kind: 'allow' }
-  | { kind: 'deny';  reason: string; display: string }
-  | { kind: 'ask';   reason: string; display: string }
-  | { kind: 'block'; reason: string };   // destructive path
+  | { kind: "allow" }
+  | { kind: "deny"; reason: string; display: string }
+  | { kind: "ask"; reason: string; display: string }
+  | { kind: "block"; reason: string }; // destructive path
 
 export function classifyGitInvocation(
   invocation: Invocation,
-  policy: { readOnlyGit: 'deny' | 'ask' | 'allow' },
+  policy: { readOnlyGit: "deny" | "ask" | "allow" },
 ): Verdict;
 ```
 
@@ -190,9 +191,7 @@ over the verb (R6). Table-driven; one test per row of `docs/20` §d.
 ### 3.5 `paths.ts`
 
 ```ts
-export function destructiveTargetsVcs(
-  command: string,
-): 'git' | 'jj' | 'unresolvable' | undefined;
+export function destructiveTargetsVcs(command: string): "git" | "jj" | "unresolvable" | undefined;
 ```
 
 Separate predicate, separate message. Triggers only on a destructive verb whose
@@ -220,7 +219,7 @@ Then resolve the effective cwd (§1), detect, and on a `jj` workspace consult
 **The whole body is wrapped in `try { … } catch { return next(); }`.** Verified:
 a throwing `tools/pre-execute` listener is caught by the registry and converted
 into a **tool error** (`dsh-tools/lib/index.js:3221-3225` → `:3198`), so one
-detector bug would break *every* `bash` call rather than the one being
+detector bug would break _every_ `bash` call rather than the one being
 classified. This is the single most important line of defensive code in the
 plugin.
 
@@ -237,7 +236,10 @@ return `''` outside a `jj` workspace. Copy comes from
 ### 3.8 `hunk.ts`
 
 ```ts
-export interface HunkSelection { query?: string; spec?: unknown }
+export interface HunkSelection {
+  query?: string;
+  spec?: unknown;
+}
 export async function listHunks(ctx, opts): Promise<HunkListResult>;
 export async function applyHunks(ctx, mode, selection, opts): Promise<ApplyResult>;
 ```
@@ -267,15 +269,15 @@ resulting working-copy state.
 
 ## 4. Build order
 
-| Milestone | Delivers | Proves |
-|---|---|---|
-| **M0 — spike** | a throwaway plugin that returns `{kind:'ask'}` for one command | **the one unverified link**: does an ask reach a UI and come back as `allowed-once`? Everything in [17](17-bypass-and-approval.md) rests on it. |
-| **M1 — detect + parse** | `detect.ts`, `parse.ts` ported, unit-tested against the 64-command corpus | the corpus still passes after the port |
-| **M2 — guard** | `verbs.ts`, `guard.ts`, `messages.ts`, fail-open wiring | the behaviour matrix in `SPEC.md` §7 |
-| **M3 — paths** | `paths.ts`, write protection | `rm -rf .git` is refused; `.gitignore` is not |
-| **M4 — context** | `context.ts` | the injected text actually reaches the model, and is absent outside a `jj` repo |
-| **M5 — tools + hunk** | `shell.ts`, `jj.ts`, `hunk.ts`, `tools.ts` | a real split round-trips on the `jj-with-changes` fixture |
-| **M6 — preflight** | `preflight.ts`, `errors.ts` | every `docs/26` failure mode produces its message |
+| Milestone               | Delivers                                                                  | Proves                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0 — spike**          | a throwaway plugin that returns `{kind:'ask'}` for one command            | **the one unverified link**: does an ask reach a UI and come back as `allowed-once`? Everything in [17](17-bypass-and-approval.md) rests on it. |
+| **M1 — detect + parse** | `detect.ts`, `parse.ts` ported, unit-tested against the 64-command corpus | the corpus still passes after the port                                                                                                          |
+| **M2 — guard**          | `verbs.ts`, `guard.ts`, `messages.ts`, fail-open wiring                   | the behaviour matrix in `SPEC.md` §7                                                                                                            |
+| **M3 — paths**          | `paths.ts`, write protection                                              | `rm -rf .git` is refused; `.gitignore` is not                                                                                                   |
+| **M4 — context**        | `context.ts`                                                              | the injected text actually reaches the model, and is absent outside a `jj` repo                                                                 |
+| **M5 — tools + hunk**   | `shell.ts`, `jj.ts`, `hunk.ts`, `tools.ts`                                | a real split round-trips on the `jj-with-changes` fixture                                                                                       |
+| **M6 — preflight**      | `preflight.ts`, `errors.ts`                                               | every `docs/26` failure mode produces its message                                                                                               |
 
 M0 is first because it is the only step whose outcome could invalidate a design
 decision. M5 is last because it is the largest surface and the least likely to
@@ -283,32 +285,32 @@ surprise.
 
 ## 5. Test mapping
 
-| Module | Layer | Fixture |
-|---|---|---|
-| `parse.ts` | unit | none — the 64-command corpus |
-| `verbs.ts` | unit | none — the 104-row table |
-| `guard.ts` | unit | fake `exec`, stubbed detector |
-| `detect.ts` | integration | all seven fixtures |
-| `paths.ts` | integration | `jj-colocated` |
-| `hunk.ts` | integration | `jj-with-changes` |
-| `tools.ts` | integration | `jj-with-changes`, `jj-native` |
-| preflight | integration | `jj-native` (no `.git`), plus a broken-repo fixture |
+| Module      | Layer       | Fixture                                             |
+| ----------- | ----------- | --------------------------------------------------- |
+| `parse.ts`  | unit        | none — the 64-command corpus                        |
+| `verbs.ts`  | unit        | none — the 104-row table                            |
+| `guard.ts`  | unit        | fake `exec`, stubbed detector                       |
+| `detect.ts` | integration | all seven fixtures                                  |
+| `paths.ts`  | integration | `jj-colocated`                                      |
+| `hunk.ts`   | integration | `jj-with-changes`                                   |
+| `tools.ts`  | integration | `jj-with-changes`, `jj-native`                      |
+| preflight   | integration | `jj-native` (no `.git`), plus a broken-repo fixture |
 
 `test/fixtures/build-fixtures.sh` already builds all seven and self-verifies;
 it is the entry point for every integration layer.
 
 ## 6. Unknowns to settle during the build
 
-| # | Unknown | How to settle |
-|---|---|---|
-| 1 | Does `{kind:'ask'}` reach a UI and return `allowed-once`? | M0 spike |
-| 2 | Is `exec.arguments.workdir` always a string when present, and relative to the session cwd? | read the bash tool's handler; confirm with a live call |
-| 3 | Does `ctx.fs.stat` resolve a path relative to the workspace, or must we join the root ourselves? | read `dsh-fs` `stat` + `resolve` |
-| 4 | Are tool parameters validated before `tools/pre-execute`, or only inside the tool body? | affects whether `exec.arguments` is trustworthy in the guard |
-| 5 | The exact `defineTool` return contract and disposer | `dsh-tool-bash/lib/index.js:698` |
-| 6 | Whether `inject: ['tools','fs','shell','systemPrompt']` is sufficient, or `approval` must be declared too | `ctx.get('approval')` is optional by design; confirm |
+| #   | Unknown                                                                                                   | How to settle                                                |
+| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1   | Does `{kind:'ask'}` reach a UI and return `allowed-once`?                                                 | M0 spike                                                     |
+| 2   | Is `exec.arguments.workdir` always a string when present, and relative to the session cwd?                | read the bash tool's handler; confirm with a live call       |
+| 3   | Does `ctx.fs.stat` resolve a path relative to the workspace, or must we join the root ourselves?          | read `dsh-fs` `stat` + `resolve`                             |
+| 4   | Are tool parameters validated before `tools/pre-execute`, or only inside the tool body?                   | affects whether `exec.arguments` is trustworthy in the guard |
+| 5   | The exact `defineTool` return contract and disposer                                                       | `dsh-tool-bash/lib/index.js:698`                             |
+| 6   | Whether `inject: ['tools','fs','shell','systemPrompt']` is sufficient, or `approval` must be declared too | `ctx.get('approval')` is optional by design; confirm         |
 
-**#7 is settled — see §1.** The guard *can* read the same `policyWorkspaceRoot`
+**#7 is settled — see §1.** The guard _can_ read the same `policyWorkspaceRoot`
 the bash tool computes, and in practice it does not need to: `SandboxPolicyService.resolve`
 derives `workspaceRoot` from `session.header.cwd` and nothing else whenever the
 session has a cwd. Evidence: [29](29-state-config-and-sandbox-surfaces.md) §3.

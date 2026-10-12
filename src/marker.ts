@@ -93,10 +93,7 @@ export function invalidateMarkers(): void {
  * @param start - absolute directory to begin at.
  * @returns the nearest marker, or `undefined` when none is found.
  */
-export async function markerFor(
-  ctx: Context,
-  start: string,
-): Promise<Marker | undefined> {
+export async function markerFor(ctx: Context, start: string): Promise<Marker | undefined> {
   const entry = CACHE.get(start);
   if (entry !== undefined && Date.now() - entry.at < TTL_MS) {
     return entry.value ?? undefined;
@@ -138,10 +135,7 @@ function parentOf(dir: string): string | undefined {
  * and the safe reading of an unparseable opt-out is to keep the plugin on
  * rather than to silently disable protection.
  */
-async function readMarker(
-  ctx: Context,
-  dir: string,
-): Promise<Marker | undefined> {
+async function readMarker(ctx: Context, dir: string): Promise<Marker | undefined> {
   const path = `${dir}/${MARKER_FILE}`;
   try {
     // `ctx.get('fs')`, matching `detect.ts`: the service is not part of the

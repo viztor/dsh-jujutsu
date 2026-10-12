@@ -8,7 +8,7 @@ arithmetic, and anything I could not close is labelled.
 **Headline.** The skill split survives — but not for the reason
 [28 §1.5](28-teaching-and-interaction-surfaces.md) gives. Q1 and Q5 confirm it;
 Q2 does not kill it but does invalidate its "once per session" cost model; Q3
-shows the token saving is **≈26 tokens/request, not 5×**, and turns *negative*
+shows the token saving is **≈26 tokens/request, not 5×**, and turns _negative_
 if the catalog description is written as long as 28 proposes.
 
 Citations are package-relative. `dsh-web-app/cordis.patch.yml` etc. are the
@@ -18,19 +18,19 @@ installed composition rows, not the source tree.
 
 ## 0. Answers at a glance
 
-| Q | Answer | Confidence | Effect on the spec |
-|---|---|---|---|
-| **Q1** | Yes. A global runtime skill is merged into every preset-scoped agent's catalog; the preset layer only *shadows* a same-name entry. | CERTAIN | §5.9 confirmed. Add: a preset that mounts no `tool-skill` has no catalog at all. |
-| **Q2** | Not protected — it is a plain surface node inside any compacted span. But it is **self-healing**: the next `agent/pre-step` republishes it as a catalog *update*. Pressure compaction republishes in the same step; overflow compaction loses exactly one request. | CERTAIN | §5.9's "once per session" is false. Cost must be modelled as "one line, republished after every compaction". |
-| **Q3** | Real injection is **89 words / 553 chars ≈ 138 tok**, not ~200 words. 38 of the 89 words are MANUAL and can move (≈57 tok saved). The catalog line costs 30–77 tok. Net **−26 tok** with a short description, **+20 tok** with 28's 40-word description. | CERTAIN | Kill the "roughly 5×" claim. Justify the split by depth, not tokens; cap the description at ~35 words. |
-| **Q4** | Yes — a plugin `ask()` enters the *same* answerer waterfall; `wait:{callId}` keys the *same* card. No plugin-specific path exists. | LIKELY (code path complete and shared with the tool; not exercised in a GUI) | Unblocks [28 §3.5(b)](28-teaching-and-interaction-surfaces.md) hunk-selection confirmation. |
-| **Q5** | "Owned" = created through another agent's context (a subagent). Preset scoping is irrelevant. A root agent under any preset is served. | CERTAIN | §5.11's install offer works in preset sessions; only a subagent-context offer fails. |
+| Q      | Answer                                                                                                                                                                                                                                                             | Confidence                                                                   | Effect on the spec                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Q1** | Yes. A global runtime skill is merged into every preset-scoped agent's catalog; the preset layer only _shadows_ a same-name entry.                                                                                                                                 | CERTAIN                                                                      | §5.9 confirmed. Add: a preset that mounts no `tool-skill` has no catalog at all.                             |
+| **Q2** | Not protected — it is a plain surface node inside any compacted span. But it is **self-healing**: the next `agent/pre-step` republishes it as a catalog _update_. Pressure compaction republishes in the same step; overflow compaction loses exactly one request. | CERTAIN                                                                      | §5.9's "once per session" is false. Cost must be modelled as "one line, republished after every compaction". |
+| **Q3** | Real injection is **89 words / 553 chars ≈ 138 tok**, not ~200 words. 38 of the 89 words are MANUAL and can move (≈57 tok saved). The catalog line costs 30–77 tok. Net **−26 tok** with a short description, **+20 tok** with 28's 40-word description.           | CERTAIN                                                                      | Kill the "roughly 5×" claim. Justify the split by depth, not tokens; cap the description at ~35 words.       |
+| **Q4** | Yes — a plugin `ask()` enters the _same_ answerer waterfall; `wait:{callId}` keys the _same_ card. No plugin-specific path exists.                                                                                                                                 | LIKELY (code path complete and shared with the tool; not exercised in a GUI) | Unblocks [28 §3.5(b)](28-teaching-and-interaction-surfaces.md) hunk-selection confirmation.                  |
+| **Q5** | "Owned" = created through another agent's context (a subagent). Preset scoping is irrelevant. A root agent under any preset is served.                                                                                                                             | CERTAIN                                                                      | §5.11's install offer works in preset sessions; only a subagent-context offer fails.                         |
 
 ---
 
 ## Q1 — Is a runtime-registered skill visible in the catalog for a preset-scoped agent?
 
-**Answer: yes.** The registry is host-plane and *layered*; a read always merges
+**Answer: yes.** The registry is host-plane and _layered_; a read always merges
 the global layer with the viewing agent's scope chain, and the chain can only
 shadow, never hide.
 
@@ -44,8 +44,8 @@ const scope = scopeOf(this.ctx);
 
 A repository plugin mounted as a host-plane row has no scope tag, so `scopeOf`
 returns `undefined` and the entry goes to `layers.global`. That is the deployment
-shape the composition documents: *"deployment-level providers — repository
-plugins, a host skill-filesystem row — register into its global layer"*
+shape the composition documents: _"deployment-level providers — repository
+plugins, a host skill-filesystem row — register into its global layer"_
 (`dsh-web-app/cordis.patch.yml:475-479`).
 
 **The read merges global first, then the chain.** The tool's lookup passes the
@@ -53,11 +53,14 @@ agent as the viewing scope:
 
 ```js
 // dsh-tool-skill/lib/index.js:207-211
-const snapshot = ctx.tools.get(skillTool.name, agent) === skillTool ? await ctx.skills.snapshot({
-    cwd: agent.session.header.cwd,
-    signal,
-    scope: agent
-}) : { skills: [], complete: true };
+const snapshot =
+  ctx.tools.get(skillTool.name, agent) === skillTool
+    ? await ctx.skills.snapshot({
+        cwd: agent.session.header.cwd,
+        signal,
+        scope: agent,
+      })
+    : { skills: [], complete: true };
 ```
 
 ```js
@@ -75,7 +78,7 @@ async collectFresh(options) {
 entries are unconditionally present; they are lost only to a same-name entry in
 a nearer layer.
 
-**The agent *is* the scope key, and the preset is its parent.** The agent loop
+**The agent _is_ the scope key, and the preset is its parent.** The agent loop
 mints the scope with the agent as the key, and the preset registry parents that
 key to the preset's own key:
 
@@ -87,17 +90,17 @@ this.scope = createScope(loopCtx, this);
 ```js
 // dsh-agent-preset-registry/lib/index.js:675-678  (join)
 const binding = {
-    parent: bindScopeParent(key, generation.key),
-    generation
+  parent: bindScopeParent(key, generation.key),
+  generation,
 };
 ```
 
 The preset's rows mount under `createScope(this.owner, key)`'s context
 (`dsh-agent-preset-registry/lib/index.js:527,534`), which is why a preset's
-`skill-filesystem` registers into *that preset's* layer — exactly what the
+`skill-filesystem` registers into _that preset's_ layer — exactly what the
 composition says, verbatim:
 
-> `# The `skill` REGISTRY stays in the host plane. … a preset's `skill-filesystem` registers into that preset's layer, and each agent reads the merged catalog its scope chain selects.`
+> `# The `skill`REGISTRY stays in the host plane. … a preset's`skill-filesystem` registers into that preset's layer, and each agent reads the merged catalog its scope chain selects.`
 
 (`dsh-web-app/cordis.patch.yml:475-482`.) The standard preset proves the pairing:
 it mounts `skill-filesystem` + `tool-skill` inside the preset
@@ -119,7 +122,7 @@ needed. The only unexercised link is a live registration, which cannot change
 the merge order.
 
 **What it changes.** §5.9's registration plan is sound as written. Add one
-sentence: *the catalog exists only under a preset that mounts `tool-skill`*, and
+sentence: _the catalog exists only under a preset that mounts `tool-skill`_, and
 keep the existing note that a project skill of the same name wins.
 
 ---
@@ -136,7 +139,9 @@ appended as durable `user/message` events with no protection flag:
 
 ```js
 // dsh-agent-loop/lib/index.js:1061
-if (firstAttempt) for (const message of decision.messages) this.session.append("user/message", message, { surfaceOp: "append" });
+if (firstAttempt)
+  for (const message of decision.messages)
+    this.session.append("user/message", message, { surfaceOp: "append" });
 ```
 
 **Compaction starts at surface node 1, so the catalog is always inside the
@@ -164,7 +169,7 @@ Shadowed events stay readable in the append-only log — the compaction code
 itself reads them back (`prepareCompaction` → `buildSummarizationInput` over
 `shadowedSeqs`).
 
-**The republish is digest-gated on the *log*, not the surface.** `catalogHistory`
+**The republish is digest-gated on the _log_, not the surface.** `catalogHistory`
 scans the whole log but only treats a catalog as "visible" when its seq is still
 a surface node:
 
@@ -195,7 +200,7 @@ replaces every earlier available-skills list in this session"
 (`dsh-tool-skill/lib/index.js:262-291`).
 
 **Timing: the pressure path loses nothing.** Automatic pressure compaction runs
-*inside* `agent/pre-step` (`dsh-compaction-basic/lib/index.js:839-853`), and the
+_inside_ `agent/pre-step` (`dsh-compaction-basic/lib/index.js:839-853`), and the
 catalog publisher reads the surface only after its own `await next()`
 (`dsh-tool-skill/lib/index.js:203-206`). Whichever of the two listeners is
 upstream, the publisher observes the post-compaction surface and appends the
@@ -220,7 +225,7 @@ That `continue` retries the request **without re-running `agent/pre-step`**
 therefore goes out with the catalog shadowed. The next step's pre-step
 republishes it.
 
-**Also worth knowing:** the catalog *framing* (`<system-reminder>` + the two
+**Also worth knowing:** the catalog _framing_ (`<system-reminder>` + the two
 closing paragraphs, `dsh-tool-skill/lib/index.js:238-260`) is ~171 tokens and is
 paid whenever any model-invocable skill exists — it is harness overhead, not
 ours. Our marginal cost is the single entry line.
@@ -231,9 +236,9 @@ argument is order-independent); **LIKELY** for the exact count of requests lost
 on the overflow path (derived from the `continue`, not executed).
 
 **What it changes.** §5.9 and [22](22-context-injection.md) §6 must stop saying
-the catalog is "published once per session". The correct statement: *one line,
+the catalog is "published once per session". The correct statement: _one line,
 durable, and republished as a full replacement catalog after any compaction that
-shadows it.* Two consequences for the spec: (a) the line is **not** a one-time
+shadows it._ Two consequences for the spec: (a) the line is **not** a one-time
 cost; (b) a compaction in a skill-heavy session re-pays the whole catalog at
 least once, which is a harness-wide effect our registration triggers by changing
 the digest. Neither is a reason to abandon the split — the manual would have
@@ -247,13 +252,13 @@ been shadowed too, and a re-published catalog is strictly better than a lost one
 
 The real injected text is [25 §1](25-prompt-copy.md), not the ~200-word budget.
 Counted on the doc's own strings (line wraps joined with single spaces; the
-runtime context is the *rendered* §1.3 form, which is what ships).
+runtime context is the _rendered_ §1.3 form, which is what ships).
 
-| Component | Words | Chars | ≈ tokens (chars ÷ 4) |
-|---|---|---|---|
-| System section, §1.1 | 68 | 397 | 99.3 |
-| Runtime context, rendered, §1.3 | 21 | 155 | 38.8 |
-| **Combined, as shipped** | **89** | **553** | **≈ 138** |
+| Component                       | Words  | Chars   | ≈ tokens (chars ÷ 4) |
+| ------------------------------- | ------ | ------- | -------------------- |
+| System section, §1.1            | 68     | 397     | 99.3                 |
+| Runtime context, rendered, §1.3 | 21     | 155     | 38.8                 |
+| **Combined, as shipped**        | **89** | **553** | **≈ 138**            |
 
 The template form of the context (each `{{…}}` group as one word) is 12 words;
 the rendered form is 21. The rendered form is the one the model pays for.
@@ -262,18 +267,18 @@ the rendered form is 21. The rendered form is the one the model pays for.
 
 Each sentence of §1.1, plus the context block:
 
-| # | Sentence | Class | Words | Chars | ≈ tok |
-|---|---|---|---|---|---|
-| S1 | Version control here is Jujutsu (jj). | STATE (constant premise) | 6 | 37 | 9.3 |
-| S2 | The bash tool intercepts git and returns the jj command to run instead; there is no Git mode. | **RULE** | 18 | 93 | 23.3 |
-| S3 | Use jj for every version-control step. | **RULE** | 6 | 38 | 9.5 |
-| S4 | The working copy @ is always a commit and always dirty: no staging, nothing to add. | MANUAL | 16 | 83 | 20.8 |
-| S5 | Address revisions by change ID, which survives rewrites; commit IDs do not. | MANUAL | 12 | 75 | 18.8 |
-| S6 | Bookmarks are the publish boundary: jj git push --bookmark `<name>`. | MANUAL | 10 | 66 | 16.5 |
-| — | Runtime context: root / layout / `@` / `jj-hunk` | STATE | 21 | 155 | 38.8 |
-| | **RULE total** | | **24** | 131 | 32.8 |
-| | **STATE total** | | **27** | 192 | 48.0 |
-| | **MANUAL total** | | **38** | 224 | 56.0 |
+| #   | Sentence                                                                                      | Class                    | Words  | Chars | ≈ tok |
+| --- | --------------------------------------------------------------------------------------------- | ------------------------ | ------ | ----- | ----- |
+| S1  | Version control here is Jujutsu (jj).                                                         | STATE (constant premise) | 6      | 37    | 9.3   |
+| S2  | The bash tool intercepts git and returns the jj command to run instead; there is no Git mode. | **RULE**                 | 18     | 93    | 23.3  |
+| S3  | Use jj for every version-control step.                                                        | **RULE**                 | 6      | 38    | 9.5   |
+| S4  | The working copy @ is always a commit and always dirty: no staging, nothing to add.           | MANUAL                   | 16     | 83    | 20.8  |
+| S5  | Address revisions by change ID, which survives rewrites; commit IDs do not.                   | MANUAL                   | 12     | 75    | 18.8  |
+| S6  | Bookmarks are the publish boundary: jj git push --bookmark `<name>`.                          | MANUAL                   | 10     | 66    | 16.5  |
+| —   | Runtime context: root / layout / `@` / `jj-hunk`                                              | STATE                    | 21     | 155   | 38.8  |
+|     | **RULE total**                                                                                |                          | **24** | 131   | 32.8  |
+|     | **STATE total**                                                                               |                          | **27** | 192   | 48.0  |
+|     | **MANUAL total**                                                                              |                          | **38** | 224   | 56.0  |
 
 **38 of the 89 words (43%) can move.** The RULE is 24 words and cannot: it has
 to be true before the first Git command, and a skill loads only after the model
@@ -289,17 +294,17 @@ the tools anyway.
 Whole-block char counts (they include the separators, so they are the honest
 totals):
 
-| | Words | Chars | ≈ tok |
-|---|---|---|---|
-| **Before** — section + rendered context | 89 | 553 | **138.3** |
-| **After** — RULE + STATE only | 51 | 326 | **81.5** |
-| Saving (the moved MANUAL) | 38 | 227 | **56.8** |
-| Added — catalog line, 18-word description | 18 | 122 | 30.5 |
-| Added — catalog line, 51-word description (28's shape) | 51 | 308 | 77.0 |
-| **Net, short description** | | | **−26.3 (−19%)** |
-| **Net, 28's routing description** | | | **+20.3 (+15%)** |
+|                                                        | Words | Chars | ≈ tok            |
+| ------------------------------------------------------ | ----- | ----- | ---------------- |
+| **Before** — section + rendered context                | 89    | 553   | **138.3**        |
+| **After** — RULE + STATE only                          | 51    | 326   | **81.5**         |
+| Saving (the moved MANUAL)                              | 38    | 227   | **56.8**         |
+| Added — catalog line, 18-word description              | 18    | 122   | 30.5             |
+| Added — catalog line, 51-word description (28's shape) | 51    | 308   | 77.0             |
+| **Net, short description**                             |       |       | **−26.3 (−19%)** |
+| **Net, 28's routing description**                      |       |       | **+20.3 (+15%)** |
 
-Catalog line = `` - `jujutsu`: `` (13 chars) + the description, truncated at 500
+Catalog line = ``- `jujutsu`:`` (13 chars) + the description, truncated at 500
 chars (`dsh-tool-skill/lib/index.js:293-295, 359-362`).
 
 **Break-even: the description may be at most 227 − 13 = 214 chars ≈ 35 words.**
@@ -336,10 +341,12 @@ The tool does nothing a plugin cannot:
 
 ```js
 // dsh-tool-ask-user/lib/index.js:195-198
-return answerResult(await ctx.userQuestions.ask({
+return answerResult(
+  await ctx.userQuestions.ask({
     ...request,
-    wait: { callId: exec.callId }
-}));
+    wait: { callId: exec.callId },
+  }),
+);
 ```
 
 `ask()` dispatches the scoped answerer waterfall
@@ -401,7 +408,7 @@ The second blocker (`DELEGATED_CALLER` for subagents) stands — see Q5.
 **Answer: yes, for any root agent, preset or not.** "Owned" has nothing to do
 with presets.
 
-The gate is two checks, both about the *runtime* agent graph:
+The gate is two checks, both about the _runtime_ agent graph:
 
 ```js
 // dsh-user-questions/lib/index.js:531-535
@@ -412,7 +419,7 @@ assertLiveRoot(agent) {
 }
 ```
 
-and "owned" is defined as *created through another agent's context*:
+and "owned" is defined as _created through another agent's context_:
 
 ```js
 // dsh-agent/lib/index.js:621-623
@@ -432,7 +439,16 @@ why a host-plane plugin is not disadvantaged:
 
 ```js
 // dsh-user-questions/lib/index.js:681
-return await (agent === void 0 ? this.ctx.waterfall("user-questions/request", request, noAnswerer) : this.ctx.waterfall(scopeTarget(agent, agent), "user-questions/request", { ...request, agent }, noAnswerer));
+return await(
+  agent === void 0
+    ? this.ctx.waterfall("user-questions/request", request, noAnswerer)
+    : this.ctx.waterfall(
+        scopeTarget(agent, agent),
+        "user-questions/request",
+        { ...request, agent },
+        noAnswerer,
+      ),
+);
 ```
 
 The bridge listener is untagged, so `scopeTarget` admits it, and it recovers the
@@ -474,7 +490,7 @@ spec's call shape — omitting it silently degrades to `NO_PROVIDER`.
 mechanics outright: a host-plane `ctx.skills.register()` lands in the global
 layer and every preset-scoped agent merges it, with the preset able only to
 shadow a same-name entry — so `SPEC.md` §5.9's registration plan is correct as
-written. Q2 does not kill the split: the catalog is *not* protected from
+written. Q2 does not kill the split: the catalog is _not_ protected from
 compaction, but `catalogHistory` reads the append-only log rather than the
 surface, so a shadowed catalog is republished as an update at the next
 `agent/pre-step`; pressure compaction republishes it in the same step, and only
@@ -482,12 +498,12 @@ the context-overflow retry leaves one request without it — a bounded, transien
 loss that the old in-prompt manual would not have suffered but that is far better
 than losing the manual outright. Q5 confirms the interactive half: "owned" means
 a subagent, not a preset, so the `jj-hunk` offer is served in a preset session.
-What Q3 does kill is the *arithmetic*: the real injection is 89 words ≈ 138
+What Q3 does kill is the _arithmetic_: the real injection is 89 words ≈ 138
 tokens, not ~200 words; moving the 38-word manual saves ≈57 tokens/request, and
 the catalog line that replaces it costs 30–77 — a net **−26 tokens** with a short
 description and a net **+20** with the 40-word description 28 proposes, with
 break-even at ~35 words. So the split should still ship, for the honest reason
-that a skill lets the manual be *complete* (op log, change IDs, conflict model,
+that a skill lets the manual be _complete_ (op log, change IDs, conflict model,
 the full verb table) instead of capped at 38 words, at zero cost in sessions that
 never load it — and the description must be written as a routing rule under ~35
 words, not as a summary. The one thing to fix everywhere before shipping is the
@@ -495,8 +511,8 @@ sentence "published once per session".
 
 ## Still unresolved
 
-| Claim | Status | What would settle it |
-|---|---|---|
-| A plugin-initiated `ask()` with `wait:{callId: exec.callId}` renders the card in the running GUI | **UNVERIFIED by execution** — code path complete (Q4) | mount the probe tool and screenshot the panel |
-| The end-to-end answer reaches a host-plane `ask()` for a preset agent in this profile | **UNVERIFIED by execution** — gate and bridge confirmed (Q5) | the same probe, answering the panel |
-| Whether the single request lost after overflow compaction ever matters in practice | **UNVERIFIED** — depends on the model needing the catalog in that one step | instrument a session that overflows mid-task |
+| Claim                                                                                            | Status                                                                     | What would settle it                          |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------- |
+| A plugin-initiated `ask()` with `wait:{callId: exec.callId}` renders the card in the running GUI | **UNVERIFIED by execution** — code path complete (Q4)                      | mount the probe tool and screenshot the panel |
+| The end-to-end answer reaches a host-plane `ask()` for a preset agent in this profile            | **UNVERIFIED by execution** — gate and bridge confirmed (Q5)               | the same probe, answering the panel           |
+| Whether the single request lost after overflow compaction ever matters in practice               | **UNVERIFIED** — depends on the model needing the catalog in that one step | instrument a session that overflows mid-task  |

@@ -81,7 +81,7 @@ real scaling problems, each with a fix:
 
 ### 1. Excessive remote refs
 
-`jj git fetch` in an environment with hundreds of forks imports *every*
+`jj git fetch` in an environment with hundreds of forks imports _every_
 reference into the operation store, which slows the CLI down. Fix: restrict the
 fetch patterns to what you actually track.
 
@@ -102,7 +102,7 @@ jj workspace add ../nested-fork-feature
 A distinct working directory over the same repository storage. **VERIFIED**
 that it works, and **corrected**: in a colocated repo `jj workspace add` prints
 "Created Git worktree for the new workspace" — so the claim that
-`git-worktree` is unsupported is too strong. `jj` does not let you *use*
+`git-worktree` is unsupported is too strong. `jj` does not let you _use_
 `git worktree` for isolation, but it uses one internally. Measured layout of the
 secondary workspace: `.jj/` is a directory, `.git` is a file pointing at
 `../<main>/.git/worktrees/<name>` — see
@@ -136,13 +136,13 @@ directory was gone.
 
 - **These are user-configuration fixes, not plugin features.** `fetch`
   patterns, remotes, and sparse settings live in `jj` config. A plugin could
-  *detect* a pathological config and suggest the fix — that is the useful
+  _detect_ a pathological config and suggest the fix — that is the useful
   product — but it should not silently rewrite the user's `config.toml`.
 - **`jj git export` is the compatibility seam for everything else.** Any tool
   that reads `.git` (editors, `gh`, Turborepo, CI shims — see
   [10](10-workflow-compatibility.md)) needs an export first. That is a
   candidate for automatic execution before `bash` commands that invoke such
-  tools, and it is the strongest argument *against* a blanket Git block in a
+  tools, and it is the strongest argument _against_ a blanket Git block in a
   colocated repo.
 
 ## Verification note

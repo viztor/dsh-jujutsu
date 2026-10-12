@@ -8,18 +8,18 @@ exercised with four sentinel commands, then **removed** (`remove_bundle`,
 in `dependencies`, none in `dsh.profile.bundles`, none in `node_modules`.
 
 The probe logged JSONL to `/tmp/dsh-jujutsu-probe.jsonl` — **383 records** —
-and the harness's own session logs were used to confirm *delivery*, because a
+and the harness's own session logs were used to confirm _delivery_, because a
 probe that only logs what it sent cannot tell you what the model received.
 
 ## What the live run settles
 
-| # | Question | Result |
-|---|---|---|
-| **Q1** | Does `{kind:'ask'}` reach a UI and return `allowed-once`? | **CONFIRMED** |
-| **Q3** | Does a `deny` plus a post-execute `additionalContexts` reach the model? | **CONFIRMED** |
-| **Q2** | Does `agent.inject` at `agent/turn-stopping` reach the model? | **CONFIRMED** |
-| control | Does a host plugin's `ctx.systemPrompt.context` reach the model? | **CONFIRMED** |
-| — | Is the deny text delivered verbatim? | **CONFIRMED** |
+| #       | Question                                                                | Result        |
+| ------- | ----------------------------------------------------------------------- | ------------- |
+| **Q1**  | Does `{kind:'ask'}` reach a UI and return `allowed-once`?               | **CONFIRMED** |
+| **Q3**  | Does a `deny` plus a post-execute `additionalContexts` reach the model? | **CONFIRMED** |
+| **Q2**  | Does `agent.inject` at `agent/turn-stopping` reach the model?           | **CONFIRMED** |
+| control | Does a host plugin's `ctx.systemPrompt.context` reach the model?        | **CONFIRMED** |
+| —       | Is the deny text delivered verbatim?                                    | **CONFIRMED** |
 
 ### Q1 — the ask path works end to end
 
@@ -85,22 +85,22 @@ proposed is available to a host plugin in this profile.
 ## An accidental finding worth keeping
 
 The probe's sentinel match is a naive `cmd.includes('PROBE_DENY_CTX')`. While
-inspecting its own log, the parent ran a `grep` whose *pattern text* contained
+inspecting its own log, the parent ran a `grep` whose _pattern text_ contained
 that string — and **the probe denied the grep**.
 
 That is a live demonstration of the false-positive class
 [21](21-guard-evasion.md) predicted: a guard that scans command text for a token
-denies commands that merely *mention* the token. It is the strongest argument
+denies commands that merely _mention_ the token. It is the strongest argument
 yet for the rule in [15](15-verb-mapping.md) §4 — **resolve the invoked program,
 never scan for a token** — and it happened to the person writing the rule.
 
 ## What the run did NOT settle
 
-| # | Question | Why not |
-|---|---|---|
-| **Q12** | Preflight latency at session start | `agent/created` never fired: the probe mounted **mid-session**, and that event only fires for new agents. Needs a session started with the probe already installed. |
-| **Q13** | Does `ctx.fs.stat(<cwd>/.jj)` at `agent/created` see the same root a tool call computes? | same reason |
-| — | The outgoing message list | the `agent/request` inspector logged `messageCount: 0` on all 79 records: `config.messages` is not where the messages live in `LlmCallConfig`. The delivery questions were answered from the session logs instead, which is the more trustworthy source anyway. |
+| #       | Question                                                                                 | Why not                                                                                                                                                                                                                                                         |
+| ------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Q12** | Preflight latency at session start                                                       | `agent/created` never fired: the probe mounted **mid-session**, and that event only fires for new agents. Needs a session started with the probe already installed.                                                                                             |
+| **Q13** | Does `ctx.fs.stat(<cwd>/.jj)` at `agent/created` see the same root a tool call computes? | same reason                                                                                                                                                                                                                                                     |
+| —       | The outgoing message list                                                                | the `agent/request` inspector logged `messageCount: 0` on all 79 records: `config.messages` is not where the messages live in `LlmCallConfig`. The delivery questions were answered from the session logs instead, which is the more trustworthy source anyway. |
 
 Both are cheap to close with a second run — install, start a **new** session in
 a `jj` fixture, read the log — but neither is load-bearing: preflight can stay

@@ -291,7 +291,8 @@ const STRINGS: Record<string, Record<string, string>> = {
     teachSkillHint:
       "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
     jjPathLabel: "jj executable",
-    jjPathHint: "The jj executable. Change this when jj is not on PATH, or to pin a specific build.",
+    jjPathHint:
+      "The jj executable. Change this when jj is not on PATH, or to pin a specific build.",
     jjHunkPathLabel: "jj-hunk executable",
     jjHunkPathHint:
       "The jj-hunk executable. Hunk-level split and squash need it; without it those tools report unavailable rather than failing.",
@@ -381,7 +382,11 @@ const FIELDS: Record<string, FieldMeta> = {
     hintKey: "bypassHint",
     choices: ["ask", "deny", "allow"],
   },
-  rememberBypass: { kind: "boolean", labelKey: "rememberBypassLabel", hintKey: "rememberBypassHint" },
+  rememberBypass: {
+    kind: "boolean",
+    labelKey: "rememberBypassLabel",
+    hintKey: "rememberBypassHint",
+  },
   alertUninitialised: {
     kind: "boolean",
     labelKey: "alertUninitialisedLabel",
@@ -435,16 +440,6 @@ const GROUPS: readonly GroupMeta[] = [
   { id: "master", titleKey: "groupMaster", blurbKey: "groupMasterBlurb", fields: ["enabled"] },
 ];
 
-/** The two drafts a boolean field accepts, as the spec sees them. */
-const BOOLEAN_CHOICES: readonly string[] = ["true", "false"];
-
-/** The choices for one field: an empty list means a text input. */
-function choicesOf(meta: FieldMeta): readonly string[] {
-  if (meta.kind === "boolean") return BOOLEAN_CHOICES;
-  if (meta.kind === "enum") return meta.choices ?? [];
-  return [];
-}
-
 /** A boolean field, staged as text. */
 function booleanField(field: string): SettingsFieldSpec {
   return {
@@ -484,7 +479,10 @@ function buildSpecs(): SettingsFieldSpec[] {
 /** What the panel receives from its slot entry. */
 interface PanelProps extends PluginConfigViewProps {
   readonly t?: (key: string) => string;
-  readonly store: SnapshotStore<{ fields: Record<string, SettingsFieldState>; shell: SettingsFormShell }>;
+  readonly store: SnapshotStore<{
+    fields: Record<string, SettingsFieldState>;
+    shell: SettingsFormShell;
+  }>;
   readonly edit: (field: string, text: string) => void;
   readonly resetField: (field: string) => void;
   readonly save: () => void;
@@ -683,6 +681,10 @@ function apply(ctx: ClientContext): void {
     try {
       return ctx.locale.register(NS, { en: STRINGS[EN], zh: STRINGS.zh });
     } catch (error) {
+      // Reported rather than swallowed, like the host half's failures: without
+      // the dictionary every label renders as its key, which looks like a bug in
+      // the panel rather than a failed registration.
+      console.error("[dsh-jujutsu] locale registration failed:", error);
       return undefined;
     }
   }, "dsh-jujutsu: dictionaries");
@@ -728,4 +730,4 @@ function apply(ctx: ClientContext): void {
   }, "dsh-jujutsu: panel");
 }
 
-export { inject, apply, Panel, FIELDS, GROUPS, STRINGS, buildSpecs, choicesOf, booleanField, enumField };
+export { inject, apply, Panel, FIELDS, GROUPS, STRINGS, buildSpecs, booleanField, enumField };

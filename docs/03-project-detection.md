@@ -42,12 +42,12 @@ are still invented.
 A Jujutsu workspace is identifiable from the filesystem, and the signals are
 ordered by strength:
 
-| Signal | Strength | Note |
-|---|---|---|
-| `.jj/` directory at the workspace root | **definitive** | Present in every `jj` repo, colocated or not |
-| `.jj/repo` / `.jj/working_copy` | definitive | Internal layout; version-sensitive |
-| `.jj/` **and** `.git/` both present | definitive, and *colocated* | The interesting case — see [07](07-jujutsu-core-model.md) |
-| `jj config` / `jj root` succeeds | definitive, but requires spawning a process | Slower; use as confirmation, not as the primary check |
+| Signal                                 | Strength                                    | Note                                                      |
+| -------------------------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `.jj/` directory at the workspace root | **definitive**                              | Present in every `jj` repo, colocated or not              |
+| `.jj/repo` / `.jj/working_copy`        | definitive                                  | Internal layout; version-sensitive                        |
+| `.jj/` **and** `.git/` both present    | definitive, and _colocated_                 | The interesting case — see [07](07-jujutsu-core-model.md) |
+| `jj config` / `jj root` succeeds       | definitive, but requires spawning a process | Slower; use as confirmation, not as the primary check     |
 
 The conversation never mentions `.jj/` once. That is the whole detection
 problem, and it is a two-line check.
@@ -58,7 +58,7 @@ problem, and it is a two-line check.
 jj project?" is not the same question as "should Git be blocked?":
 
 - `.jj/` only → native `jj`; Git commands are meaningless. Blocking is free.
-- `.jj/` + `.git/` → colocated. Git *works*, and other tools (editors, `gh`,
+- `.jj/` + `.git/` → colocated. Git _works_, and other tools (editors, `gh`,
   CI shims) legitimately use it. Blocking Git for the agent may still be right,
   but the harness must not pretend `.git` is absent.
 - `.git/` only → not our business. Return `next()`.
@@ -73,10 +73,10 @@ same unresolved tension flagged in [01](01-framing-and-intent.md) and
 ```ts
 // Pseudocode — verify the exact workspace-access API before implementing.
 function detectWorkspace(exec) {
-  const root = workspaceRootFor(exec);        // NOT process.cwd()
+  const root = workspaceRootFor(exec); // NOT process.cwd()
   return {
-    hasJj:   ctx.fs.exists(join(root, '.jj')),
-    hasGit:  ctx.fs.exists(join(root, '.git')),
+    hasJj: ctx.fs.exists(join(root, ".jj")),
+    hasGit: ctx.fs.exists(join(root, ".git")),
   };
 }
 ```

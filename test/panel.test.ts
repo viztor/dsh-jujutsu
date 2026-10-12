@@ -46,8 +46,12 @@ function loadPanel(): Record<string, any> {
       SettingsFormModel: class {
         shell() {
           return {
-            available: true, writable: true, dirty: false,
-            invalid: false, saving: false, failed: false,
+            available: true,
+            writable: true,
+            dirty: false,
+            invalid: false,
+            saving: false,
+            failed: false,
           };
         }
         field() {
@@ -110,7 +114,10 @@ function panelComponent() {
   // `t` is what the slot supplies from `locale: NS`; a key-echoing stub proves
   // the panel asks for the right keys without needing the real dictionary.
   const t = (key: string) => key;
-  return { Panel: (extra: Record<string, unknown>) => registered!({ ...injected, t, ...extra }), panel };
+  return {
+    Panel: (extra: Record<string, unknown>) => registered!({ ...injected, t, ...extra }),
+    panel,
+  };
 }
 
 /** Collect `[type, props]` for every element, running function components. */
@@ -159,8 +166,7 @@ describe("the panel covers the schema", () => {
   });
 
   it("groups every field exactly once", () => {
-    const listed = loadPanel()
-      .GROUPS.flatMap((g: { fields: string[] }) => g.fields);
+    const listed = loadPanel().GROUPS.flatMap((g: { fields: string[] }) => g.fields);
     expect(new Set(listed).size).toBe(listed.length);
     expect(new Set(listed)).toEqual(new Set(Object.keys(loadPanel().FIELDS)));
   });
@@ -172,7 +178,14 @@ describe("built-in components only", () => {
     const types = typesOf(Panel({ view: "page" }));
     const controls = types.filter((x) => x === "SettingsValueField");
     expect(controls).toHaveLength(Object.keys(panel.FIELDS).length);
-    for (const handRolled of ["Switch", "SegmentedControl", "ConfigField", "section", "h3", "input"]) {
+    for (const handRolled of [
+      "Switch",
+      "SegmentedControl",
+      "ConfigField",
+      "section",
+      "h3",
+      "input",
+    ]) {
       expect(types, handRolled).not.toContain(handRolled);
     }
   });
@@ -211,9 +224,13 @@ describe("translations", () => {
   it("resolves every group and field key", () => {
     const panel = loadPanel();
     const keys = [
-      ...panel.GROUPS.flatMap((g: { titleKey: string; blurbKey: string }) => [g.titleKey, g.blurbKey]),
-      ...Object.values(panel.FIELDS as Record<string, { labelKey: string; hintKey: string }>)
-        .flatMap((f) => [f.labelKey, f.hintKey]),
+      ...panel.GROUPS.flatMap((g: { titleKey: string; blurbKey: string }) => [
+        g.titleKey,
+        g.blurbKey,
+      ]),
+      ...Object.values(
+        panel.FIELDS as Record<string, { labelKey: string; hintKey: string }>,
+      ).flatMap((f) => [f.labelKey, f.hintKey]),
     ];
     for (const locale of Object.keys(STRINGS)) {
       for (const key of keys) {
@@ -285,10 +302,7 @@ describe("the bundle loads as written", () => {
 
   it("requires only what the client runtime provides", () => {
     const requires = [...PANEL.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
-    expect(requires.sort()).toEqual([
-      "@deepseek-ai/dsh-client-ui-primitives",
-      "react",
-    ]);
+    expect(requires.sort()).toEqual(["@deepseek-ai/dsh-client-ui-primitives", "react"]);
   });
 
   it("mounts on the bundle's own page, keyed by the package name", () => {
@@ -358,8 +372,7 @@ describe("the client half is built, not hand-written", () => {
     // The route serves `${package}/client.js` and accepts only
     // `/^client\..*\.js$/`, so the artifact must end in `.js` even though the
     // bundler emits `.cjs` for a `type: module` package.
-    expect(pkg.exports["./client"]?.default)
-      .toBe("./lib/client.js");
+    expect(pkg.exports["./client"]?.default).toBe("./lib/client.js");
   });
 
   it("does not carry its own loader call in the module body", () => {
@@ -422,8 +435,9 @@ describe("the panel uses only what the primitives export", () => {
   it("requires only names the primitives actually export", () => {
     const source = readFileSync("src/client/panel.ts", "utf8");
     const block = source.slice(source.indexOf("const REQUIRED = ["));
-    const required = [...block.slice(0, block.indexOf("]")).matchAll(/"([A-Za-z]+)"/g)]
-      .map((m) => m[1] as string);
+    const required = [...block.slice(0, block.indexOf("]")).matchAll(/"([A-Za-z]+)"/g)].map(
+      (m) => m[1] as string,
+    );
     expect(required.length).toBeGreaterThan(0);
     const missing = required.filter((name) => !PRIMITIVE_EXPORTS.has(name));
     expect(missing).toEqual([]);

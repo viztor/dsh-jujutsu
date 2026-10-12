@@ -20,14 +20,14 @@ Related: [SPEC §5.1](../SPEC.md), [§5.4](../SPEC.md), [§8](../SPEC.md),
 The plugin can fail through two different seams, and they do not carry the same
 payload. This constrains every message below.
 
-| Channel | Shape | What the model sees | What is durable-only |
-|---|---|---|---|
-| Guard (`tools/pre-execute` → `{kind:'deny'}`) | `{ kind:'deny', reason: string, info?: ToolErrorInfo }` | exactly `Error: <reason>` | `info` |
-| Tool body (any `jj_*` tool) | returned value `{ error: { code, message, hint? } }` | the whole object | — |
+| Channel                                       | Shape                                                   | What the model sees       | What is durable-only |
+| --------------------------------------------- | ------------------------------------------------------- | ------------------------- | -------------------- |
+| Guard (`tools/pre-execute` → `{kind:'deny'}`) | `{ kind:'deny', reason: string, info?: ToolErrorInfo }` | exactly `Error: <reason>` | `info`               |
+| Tool body (any `jj_*` tool)                   | returned value `{ error: { code, message, hint? } }`    | the whole object          | —                    |
 
 **VERIFIED** — `dsh-tools/lib/index.js:3241-3256`: the deny path builds
 `{ content:[{type:'text', text: \`Error: ${denialReason}\`}], isError:true, error:{ message, info } }`.
-`ToolErrorInfo` is `{ name, code, reason? }` (`dsh-tools/lib/types/index.d.ts:378`).
+`ToolErrorInfo`is`{ name, code, reason? }` (`dsh-tools/lib/types/index.d.ts:378`).
 
 Two consequences that shape everything below:
 
@@ -44,24 +44,24 @@ Two consequences that shape everything below:
 
 ### A.1 The checks
 
-| # | Precondition | Probe | On failure | Posture |
-|---|---|---|---|---|
-| **P1** | `jj` resolvable | `command -v <jjPath>` (exit 1 = absent), then `jj --version` | `JJ_MISSING` on every `jj_*` tool | **closed** for tools · **open** for guard and `bash` |
-| **P2** | `jj` ≥ 0.46.0 | parse `jj --version` → `jj 0.46.0` | warn; see A.3 | **open** (warn) unless the capability probe fails, then **closed** |
-| **P3** | `jj-hunk` resolvable | `command -v <jjHunkPath>`, then `jj-hunk list --help` | `JJ_HUNK_MISSING` on the two hunk tools | **closed** for hunk tools · **open** everywhere else |
-| **P4** | `jj-hunk` ≥ 0.5.1 | see A.4 | `JJ_HUNK_VERSION_TOO_OLD` if resolved; warn-and-proceed if unknown | **closed** when resolved too old · **open** when unresolvable |
-| **P5** | `cargo` present | `command -v cargo` | `CARGO_MISSING` — only the install *offer* is disabled | **open** |
-| **P6** | `jj` identity configured | `jj config list user` — parse `user.name` **and** `user.email` | `JJ_IDENTITY_UNCONFIGURED` | **closed** for commit-creating ops · **open** + once-per-session warning otherwise |
-| **P7** | workspace root resolvable | `exec.agent?.session.header.cwd` | `WORKSPACE_ROOT_UNRESOLVED` | **open** for guard · **closed** for tools |
-| **P8** | `.jj/` present and readable | `ctx.fs.stat(<root>/.jj)` → `{type:'directory'}` | absent → `NOT_JJ_WORKSPACE` (plugin stays invisible); unreadable → `JJ_REPO_UNREADABLE` | **open** (absent) · **closed** for tools (unreadable) |
-| **P9** | repo not broken | resolve `.jj/repo` → read `store/git_target` → stat the named Git dir (A.2) | `JJ_REPO_BROKEN` | **closed** for tools · **open** for guard |
-| **P10** | colocated vs native | `.git` at root is `directory` / `file` / absent, cross-checked with `git_target` | not a failure — selects behaviour | n/a |
-| **P11** | remote configured | `jj git remote list` | not a failure — changes push guidance only | **open** |
-| **P12** | conflicts present | `jj log --no-graph -T 'conflict' -r @` → `true`/`false` | not a failure — sets `conflicted` and warns | **open** (warn) |
-| **P13** | primary vs secondary workspace | is `.jj/repo` a directory or a file? | not a failure — the real repo dir is indirect | n/a |
-| **P14** | probe runs in the session's execution world | every probe through `ctx.shell`; never `process.env.PATH` | — | — |
+| #       | Precondition                                | Probe                                                                            | On failure                                                                              | Posture                                                                            |
+| ------- | ------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **P1**  | `jj` resolvable                             | `command -v <jjPath>` (exit 1 = absent), then `jj --version`                     | `JJ_MISSING` on every `jj_*` tool                                                       | **closed** for tools · **open** for guard and `bash`                               |
+| **P2**  | `jj` ≥ 0.46.0                               | parse `jj --version` → `jj 0.46.0`                                               | warn; see A.3                                                                           | **open** (warn) unless the capability probe fails, then **closed**                 |
+| **P3**  | `jj-hunk` resolvable                        | `command -v <jjHunkPath>`, then `jj-hunk list --help`                            | `JJ_HUNK_MISSING` on the two hunk tools                                                 | **closed** for hunk tools · **open** everywhere else                               |
+| **P4**  | `jj-hunk` ≥ 0.5.1                           | see A.4                                                                          | `JJ_HUNK_VERSION_TOO_OLD` if resolved; warn-and-proceed if unknown                      | **closed** when resolved too old · **open** when unresolvable                      |
+| **P5**  | `cargo` present                             | `command -v cargo`                                                               | `CARGO_MISSING` — only the install _offer_ is disabled                                  | **open**                                                                           |
+| **P6**  | `jj` identity configured                    | `jj config list user` — parse `user.name` **and** `user.email`                   | `JJ_IDENTITY_UNCONFIGURED`                                                              | **closed** for commit-creating ops · **open** + once-per-session warning otherwise |
+| **P7**  | workspace root resolvable                   | `exec.agent?.session.header.cwd`                                                 | `WORKSPACE_ROOT_UNRESOLVED`                                                             | **open** for guard · **closed** for tools                                          |
+| **P8**  | `.jj/` present and readable                 | `ctx.fs.stat(<root>/.jj)` → `{type:'directory'}`                                 | absent → `NOT_JJ_WORKSPACE` (plugin stays invisible); unreadable → `JJ_REPO_UNREADABLE` | **open** (absent) · **closed** for tools (unreadable)                              |
+| **P9**  | repo not broken                             | resolve `.jj/repo` → read `store/git_target` → stat the named Git dir (A.2)      | `JJ_REPO_BROKEN`                                                                        | **closed** for tools · **open** for guard                                          |
+| **P10** | colocated vs native                         | `.git` at root is `directory` / `file` / absent, cross-checked with `git_target` | not a failure — selects behaviour                                                       | n/a                                                                                |
+| **P11** | remote configured                           | `jj git remote list`                                                             | not a failure — changes push guidance only                                              | **open**                                                                           |
+| **P12** | conflicts present                           | `jj log --no-graph -T 'conflict' -r @` → `true`/`false`                          | not a failure — sets `conflicted` and warns                                             | **open** (warn)                                                                    |
+| **P13** | primary vs secondary workspace              | is `.jj/repo` a directory or a file?                                             | not a failure — the real repo dir is indirect                                           | n/a                                                                                |
+| **P14** | probe runs in the session's execution world | every probe through `ctx.shell`; never `process.env.PATH`                        | —                                                                                       | —                                                                                  |
 
-P1–P6 are the ones with a *decision* attached. P7–P13 are informational: they
+P1–P6 are the ones with a _decision_ attached. P7–P13 are informational: they
 change what the plugin says, not whether it works.
 
 ### A.2 The broken-repo probe (P9) is filesystem-only
@@ -83,8 +83,8 @@ relative path — resolve it against `<repoDir>/store/` and `stat` it. Missing �
 **VERIFIED** on five fixtures (colocated primary, native primary, colocated
 primary with `.git` deleted, secondary workspace, primary of a secondary pair).
 **UNVERIFIED** on any `jj` other than 0.46.0: `git_target` is an internal layout
-detail. Mitigation: treat a missing/unparseable `git_target` as *unknown*, not
-as *broken*, and fall back to the shell probe
+detail. Mitigation: treat a missing/unparseable `git_target` as _unknown_, not
+as _broken_, and fall back to the shell probe
 `jj status` → exit 255 + stderr `Internal error: The repository appears broken or inaccessible`.
 
 **Measured failure text** (colocated, `rm -rf .git`):
@@ -105,7 +105,7 @@ recovery command in [SPEC §5.7](../SPEC.md) is unavailable because the op log
 itself is unreadable — `jj git init --colocate` answers `Error: The target repo
 already exists`. There is no in-band repair.
 
-A distinct, *recoverable* failure is `.jj` present but unreadable:
+A distinct, _recoverable_ failure is `.jj` present but unreadable:
 
 ```
 $ chmod 000 .jj && jj status
@@ -128,10 +128,10 @@ else. Parse with `^jj (\d+)\.(\d+)\.(\d+)$`.
 Below 0.46.0 the plugin does **not** refuse outright. The features that matter
 are not the version number but two capabilities:
 
-| Capability probe | Command | Why |
-|---|---|---|
+| Capability probe | Command                                  | Why                             |
+| ---------------- | ---------------------------------------- | ------------------------------- |
 | structured reads | `jj log --no-graph -T 'json(self)' -r @` | every `jj_*` read depends on it |
-| conflict flag | `jj log --no-graph -T 'conflict' -r @` | P12 |
+| conflict flag    | `jj log --no-graph -T 'conflict' -r @`   | P12                             |
 
 If the version parses low but the probes pass, **warn once and proceed** — the
 floor is what was tested, not what is required. If a probe fails, **refuse the
@@ -156,14 +156,14 @@ The binary embeds no crate-version string (`strings` surfaces only dependency
 versions such as `0.34.0`, `0.11.1`). Detection is therefore best-effort, in
 three tiers:
 
-| Tier | Method | Reliability |
-|---|---|---|
-| 1 | `cargo install --list` → `jj-hunk v0.5.1 (https://github.com/laulauland/jj-hunk#53838e93):` | exact, but only for cargo-installed binaries |
-| 2 | capability probe: `jj-hunk list --format json` on a non-empty diff, assert every id matches `^hunk-[0-9a-f]{64}$` | proves the 0.5.1 ID contract; the discriminating power against 0.5.0 is **UNVERIFIED** |
-| 3 | neither yields a version | version **unknown** → **proceed with a once-per-session warning** |
+| Tier | Method                                                                                                            | Reliability                                                                            |
+| ---- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 1    | `cargo install --list` → `jj-hunk v0.5.1 (https://github.com/laulauland/jj-hunk#53838e93):`                       | exact, but only for cargo-installed binaries                                           |
+| 2    | capability probe: `jj-hunk list --format json` on a non-empty diff, assert every id matches `^hunk-[0-9a-f]{64}$` | proves the 0.5.1 ID contract; the discriminating power against 0.5.0 is **UNVERIFIED** |
+| 3    | neither yields a version                                                                                          | version **unknown** → **proceed with a once-per-session warning**                      |
 
-Tier 3 is the important one. Refusing a hunk operation because the *version
-could not be read* would block real work on a machine where the binary is
+Tier 3 is the important one. Refusing a hunk operation because the _version
+could not be read_ would block real work on a machine where the binary is
 perfectly current — and the failure the floor protects against is
 self-detecting anyway, because [SPEC §5.4](../SPEC.md) never accepts hunk IDs
 across turns. The version gate is a courtesy, not a correctness boundary; the
@@ -197,7 +197,7 @@ $ echo $?
 ```
 
 **Exit 0.** The command succeeds. The warning goes to **stderr**, and so does
-`jj commit`'s entire human output — `jj commit 2>/dev/null` produces *nothing* on
+`jj commit`'s entire human output — `jj commit 2>/dev/null` produces _nothing_ on
 stdout. A plugin that captures only stdout never sees this.
 
 The commit is created with an empty identity, confirmed independently of the
@@ -240,7 +240,7 @@ Error: Won't push commit c5aff5992944 since it has no author and/or committer se
 The identity is materialized when the commit is created. Every commit made
 before the fix stays broken.
 
-#### It *is* repairable — which sets the posture
+#### It _is_ repairable — which sets the posture
 
 ```
 $ jj metaedit --update-author -r main
@@ -262,28 +262,28 @@ two one
 
 **Refuse commit-creating operations; warn once per session everywhere else.**
 
-| Operation | Behaviour when identity is unconfigured |
-|---|---|
-| `jj_status`, `jj_log`, `jj_diff`, `jj_op_log`, `jj_hunk_list`, `jj_bookmark list` | allow, attach a warning once per session |
-| `jj_new`, `jj_hunk_apply` with `mode: split\|commit\|squash` | **refuse** — `JJ_IDENTITY_UNCONFIGURED` |
-| `jj_describe`, `jj_squash`, `jj_op_restore`, `jj_bookmark` mutations | allow, attach the warning — they do not mint a new empty identity |
-| any `bash` call | **never blocked** — see Part C |
+| Operation                                                                         | Behaviour when identity is unconfigured                           |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `jj_status`, `jj_log`, `jj_diff`, `jj_op_log`, `jj_hunk_list`, `jj_bookmark list` | allow, attach a warning once per session                          |
+| `jj_new`, `jj_hunk_apply` with `mode: split\|commit\|squash`                      | **refuse** — `JJ_IDENTITY_UNCONFIGURED`                           |
+| `jj_describe`, `jj_squash`, `jj_op_restore`, `jj_bookmark` mutations              | allow, attach the warning — they do not mint a new empty identity |
+| any `bash` call                                                                   | **never blocked** — see Part C                                    |
 
 The line between the two rows is narrow and was measured, not assumed. The
 identity is fixed when a commit is **created**; rewriting an existing commit
 preserves its author.
 
-| Command | In an unconfigured repo | Author of the resulting commit |
-|---|---|---|
-| `jj new -m fresh` | mints | **empty** |
-| `jj commit -m x` | mints | **empty** |
-| `jj describe -m x` | rewrites an existing commit | preserved (`real@example.com`) |
-| `jj squash` (jj-native) | rewrites the destination | preserved (whatever it already had) |
-| `jj-hunk split` | mints | **empty** |
-| `jj-hunk commit` | mints | **empty** |
-| `jj-hunk squash` | mints | **empty** |
+| Command                 | In an unconfigured repo     | Author of the resulting commit      |
+| ----------------------- | --------------------------- | ----------------------------------- |
+| `jj new -m fresh`       | mints                       | **empty**                           |
+| `jj commit -m x`        | mints                       | **empty**                           |
+| `jj describe -m x`      | rewrites an existing commit | preserved (`real@example.com`)      |
+| `jj squash` (jj-native) | rewrites the destination    | preserved (whatever it already had) |
+| `jj-hunk split`         | mints                       | **empty**                           |
+| `jj-hunk commit`        | mints                       | **empty**                           |
+| `jj-hunk squash`        | mints                       | **empty**                           |
 
-So `jj_squash` (the jj-native tool) is *not* the same hazard as
+So `jj_squash` (the jj-native tool) is _not_ the same hazard as
 `jj_hunk_apply` with `mode: squash` — the latter creates a commit and therefore
 carries the identity precondition. That asymmetry is the reason the closed set
 is `{jj_new, jj_hunk_apply(split|commit|squash)}` and not "everything that
@@ -325,14 +325,14 @@ Different wording, same outcome. The probe therefore requires **both**
 > **Corrected home.** This table says "once per session, lazily on first
 > `jj`-workspace touch". [30](30-lifecycle-and-observability-surfaces.md) §1
 > shows that is the wrong trigger and names the right one: **`agent/created`**,
-> which is `@mode serial` and *awaited before session creation resolves*, with
+> which is `@mode serial` and _awaited before session creation resolves_, with
 > the loop holding queued input. `session/created` fires earlier but is a
 > synchronous `emit` — async work there is not awaited and rejections are only
 > logged. The workspace root is available at `agent/created` as
 > `SessionHeader.cwd`, so no tool call is needed.
 >
-> The practical gain: the lazy trigger is really *once per session that touches
-> `jj`*, and it puts 5–8 shell spawns on the **first** `jj` tool call — the one
+> The practical gain: the lazy trigger is really _once per session that touches
+> `jj`_, and it puts 5–8 shell spawns on the **first** `jj` tool call — the one
 > call where latency is most visible. Moving to `agent/created` behind a single
 > `.jj` `ctx.fs.stat` gate makes a plain-Git or non-repo session cost exactly one
 > stat.
@@ -347,16 +347,16 @@ Different wording, same outcome. The probe therefore requires **both**
 > for the guard, because the effective cwd comes from
 > `exec.arguments.workdir`, which is unknowable at session start.
 
-| # | Runs at | Cache key | Cached value | Invalidated by |
-|---|---|---|---|---|
-| P1, P3, P5 | once per **session**, lazily on first `jj`-workspace touch | session id | resolved absolute paths, or `absent` | a successful install; a `jjPath`/`jjHunkPath` config change; session end |
-| P2, P4 | once per **session** | session id | parsed version + capability-probe result | a successful install; session end |
-| P6 | once per session **and re-probed on every commit-creating call** | session id | `configured` / `unconfigured` | `jj config set` seen in a `bash` call; any commit-creating call (re-probe); session end |
-| P7 | every **tool call** | — | — | n/a — it is a field read, not a probe |
-| P8, P9, P10, P13 | once per **workspace root** | absolute root path | `{kind, repoDir, colocated, broken}` | session start; `jj git init` / `jj workspace add` / `jj git colocation` / `jj git clone` observed in a `bash` call; any `rm`/`mv` in `bash` whose resolved path names `.git` or `.jj`; a `JJ_REPO_BROKEN` result |
-| P11 | once per **workspace root** | absolute root path | `string[]` of remotes | `jj git remote add\|remove\|rename` seen in `bash`; session start |
-| P12 | every **tool call** that mutates | — | — | always re-read; conflicts change on any operation and the probe is one cheap `jj log` |
-| P14 | n/a | — | — | n/a |
+| #                | Runs at                                                          | Cache key          | Cached value                             | Invalidated by                                                                                                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------- | ------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1, P3, P5       | once per **session**, lazily on first `jj`-workspace touch       | session id         | resolved absolute paths, or `absent`     | a successful install; a `jjPath`/`jjHunkPath` config change; session end                                                                                                                                         |
+| P2, P4           | once per **session**                                             | session id         | parsed version + capability-probe result | a successful install; session end                                                                                                                                                                                |
+| P6               | once per session **and re-probed on every commit-creating call** | session id         | `configured` / `unconfigured`            | `jj config set` seen in a `bash` call; any commit-creating call (re-probe); session end                                                                                                                          |
+| P7               | every **tool call**                                              | —                  | —                                        | n/a — it is a field read, not a probe                                                                                                                                                                            |
+| P8, P9, P10, P13 | once per **workspace root**                                      | absolute root path | `{kind, repoDir, colocated, broken}`     | session start; `jj git init` / `jj workspace add` / `jj git colocation` / `jj git clone` observed in a `bash` call; any `rm`/`mv` in `bash` whose resolved path names `.git` or `.jj`; a `JJ_REPO_BROKEN` result |
+| P11              | once per **workspace root**                                      | absolute root path | `string[]` of remotes                    | `jj git remote add\|remove\|rename` seen in `bash`; session start                                                                                                                                                |
+| P12              | every **tool call** that mutates                                 | —                  | —                                        | always re-read; conflicts change on any operation and the probe is one cheap `jj log`                                                                                                                            |
+| P14              | n/a                                                              | —                  | —                                        | n/a                                                                                                                                                                                                              |
 
 Two rules the cache must obey:
 
@@ -365,7 +365,7 @@ Two rules the cache must obey:
    ([19](19-jj-hunk-provisioning.md): "Detection must never block plugin load").
 2. **A cache miss is not a failure.** Any probe that throws or returns an
    unexpected shape resolves to `unknown` and takes the **open** branch, never
-   the closed one. Only a *positive* observation ("`jj` is not on `PATH`",
+   the closed one. Only a _positive_ observation ("`jj` is not on `PATH`",
    "`user.email` is empty") closes a door.
 
 P6's re-probe on commit-creating calls is the one deliberate exception to
@@ -377,11 +377,11 @@ the failure the check exists to prevent.
 
 Yes, in three places, and only three.
 
-| Difference | Colocated (`.git` is a directory) | Native (`--no-colocate`) |
-|---|---|---|
-| `jj git export` | no-op — `No export needed in colocated workspaces.` | exports refs to `.jj/repo/store/git` |
+| Difference       | Colocated (`.git` is a directory)                          | Native (`--no-colocate`)                      |
+| ---------------- | ---------------------------------------------------------- | --------------------------------------------- |
+| `jj git export`  | no-op — `No export needed in colocated workspaces.`        | exports refs to `.jj/repo/store/git`          |
 | broken-repo risk | `.git` deletion is unrecoverable ([SPEC §5.7](../SPEC.md)) | no `.git` to delete; the same `rm` is a no-op |
-| write protection | `.git/**` writes denied | nothing to protect |
+| write protection | `.git/**` writes denied                                    | nothing to protect                            |
 
 Everything else — detection, the guard, the verb map, the tool surface — is
 identical. In particular, detection is **not** "`.git` absent means native":
@@ -416,10 +416,10 @@ between a useful hint and a hint that produces a second failure.
 
 **Conflicts.** Two probes, both verified:
 
-| Probe | No conflicts | Conflicts present |
-|---|---|---|
-| `jj resolve --list` | exit **2**, stderr `Error: No conflicts found at this revision` | exit **0**, stdout `f.txt    2-sided conflict` |
-| `jj log --no-graph -T 'conflict' -r @` | `false` | `true` |
+| Probe                                  | No conflicts                                                    | Conflicts present                              |
+| -------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| `jj resolve --list`                    | exit **2**, stderr `Error: No conflicts found at this revision` | exit **0**, stdout `f.txt    2-sided conflict` |
+| `jj log --no-graph -T 'conflict' -r @` | `false`                                                         | `true`                                         |
 
 The exit code is **inverted from the intuitive reading** — 2 means clean. The
 template probe is preferred for the per-call check because it is a plain
@@ -447,42 +447,42 @@ the error; §0 explains why that changes what the model sees.
 `{ error: { code, message, hint? } }` returned as the tool's value. `message` is
 the literal string the model receives; `<…>` marks substitution.
 
-| code | Trigger | message | hint | Posture | Recovery |
-|---|---|---|---|---|---|
-| `NOT_JJ_WORKSPACE` | any `jj_*` tool, no readable `.jj/` at the resolved root | `Not a Jujutsu workspace: <root> has no .jj directory. This tool never falls back to Git.` | `Run \`jj git init\` to start a Jujutsu repo here, or use bash for non-jj work.` | **closed** (the tool cannot act) | `jj git init` |
-| `JJ_MISSING` | P1 fails | `jj not found (looked for "<jjPath>" on PATH).` | `Install Jujutsu, or set jjPath in the dsh-jujutsu config.` | **closed** for tools · **open** for guard and `bash` | install `jj`, or set `jjPath` |
-| `JJ_VERSION_TOO_OLD` | `jj --version` < 0.46.0 **and** a capability probe fails | `jj <found> is older than the supported floor 0.46.0; the required template features are missing.` | `Upgrade jj. The Git guard still works; only the jj_* tools are unavailable.` | **closed** for the failing tools · **open** if probes pass | upgrade `jj` |
-| `JJ_HUNK_MISSING` | P3 fails, on `jj_hunk_list` / `jj_hunk_apply` | `jj-hunk not found (looked for "<jjHunkPath>" on PATH).` | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> jj-hunk` | **closed** for hunk tools · **open** elsewhere | install `jj-hunk` |
-| `JJ_HUNK_VERSION_TOO_OLD` | P4 resolves a version < 0.5.1 | `jj-hunk <found> predates 0.5.1: hunk ids use the older content/context hashes and --query is unavailable.` | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> --force jj-hunk` | **closed** for hunk tools | reinstall ≥ 0.5.1 |
-| `JJ_HUNK_INSTALL_DECLINED` | user answered no, or `hunkInstall: 'never'` | `jj-hunk is not installed and installation was declined for this session.` | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> jj-hunk` | **closed** for hunk tools | install manually; a new session re-offers |
-| `JJ_HUNK_INSTALL_FAILED` | `cargo install` exits non-zero, or the post-install `--help` probe fails | `Installing jj-hunk failed (cargo exit <n>). Last output: <tail of stderr>` | `Install manually, then set jjHunkPath to the binary.` | **closed** for hunk tools, no retry | manual install |
-| `CARGO_MISSING` | P5 fails at the moment of the offer | `cargo not found; cannot install jj-hunk.` | `Install the Rust toolchain from https://rustup.rs, then re-run.` | **open** (only the offer path is disabled) | install rustup |
-| `WORKSPACE_ROOT_UNRESOLVED` | `exec.agent?.session.header.cwd` is `undefined` or empty | `Cannot determine the workspace root for this session (exec.agent.session.header.cwd is unset).` | `Retry from a session that has a workspace.` | **open** for guard (`next()`) · **closed** for tools | none available |
-| `JJ_IDENTITY_UNCONFIGURED` | P6 fails on `jj_new` or `jj_hunk_apply(split\|commit\|squash)` | `jj user.name/user.email are not configured. Commits created now get the empty identity and jj refuses to push them ("Won't push commit <id> since it has no author and/or committer set").` | `jj config set --user user.name "Your Name" && jj config set --user user.email "you@example.com"` | **closed** for commit-creating ops · **open** + warning elsewhere | configure identity; repair existing commits with `jj metaedit --update-author -r 'author("") ~ root()'` |
-| `JJ_REPO_BROKEN` | `git_target` names a Git dir that does not exist | `The jj repo at <root> is broken: it is colocated with a Git repo at <gitdir>, which is missing.` | `The operation log is unreadable, so \`jj op restore\` cannot help. Restore <gitdir> from a backup.` | **closed** for tools · **open** for guard | restore `.git`; no in-band repair |
-| `JJ_REPO_UNREADABLE` | `.jj/` exists but `stat`/`readText` throws (e.g. mode 000) | `The jj repo at <root> cannot be read: <path> is not accessible.` | `Check permissions on <root>/.jj.` | **closed** for tools · **open** for guard | fix permissions |
-| `JJ_CONFLICTS_PRESENT` | P12 returns `true` and the call would mutate a conflicted path | `The working copy has unresolved conflicts: <paths>. Mutating here operates on conflicted trees.` | `Inspect: jj resolve --list ; resolve: jj resolve <path> ; abandon: jj abandon @` | **open** with warning · **closed** only for `jj_hunk_apply` on a conflicted path | `jj resolve` |
-| `REVSET_INVALID` | `jj log -r <revset>` exits 1 with `Failed to parse revset` | `Invalid revset "<revset>": <first cause line>` | `Check the syntax: jj help -k revsets` | **closed** for that call | fix the revset |
-| `REVSET_NOT_SINGLE` | plugin counts ≠ 1 revision for a `jj-hunk` call | `The revset "<revset>" resolves to <n> revisions; jj-hunk needs exactly one.` | `Narrow it, e.g. -r @ or -r <change-id>.` | **closed** for that call | narrow the revset |
-| `HUNK_QUERY_EMPTY` | pre-list with the same `--query` returns `{"files":[]}` | `The query "<query>" selects no hunks; nothing was applied.` | `Run jj_hunk_list with the same query to see what is available, or widen it.` | **closed** for that call | widen the query |
-| `HUNK_QUERY_INVALID` | `jj-hunk` exits 1 with `Invalid hunkset query` | `Invalid hunkset query "<query>": <cause>` | `Try a simpler form: added(content:"…"), changed(path:glob:"src/**").` | **closed** for that call | fix the query |
-| `HUNK_SPEC_STALE` | a `spec` object whose ids are not a subset of the immediately preceding `jj_hunk_list` | `The hunk spec is stale: <k> of <n> ids were not in the last jj_hunk_list. Hunk ids are SHA-256 over the materialized comparison and change on any edit.` | `Re-run jj_hunk_list and rebuild the selection, or use --query.` | **closed** for that call | re-list |
-| `HUNK_SPEC_INVALID` | `spec` fails the plugin's own schema check | `The hunk spec is not a valid selection: <violation>` | `Expected {files:{<path>:{hunks:[<index>]}}, default:"reset"}.` | **closed** for that call | fix the spec |
-| `JJ_EXEC_FAILED` | a `jj` command exits non-zero and matches no case above | `jj <args> failed (exit <n>): <first stderr line>` | `Run \`jj <args>\` through bash to see the full output.` | **closed** for that call | varies |
-| `SHELL_EXEC_FAILED` | `ctx.shell.execute()` rejects (infrastructure failure — the spawn produced no process), or spec preparation throws | `Failed to run <command>: <error.message>` | *(none — environment failure, not a usage error)* | **closed** for the tool that needed it · guard still returns `next()` | retry; inspect the executor |
-| `SHELL_TIMEOUT` | `ShellRunResult.timedOut === true` | `\`<command>\` exceeded the <timeoutMs> ms deadline and was killed.` | `Narrow the revset or paths, or raise timeoutMs (cap 600000 ms).` | **closed** for that call | narrow, or raise the deadline |
-| `FS_ERROR` | `ctx.fs.stat` / `readText` throws or returns an unexpected shape while probing | `Filesystem error while probing <path>: <error.message>` | *(none)* | **open** for guard (`next()`) · **closed** for tools | fix the underlying permission or path |
+| code                        | Trigger                                                                                                            | message                                                                                                                                                                                      | hint                                                                                                 | Posture                                                                          | Recovery                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `NOT_JJ_WORKSPACE`          | any `jj_*` tool, no readable `.jj/` at the resolved root                                                           | `Not a Jujutsu workspace: <root> has no .jj directory. This tool never falls back to Git.`                                                                                                   | `Run \`jj git init\` to start a Jujutsu repo here, or use bash for non-jj work.`                     | **closed** (the tool cannot act)                                                 | `jj git init`                                                                                           |
+| `JJ_MISSING`                | P1 fails                                                                                                           | `jj not found (looked for "<jjPath>" on PATH).`                                                                                                                                              | `Install Jujutsu, or set jjPath in the dsh-jujutsu config.`                                          | **closed** for tools · **open** for guard and `bash`                             | install `jj`, or set `jjPath`                                                                           |
+| `JJ_VERSION_TOO_OLD`        | `jj --version` < 0.46.0 **and** a capability probe fails                                                           | `jj <found> is older than the supported floor 0.46.0; the required template features are missing.`                                                                                           | `Upgrade jj. The Git guard still works; only the jj_* tools are unavailable.`                        | **closed** for the failing tools · **open** if probes pass                       | upgrade `jj`                                                                                            |
+| `JJ_HUNK_MISSING`           | P3 fails, on `jj_hunk_list` / `jj_hunk_apply`                                                                      | `jj-hunk not found (looked for "<jjHunkPath>" on PATH).`                                                                                                                                     | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> jj-hunk`                      | **closed** for hunk tools · **open** elsewhere                                   | install `jj-hunk`                                                                                       |
+| `JJ_HUNK_VERSION_TOO_OLD`   | P4 resolves a version < 0.5.1                                                                                      | `jj-hunk <found> predates 0.5.1: hunk ids use the older content/context hashes and --query is unavailable.`                                                                                  | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> --force jj-hunk`              | **closed** for hunk tools                                                        | reinstall ≥ 0.5.1                                                                                       |
+| `JJ_HUNK_INSTALL_DECLINED`  | user answered no, or `hunkInstall: 'never'`                                                                        | `jj-hunk is not installed and installation was declined for this session.`                                                                                                                   | `cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> jj-hunk`                      | **closed** for hunk tools                                                        | install manually; a new session re-offers                                                               |
+| `JJ_HUNK_INSTALL_FAILED`    | `cargo install` exits non-zero, or the post-install `--help` probe fails                                           | `Installing jj-hunk failed (cargo exit <n>). Last output: <tail of stderr>`                                                                                                                  | `Install manually, then set jjHunkPath to the binary.`                                               | **closed** for hunk tools, no retry                                              | manual install                                                                                          |
+| `CARGO_MISSING`             | P5 fails at the moment of the offer                                                                                | `cargo not found; cannot install jj-hunk.`                                                                                                                                                   | `Install the Rust toolchain from https://rustup.rs, then re-run.`                                    | **open** (only the offer path is disabled)                                       | install rustup                                                                                          |
+| `WORKSPACE_ROOT_UNRESOLVED` | `exec.agent?.session.header.cwd` is `undefined` or empty                                                           | `Cannot determine the workspace root for this session (exec.agent.session.header.cwd is unset).`                                                                                             | `Retry from a session that has a workspace.`                                                         | **open** for guard (`next()`) · **closed** for tools                             | none available                                                                                          |
+| `JJ_IDENTITY_UNCONFIGURED`  | P6 fails on `jj_new` or `jj_hunk_apply(split\|commit\|squash)`                                                     | `jj user.name/user.email are not configured. Commits created now get the empty identity and jj refuses to push them ("Won't push commit <id> since it has no author and/or committer set").` | `jj config set --user user.name "Your Name" && jj config set --user user.email "you@example.com"`    | **closed** for commit-creating ops · **open** + warning elsewhere                | configure identity; repair existing commits with `jj metaedit --update-author -r 'author("") ~ root()'` |
+| `JJ_REPO_BROKEN`            | `git_target` names a Git dir that does not exist                                                                   | `The jj repo at <root> is broken: it is colocated with a Git repo at <gitdir>, which is missing.`                                                                                            | `The operation log is unreadable, so \`jj op restore\` cannot help. Restore <gitdir> from a backup.` | **closed** for tools · **open** for guard                                        | restore `.git`; no in-band repair                                                                       |
+| `JJ_REPO_UNREADABLE`        | `.jj/` exists but `stat`/`readText` throws (e.g. mode 000)                                                         | `The jj repo at <root> cannot be read: <path> is not accessible.`                                                                                                                            | `Check permissions on <root>/.jj.`                                                                   | **closed** for tools · **open** for guard                                        | fix permissions                                                                                         |
+| `JJ_CONFLICTS_PRESENT`      | P12 returns `true` and the call would mutate a conflicted path                                                     | `The working copy has unresolved conflicts: <paths>. Mutating here operates on conflicted trees.`                                                                                            | `Inspect: jj resolve --list ; resolve: jj resolve <path> ; abandon: jj abandon @`                    | **open** with warning · **closed** only for `jj_hunk_apply` on a conflicted path | `jj resolve`                                                                                            |
+| `REVSET_INVALID`            | `jj log -r <revset>` exits 1 with `Failed to parse revset`                                                         | `Invalid revset "<revset>": <first cause line>`                                                                                                                                              | `Check the syntax: jj help -k revsets`                                                               | **closed** for that call                                                         | fix the revset                                                                                          |
+| `REVSET_NOT_SINGLE`         | plugin counts ≠ 1 revision for a `jj-hunk` call                                                                    | `The revset "<revset>" resolves to <n> revisions; jj-hunk needs exactly one.`                                                                                                                | `Narrow it, e.g. -r @ or -r <change-id>.`                                                            | **closed** for that call                                                         | narrow the revset                                                                                       |
+| `HUNK_QUERY_EMPTY`          | pre-list with the same `--query` returns `{"files":[]}`                                                            | `The query "<query>" selects no hunks; nothing was applied.`                                                                                                                                 | `Run jj_hunk_list with the same query to see what is available, or widen it.`                        | **closed** for that call                                                         | widen the query                                                                                         |
+| `HUNK_QUERY_INVALID`        | `jj-hunk` exits 1 with `Invalid hunkset query`                                                                     | `Invalid hunkset query "<query>": <cause>`                                                                                                                                                   | `Try a simpler form: added(content:"…"), changed(path:glob:"src/**").`                               | **closed** for that call                                                         | fix the query                                                                                           |
+| `HUNK_SPEC_STALE`           | a `spec` object whose ids are not a subset of the immediately preceding `jj_hunk_list`                             | `The hunk spec is stale: <k> of <n> ids were not in the last jj_hunk_list. Hunk ids are SHA-256 over the materialized comparison and change on any edit.`                                    | `Re-run jj_hunk_list and rebuild the selection, or use --query.`                                     | **closed** for that call                                                         | re-list                                                                                                 |
+| `HUNK_SPEC_INVALID`         | `spec` fails the plugin's own schema check                                                                         | `The hunk spec is not a valid selection: <violation>`                                                                                                                                        | `Expected {files:{<path>:{hunks:[<index>]}}, default:"reset"}.`                                      | **closed** for that call                                                         | fix the spec                                                                                            |
+| `JJ_EXEC_FAILED`            | a `jj` command exits non-zero and matches no case above                                                            | `jj <args> failed (exit <n>): <first stderr line>`                                                                                                                                           | `Run \`jj <args>\` through bash to see the full output.`                                             | **closed** for that call                                                         | varies                                                                                                  |
+| `SHELL_EXEC_FAILED`         | `ctx.shell.execute()` rejects (infrastructure failure — the spawn produced no process), or spec preparation throws | `Failed to run <command>: <error.message>`                                                                                                                                                   | _(none — environment failure, not a usage error)_                                                    | **closed** for the tool that needed it · guard still returns `next()`            | retry; inspect the executor                                                                             |
+| `SHELL_TIMEOUT`             | `ShellRunResult.timedOut === true`                                                                                 | `\`<command>\` exceeded the <timeoutMs> ms deadline and was killed.`                                                                                                                         | `Narrow the revset or paths, or raise timeoutMs (cap 600000 ms).`                                    | **closed** for that call                                                         | narrow, or raise the deadline                                                                           |
+| `FS_ERROR`                  | `ctx.fs.stat` / `readText` throws or returns an unexpected shape while probing                                     | `Filesystem error while probing <path>: <error.message>`                                                                                                                                     | _(none)_                                                                                             | **open** for guard (`next()`) · **closed** for tools                             | fix the underlying permission or path                                                                   |
 
 Three of these codes exist **only because `jj-hunk` does not report the
 condition itself**. Each was measured; each is a case where the naive
 implementation would return success:
 
-| code | What `jj-hunk` actually does | Measured |
-|---|---|---|
-| `HUNK_QUERY_EMPTY` | exits **0** and prints `{"files": []}` | `jj-hunk list --query 'added(content:"ZZZ_NOPE")'` → exit 0 |
-| `HUNK_QUERY_EMPTY` (apply) | exits **0**, no-op, no message | `jj-hunk split --query 'added(content:"ZZZ_NOPE")' "msg"` → exit 0, log unchanged |
-| `HUNK_SPEC_STALE` | exits **0**, creates an **empty commit**, leaves the changes in the working copy | `jj-hunk split --spec-file <stale>` → `Warning: No changes have been selected, so the new revision will be empty.` + `Selected changes : <id> (empty) stale with changes`, exit 0 |
-| `REVSET_NOT_SINGLE` | exits **0**, silently diffs the merged revision set | `jj-hunk list -r 'all()'` and `-r '@\|@-'` → exit 0, JSON hunks |
+| code                       | What `jj-hunk` actually does                                                     | Measured                                                                                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HUNK_QUERY_EMPTY`         | exits **0** and prints `{"files": []}`                                           | `jj-hunk list --query 'added(content:"ZZZ_NOPE")'` → exit 0                                                                                                                       |
+| `HUNK_QUERY_EMPTY` (apply) | exits **0**, no-op, no message                                                   | `jj-hunk split --query 'added(content:"ZZZ_NOPE")' "msg"` → exit 0, log unchanged                                                                                                 |
+| `HUNK_SPEC_STALE`          | exits **0**, creates an **empty commit**, leaves the changes in the working copy | `jj-hunk split --spec-file <stale>` → `Warning: No changes have been selected, so the new revision will be empty.` + `Selected changes : <id> (empty) stale with changes`, exit 0 |
+| `REVSET_NOT_SINGLE`        | exits **0**, silently diffs the merged revision set                              | `jj-hunk list -r 'all()'` and `-r '@\|@-'` → exit 0, JSON hunks                                                                                                                   |
 
 The stale-spec case is the worst of the three: the user asked to split out a
 change and got an empty commit with their message on it and all their changes
@@ -501,7 +501,7 @@ jj log --no-graph -T 'change_id' -r '<revset>'   # must be exactly 1 line
 ```
 
 Passing a multi-rev revset straight through to `jj-hunk` produces no error at
-all. `jj-hunk list -r A -r B` (two flags) *is* rejected, by clap, with exit 2 —
+all. `jj-hunk list -r A -r B` (two flags) _is_ rejected, by clap, with exit 2 —
 which is a different mistake and not the one that matters.
 
 ### B.2 Guard-channel denials
@@ -512,11 +512,11 @@ the model**, so `reason` must be self-contained and must name the `jj`
 replacement command. Full text and the verb table: [15](15-verb-mapping.md),
 [17](17-bypass-and-approval.md), [21](21-guard-evasion.md).
 
-| code (`info.code`) | Trigger | Posture |
-|---|---|---|
-| `GUARD_GIT_DENIED` | a resolved program basename of exactly `git` inside a `jj` workspace | **closed** (deny) by default, `ask` under the bypass policy |
-| `GUARD_JJ_INTERNALS_WRITE` | `read`/`write`/`edit` targeting `.jj/**` or `.git/**` | reads **open**, writes **closed** |
-| `GUARD_REPO_STORE_DELETE` | destructive verb whose resolved path names the exact component `.git` or `.jj` | `ask` when a human is present, `deny` under `never` |
+| code (`info.code`)         | Trigger                                                                        | Posture                                                     |
+| -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `GUARD_GIT_DENIED`         | a resolved program basename of exactly `git` inside a `jj` workspace           | **closed** (deny) by default, `ask` under the bypass policy |
+| `GUARD_JJ_INTERNALS_WRITE` | `read`/`write`/`edit` targeting `.jj/**` or `.git/**`                          | reads **open**, writes **closed**                           |
+| `GUARD_REPO_STORE_DELETE`  | destructive verb whose resolved path names the exact component `.git` or `.jj` | `ask` when a human is present, `deny` under `never`         |
 
 **The guard must never produce any other error.** Every internal failure inside
 the listener — a throwing detector, an unreadable `.jj`, an unresolved root —
@@ -529,8 +529,8 @@ of "fail open". The listener body is one `try { … } catch { return next(); }`.
 
 ### B.3 Post-execute advisory (not an error)
 
-| code (`info.code`) | Trigger | Effect |
-|---|---|---|
+| code (`info.code`)          | Trigger                                                                                       | Effect                                                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `JJ_IDENTITY_EMPTY_COMMITS` | a `bash` call whose stderr contains `Name and email not configured` or `Email not configured` | `{kind:'accept', additionalContexts:[…]}` — the command stands, and the model is told once per session that its commits cannot be pushed |
 
 The command is **not** blocked and **not** turned into an error. `block` would
@@ -542,8 +542,8 @@ be the model's job, not the harness's.
 ## Part C — The fail-open / fail-closed rule
 
 [SPEC §8](../SPEC.md) states the principle as **"fail open, deny narrowly"**,
-and the reason is sound: *"The guard's job is to catch the habitual Git command,
-not to be a security boundary."* But a slogan applied uniformly produces two
+and the reason is sound: _"The guard's job is to catch the habitual Git command,
+not to be a security boundary."_ But a slogan applied uniformly produces two
 wrong answers, so the principle needs to be stated more precisely.
 
 ### C.1 The rule
@@ -556,24 +556,24 @@ wrong answers, so the principle needs to be stated more precisely.
 The discriminator is not severity, and it is not whether the operation is
 "dangerous". It is **who pays for the mistake**:
 
-- A wrong *open* costs a confusing error message the model can recover from in
+- A wrong _open_ costs a confusing error message the model can recover from in
   one step, because every message names the next command.
-- A wrong *closed* blocks work that had no correct alternative anyway.
-- A wrong *open on a durable artifact* costs a repair the user has to discover —
+- A wrong _closed_ blocks work that had no correct alternative anyway.
+- A wrong _open on a durable artifact_ costs a repair the user has to discover —
   and, in the identity case, a repair that is invisible until push time.
 
 That yields three rules, in priority order:
 
 **R1 — Never block the shell.** Any failure inside the guard listener resolves
 to `next()`. A broken detector must not stop `pnpm build`. Corollary: the guard
-denies on *classification* only, never on *environment* — it does not need `jj`,
+denies on _classification_ only, never on _environment_ — it does not need `jj`,
 `jj-hunk`, `cargo`, an identity, or a resolvable version to do its job.
 
 **R2 — Never silently degrade to something worse.** When a capability is
 missing, the operation that needs it fails with the install command; it does not
 fall back to a substitute that behaves differently. `jj-hunk` absent must not
 become `jj split -i` ([19](19-jj-hunk-provisioning.md): it needs a TTY and a
-headless agent driving it will *hang*, not fail). `json(self)` unavailable must
+headless agent driving it will _hang_, not fail). `json(self)` unavailable must
 not become graph-text scraping.
 
 **R3 — Never let an avoidable, permanent artifact be created silently.** An
@@ -582,36 +582,36 @@ operation that mints history with the empty identity, or that would write into
 
 ### C.2 The two tensions, resolved
 
-| Tension | Naive reading | Resolution |
-|---|---|---|
-| "fail open" vs. missing `jj-hunk` | hunk tools degrade to something | **Closed.** The hunk tools refuse with `JJ_HUNK_MISSING` and the `cargo install` line. Everything else — guard, reads, `bash` — is untouched, so the *plugin* fails open even though the *operation* fails closed. The distinction between the two is what the slogan is actually about. |
-| "deny narrowly" vs. unconfigured identity | warn and let the model decide | **Closed for commit-creating operations.** A warning is the right shape only when the model can act on it before the damage. Here the damage is done by the very call that produces the warning, is invisible until push, and persists after the config is fixed. Denying `jj_new` costs one prompt; allowing it costs a repair. The posture is narrow because it applies to exactly three call shapes, and it is a *precondition check*, not a policy on the user's intent. |
+| Tension                                   | Naive reading                   | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "fail open" vs. missing `jj-hunk`         | hunk tools degrade to something | **Closed.** The hunk tools refuse with `JJ_HUNK_MISSING` and the `cargo install` line. Everything else — guard, reads, `bash` — is untouched, so the _plugin_ fails open even though the _operation_ fails closed. The distinction between the two is what the slogan is actually about.                                                                                                                                                                                     |
+| "deny narrowly" vs. unconfigured identity | warn and let the model decide   | **Closed for commit-creating operations.** A warning is the right shape only when the model can act on it before the damage. Here the damage is done by the very call that produces the warning, is invisible until push, and persists after the config is fixed. Denying `jj_new` costs one prompt; allowing it costs a repair. The posture is narrow because it applies to exactly three call shapes, and it is a _precondition check_, not a policy on the user's intent. |
 
 Two further boundary cases, decided the same way:
 
-| Case | Posture | Why |
-|---|---|---|
-| Guard denies on a `bash` call while the repo is broken | **open** | The repo being broken is not a reason to block the shell — the user may be about to fix it. The guard's classification does not need a working repo. |
-| `jj_hunk_apply` when the working copy is conflicted | **closed for conflicted paths only** | Reads and non-conflicted paths proceed with a warning. Applying a hunk selection to a conflicted tree is the one case where the result is genuinely ambiguous. |
-| Installing `jj-hunk` | **closed by default** (`hunkInstall: 'ask'`) | It is a system mutation with a supply-chain surface, not a config toggle ([19](19-jj-hunk-provisioning.md)). `auto` exists and is not the default. |
+| Case                                                   | Posture                                      | Why                                                                                                                                                            |
+| ------------------------------------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guard denies on a `bash` call while the repo is broken | **open**                                     | The repo being broken is not a reason to block the shell — the user may be about to fix it. The guard's classification does not need a working repo.           |
+| `jj_hunk_apply` when the working copy is conflicted    | **closed for conflicted paths only**         | Reads and non-conflicted paths proceed with a warning. Applying a hunk selection to a conflicted tree is the one case where the result is genuinely ambiguous. |
+| Installing `jj-hunk`                                   | **closed by default** (`hunkInstall: 'ask'`) | It is a system mutation with a supply-chain surface, not a config toggle ([19](19-jj-hunk-provisioning.md)). `auto` exists and is not the default.             |
 
 ### C.3 The decision table
 
-| Failure class | Shell | Guard | Reads | Mutations | Commit-creating |
-|---|---|---|---|---|---|
-| detection error / unreadable `.jj` | open | open | closed | closed | closed |
-| root unresolvable | open | open | closed | closed | closed |
-| `jj` missing / too old | open | open | closed | closed | closed |
-| repo broken | open | open | closed | closed | closed |
-| conflicts present | open | open | open | open + warning | closed on conflicted paths |
-| `jj-hunk` missing / old / declined | open | open | open | closed (hunk only) | closed (hunk only) |
-| identity unconfigured | open | open | open + warning | open + warning | **closed** |
-| remote absent | open | open | open | open | open (guidance changes) |
-| command text unparseable | open | open | open | open | open |
-| `jj-hunk` exits 0 but did nothing | — | — | — | **closed** (plugin pre-checks) | **closed** |
+| Failure class                      | Shell | Guard | Reads          | Mutations                      | Commit-creating            |
+| ---------------------------------- | ----- | ----- | -------------- | ------------------------------ | -------------------------- |
+| detection error / unreadable `.jj` | open  | open  | closed         | closed                         | closed                     |
+| root unresolvable                  | open  | open  | closed         | closed                         | closed                     |
+| `jj` missing / too old             | open  | open  | closed         | closed                         | closed                     |
+| repo broken                        | open  | open  | closed         | closed                         | closed                     |
+| conflicts present                  | open  | open  | open           | open + warning                 | closed on conflicted paths |
+| `jj-hunk` missing / old / declined | open  | open  | open           | closed (hunk only)             | closed (hunk only)         |
+| identity unconfigured              | open  | open  | open + warning | open + warning                 | **closed**                 |
+| remote absent                      | open  | open  | open           | open                           | open (guidance changes)    |
+| command text unparseable           | open  | open  | open           | open                           | open                       |
+| `jj-hunk` exits 0 but did nothing  | —     | —     | —              | **closed** (plugin pre-checks) | **closed**                 |
 
 The last row is the one that is easy to miss: it is not an environment problem
-at all, it is a *silent success*, and the plugin's own pre-check is the only
+at all, it is a _silent success_, and the plugin's own pre-check is the only
 thing standing between the model and an empty commit.
 
 ---
@@ -620,66 +620,66 @@ thing standing between the model and an empty commit.
 
 ### D.1 Verification table
 
-| # | Claim | Command that proved it | Status |
-|---|---|---|---|
-| 1 | `jj` 0.46.0 at `/opt/homebrew/bin/jj` | `command -v jj` · `jj --version` → `jj 0.46.0` | **VERIFIED** |
-| 2 | `jj --version` output is exactly `jj <semver>\n` | `python3 -c "print(repr(...))"` → `'jj 0.46.0\n'` | **VERIFIED** |
-| 3 | a missing command exits 127 with `command not found` | `bash -c 'jj-does-not-exist --version'` → exit 127 | **VERIFIED** |
-| 4 | `command -v` exits 1 for an absent binary, 0 for a present one | `bash -c 'command -v jj-does-not-exist'` → 1; `command -v jj` → 0 | **VERIFIED** |
-| 5 | `jj-hunk` 0.5.1 at `~/.cargo/bin/jj-hunk` | `command -v jj-hunk` | **VERIFIED** |
-| 6 | `jj-hunk` has no version surface | `jj-hunk --version` / `-V` / `version` all error; `strings … \| grep -c '0\.5\.1'` → 0 | **VERIFIED** |
-| 7 | `cargo install --list` reports `jj-hunk v0.5.1` | `cargo install --list` | **VERIFIED** |
-| 8 | `cargo` 1.99.0 present | `cargo --version` | **VERIFIED** |
-| 9 | `cargo-binstall` is absent | `command -v cargo-binstall` → absent | **VERIFIED** |
-| 10 | unconfigured identity: warning on **stderr**, exit **0** | `jj commit -m … 2>/dev/null` → empty stdout; `1>/dev/null` → warning | **VERIFIED** |
-| 11 | the commit gets an empty identity | `jj log --no-graph -T 'author.email()' -r @-` → `""` | **VERIFIED** |
-| 12 | `jj` refuses to push an empty-identity commit | local bare remote + `jj git push --bookmark main` → `Error: Won't push commit … since it has no author and/or committer set`, exit 1 | **VERIFIED** |
-| 13 | configuring later does not repair existing commits | same push after setting `user.name`/`user.email` → same error | **VERIFIED** |
-| 14 | `jj metaedit --update-author` repairs them | `jj metaedit --update-author -r main` then push → succeeds, remote received the commit | **VERIFIED** |
-| 15 | `author("")` selects the empty-identity commits | `jj log --no-graph -T 'description.first_line()' -r 'author("")'` → `two one` | **VERIFIED** |
-| 16 | partial identity warns with different text | name-only config → `Warning: Email not configured.` | **VERIFIED** |
-| 17 | `JJ_USER`/`JJ_EMAIL` satisfy the identity | `JJ_USER=… JJ_EMAIL=… jj commit` → no warning; author populated | **VERIFIED** |
-| 17a | `jj new` mints an empty identity | `jj new -m fresh` (no config) → author email `""` | **VERIFIED** |
-| 17b | `jj describe` preserves the existing author | `jj describe -m described` after a real-identity commit → still `real@example.com` | **VERIFIED** |
-| 17c | `jj squash` preserves the destination's author | `jj squash` (no config) → destination author unchanged, no warning emitted | **VERIFIED** |
-| 17d | `jj-hunk split`, `commit` **and** `squash` each mint an empty identity | each run with `JJ_CONFIG=/dev/null` → warning emitted, resulting author `""` | **VERIFIED** |
-| 18 | `jj config list user` is a clean two-key probe, exit 0 either way | set → `user.name = …` / `user.email = …`; unset → empty, exit 0 | **VERIFIED** |
-| 19 | `jj config list <a> <b>` is rejected — only one name allowed | `jj config list user.name user.email` → `error: unexpected argument 'user.email' found`, exit 2 | **VERIFIED** |
-| 20 | `jj status` in a `.git`-deleted colocated repo: exit 255, stdout empty | `jj status 2>/dev/null` empty; stderr `Internal error: The repository appears broken or inaccessible` | **VERIFIED** |
-| 21 | every `jj` read fails identically in that state | `jj log` / `jj op log` / `jj diff --summary` / `jj bookmark list` → all exit 255 | **VERIFIED** |
-| 22 | the broken repo cannot be re-initialised in place | `jj git init --colocate` → `Error: The target repo already exists` | **VERIFIED** |
-| 23 | an unreadable `.jj` fails with a **different** message, same exit 255 | `chmod 000 .jj` → `Internal error: Failed to determine the secure config for a repo` | **VERIFIED** |
-| 24 | `git_target` distinguishes colocated (`../../../.git`) from native (`git`) | `cat .jj/repo/store/git_target` in both fixtures | **VERIFIED** |
-| 25 | `git_target` still names the missing `.git` after deletion | same `cat` in the broken fixture → `../../../.git` | **VERIFIED** |
-| 26 | the filesystem-only broken check works on all five fixtures | a 5-fixture script resolving `.jj/repo` → `git_target` → `stat` | **VERIFIED** |
-| 27 | a secondary workspace's `.jj/repo` is a **file** holding the real repo path | `cat <ws2>/.jj/repo` → `../../<primary>/.jj/repo` | **VERIFIED** |
-| 28 | a secondary workspace's `.git` is a **file** | `cat <ws2>/.git` → `gitdir: ../<primary>/.git/worktrees/<ws2>` | **VERIFIED** |
-| 29 | `jj workspace root` resolves the root; exits 1 outside a repo | `jj workspace root` → path, exit 0; outside → `Error: There is no jj repo in "."`, exit 1 | **VERIFIED** |
-| 30 | `jj git export` is a no-op when colocated, real when native | colocated → `No export needed in colocated workspaces.`; native → exports the ref | **VERIFIED** |
-| 31 | `jj git remote list` is empty with exit 0 when there is no remote | `jj git remote list; echo $?` → exit 0, no output | **VERIFIED** |
-| 32 | `jj git push` with no remote fails with a specific message | → `Error: No git remotes to push to`, exit 1 | **VERIFIED** |
-| 33 | `jj resolve --list` exits **2** with no conflicts and **0** with them | clean → exit 2, `Error: No conflicts found at this revision`; conflicted → exit 0, `f.txt    2-sided conflict` | **VERIFIED** |
-| 34 | `-T 'conflict' -r @` is a boolean conflict probe | conflicted → `true`; clean → `false` | **VERIFIED** |
-| 35 | an invalid revset is a parse error, exit 1 | `jj log -r 'nonexistent@@@'` → `Error: Failed to parse revset: Syntax error`, exit 1 | **VERIFIED** |
-| 36 | `jj-hunk` **silently accepts** a multi-revision revset | `jj-hunk list -r 'all()'` and `-r '@\|@-'` → exit 0, JSON hunks | **VERIFIED** |
-| 37 | `jj-hunk` rejects a repeated `-r` flag (clap, exit 2) | `jj-hunk list -r @ -r @-` → `error: the argument '--rev <REV>' cannot be used multiple times` | **VERIFIED** |
-| 38 | an empty hunkset query exits **0** with `{"files": []}` | `jj-hunk list --query 'added(content:"ZZZ_NOPE")'` | **VERIFIED** |
-| 39 | an empty query on **apply** is a silent no-op, exit 0 | `jj-hunk split --query '…NOPE…' "msg"` → exit 0, log unchanged | **VERIFIED** |
-| 40 | an invalid hunkset query is exit 1 with a cause | `jj-hunk list --query 'added(content:'` → `Error: Invalid hunkset query` | **VERIFIED** |
-| 41 | a **stale spec** exits 0 and creates an **empty commit** | `jj-hunk split --spec-file <pre-edit spec>` → `Warning: No changes have been selected, so the new revision will be empty.`, exit 0 | **VERIFIED** |
-| 42 | hunk ids regenerate on any edit | pre/post `// touch` id comparison → changed | **VERIFIED** |
-| 43 | `jj-hunk` outside a repo is exit 1 with a specific message | `jj-hunk list` in a non-repo → `Error: jj diff failed: Error: There is no jj repo in "."` | **VERIFIED** |
-| 44 | a guard `deny` reaches the model as exactly `Error: <reason>` | `dsh-tools/lib/index.js:3241-3256` | **VERIFIED** (source) |
-| 45 | `ToolErrorInfo` is `{name, code, reason?}` | `dsh-tools/lib/types/index.d.ts:378` | **VERIFIED** (source) |
-| 46 | a throwing `pre-execute` listener becomes a tool error, not a pass-through | `dsh-tools/lib/index.js:3221-3225` inside `try`, `:3198` `toolErrorResult` | **VERIFIED** (source) |
-| 47 | `ShellRunResult` carries `timedOut` / `aborted` / `sandbox` | `dsh-shell/lib/types/types.d.ts` | **VERIFIED** (source) |
-| 48 | `ShellExecRequest` accepts `timeoutMs`, `onExpiry`, `signal` | same file | **VERIFIED** (source) |
-| 49 | `ctx.shell.execute()` rejects only for infrastructure failures | `dsh-shell/lib/types/index.d.ts` | **VERIFIED** (source) |
-| 50 | `ctx.fs.stat(target)` returns `FsInfo \| undefined`, with `type: 'file'\|'directory'\|'other'` | `dsh-fs/lib/types/index.d.ts:138`, `types.d.ts:67-74` | **VERIFIED** (source) |
-| 51 | `exec.agent?.session.header.cwd` is the workspace-root accessor | used verbatim in `dsh-tool-skill/lib/index.js:141,175,208` | **VERIFIED** (source) |
-| 52 | `tools/post-execute` `accept` can attach `additionalContexts` | `dsh-tools/lib/types/index.d.ts:465`; shipping use in `dsh-hooks-claude-code/lib/index.js:265` | **VERIFIED** (source) |
-| 53 | the bash executor defaults to 120 s and caps at 600 s | `dsh-bash-local/lib/index.js:71-72` | **VERIFIED** (source) |
-| 54 | no user config was written by any probe | `~/.config/jj/repos/` does not exist after all runs | **VERIFIED** |
+| #   | Claim                                                                                          | Command that proved it                                                                                                               | Status                |
+| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| 1   | `jj` 0.46.0 at `/opt/homebrew/bin/jj`                                                          | `command -v jj` · `jj --version` → `jj 0.46.0`                                                                                       | **VERIFIED**          |
+| 2   | `jj --version` output is exactly `jj <semver>\n`                                               | `python3 -c "print(repr(...))"` → `'jj 0.46.0\n'`                                                                                    | **VERIFIED**          |
+| 3   | a missing command exits 127 with `command not found`                                           | `bash -c 'jj-does-not-exist --version'` → exit 127                                                                                   | **VERIFIED**          |
+| 4   | `command -v` exits 1 for an absent binary, 0 for a present one                                 | `bash -c 'command -v jj-does-not-exist'` → 1; `command -v jj` → 0                                                                    | **VERIFIED**          |
+| 5   | `jj-hunk` 0.5.1 at `~/.cargo/bin/jj-hunk`                                                      | `command -v jj-hunk`                                                                                                                 | **VERIFIED**          |
+| 6   | `jj-hunk` has no version surface                                                               | `jj-hunk --version` / `-V` / `version` all error; `strings … \| grep -c '0\.5\.1'` → 0                                               | **VERIFIED**          |
+| 7   | `cargo install --list` reports `jj-hunk v0.5.1`                                                | `cargo install --list`                                                                                                               | **VERIFIED**          |
+| 8   | `cargo` 1.99.0 present                                                                         | `cargo --version`                                                                                                                    | **VERIFIED**          |
+| 9   | `cargo-binstall` is absent                                                                     | `command -v cargo-binstall` → absent                                                                                                 | **VERIFIED**          |
+| 10  | unconfigured identity: warning on **stderr**, exit **0**                                       | `jj commit -m … 2>/dev/null` → empty stdout; `1>/dev/null` → warning                                                                 | **VERIFIED**          |
+| 11  | the commit gets an empty identity                                                              | `jj log --no-graph -T 'author.email()' -r @-` → `""`                                                                                 | **VERIFIED**          |
+| 12  | `jj` refuses to push an empty-identity commit                                                  | local bare remote + `jj git push --bookmark main` → `Error: Won't push commit … since it has no author and/or committer set`, exit 1 | **VERIFIED**          |
+| 13  | configuring later does not repair existing commits                                             | same push after setting `user.name`/`user.email` → same error                                                                        | **VERIFIED**          |
+| 14  | `jj metaedit --update-author` repairs them                                                     | `jj metaedit --update-author -r main` then push → succeeds, remote received the commit                                               | **VERIFIED**          |
+| 15  | `author("")` selects the empty-identity commits                                                | `jj log --no-graph -T 'description.first_line()' -r 'author("")'` → `two one`                                                        | **VERIFIED**          |
+| 16  | partial identity warns with different text                                                     | name-only config → `Warning: Email not configured.`                                                                                  | **VERIFIED**          |
+| 17  | `JJ_USER`/`JJ_EMAIL` satisfy the identity                                                      | `JJ_USER=… JJ_EMAIL=… jj commit` → no warning; author populated                                                                      | **VERIFIED**          |
+| 17a | `jj new` mints an empty identity                                                               | `jj new -m fresh` (no config) → author email `""`                                                                                    | **VERIFIED**          |
+| 17b | `jj describe` preserves the existing author                                                    | `jj describe -m described` after a real-identity commit → still `real@example.com`                                                   | **VERIFIED**          |
+| 17c | `jj squash` preserves the destination's author                                                 | `jj squash` (no config) → destination author unchanged, no warning emitted                                                           | **VERIFIED**          |
+| 17d | `jj-hunk split`, `commit` **and** `squash` each mint an empty identity                         | each run with `JJ_CONFIG=/dev/null` → warning emitted, resulting author `""`                                                         | **VERIFIED**          |
+| 18  | `jj config list user` is a clean two-key probe, exit 0 either way                              | set → `user.name = …` / `user.email = …`; unset → empty, exit 0                                                                      | **VERIFIED**          |
+| 19  | `jj config list <a> <b>` is rejected — only one name allowed                                   | `jj config list user.name user.email` → `error: unexpected argument 'user.email' found`, exit 2                                      | **VERIFIED**          |
+| 20  | `jj status` in a `.git`-deleted colocated repo: exit 255, stdout empty                         | `jj status 2>/dev/null` empty; stderr `Internal error: The repository appears broken or inaccessible`                                | **VERIFIED**          |
+| 21  | every `jj` read fails identically in that state                                                | `jj log` / `jj op log` / `jj diff --summary` / `jj bookmark list` → all exit 255                                                     | **VERIFIED**          |
+| 22  | the broken repo cannot be re-initialised in place                                              | `jj git init --colocate` → `Error: The target repo already exists`                                                                   | **VERIFIED**          |
+| 23  | an unreadable `.jj` fails with a **different** message, same exit 255                          | `chmod 000 .jj` → `Internal error: Failed to determine the secure config for a repo`                                                 | **VERIFIED**          |
+| 24  | `git_target` distinguishes colocated (`../../../.git`) from native (`git`)                     | `cat .jj/repo/store/git_target` in both fixtures                                                                                     | **VERIFIED**          |
+| 25  | `git_target` still names the missing `.git` after deletion                                     | same `cat` in the broken fixture → `../../../.git`                                                                                   | **VERIFIED**          |
+| 26  | the filesystem-only broken check works on all five fixtures                                    | a 5-fixture script resolving `.jj/repo` → `git_target` → `stat`                                                                      | **VERIFIED**          |
+| 27  | a secondary workspace's `.jj/repo` is a **file** holding the real repo path                    | `cat <ws2>/.jj/repo` → `../../<primary>/.jj/repo`                                                                                    | **VERIFIED**          |
+| 28  | a secondary workspace's `.git` is a **file**                                                   | `cat <ws2>/.git` → `gitdir: ../<primary>/.git/worktrees/<ws2>`                                                                       | **VERIFIED**          |
+| 29  | `jj workspace root` resolves the root; exits 1 outside a repo                                  | `jj workspace root` → path, exit 0; outside → `Error: There is no jj repo in "."`, exit 1                                            | **VERIFIED**          |
+| 30  | `jj git export` is a no-op when colocated, real when native                                    | colocated → `No export needed in colocated workspaces.`; native → exports the ref                                                    | **VERIFIED**          |
+| 31  | `jj git remote list` is empty with exit 0 when there is no remote                              | `jj git remote list; echo $?` → exit 0, no output                                                                                    | **VERIFIED**          |
+| 32  | `jj git push` with no remote fails with a specific message                                     | → `Error: No git remotes to push to`, exit 1                                                                                         | **VERIFIED**          |
+| 33  | `jj resolve --list` exits **2** with no conflicts and **0** with them                          | clean → exit 2, `Error: No conflicts found at this revision`; conflicted → exit 0, `f.txt    2-sided conflict`                       | **VERIFIED**          |
+| 34  | `-T 'conflict' -r @` is a boolean conflict probe                                               | conflicted → `true`; clean → `false`                                                                                                 | **VERIFIED**          |
+| 35  | an invalid revset is a parse error, exit 1                                                     | `jj log -r 'nonexistent@@@'` → `Error: Failed to parse revset: Syntax error`, exit 1                                                 | **VERIFIED**          |
+| 36  | `jj-hunk` **silently accepts** a multi-revision revset                                         | `jj-hunk list -r 'all()'` and `-r '@\|@-'` → exit 0, JSON hunks                                                                      | **VERIFIED**          |
+| 37  | `jj-hunk` rejects a repeated `-r` flag (clap, exit 2)                                          | `jj-hunk list -r @ -r @-` → `error: the argument '--rev <REV>' cannot be used multiple times`                                        | **VERIFIED**          |
+| 38  | an empty hunkset query exits **0** with `{"files": []}`                                        | `jj-hunk list --query 'added(content:"ZZZ_NOPE")'`                                                                                   | **VERIFIED**          |
+| 39  | an empty query on **apply** is a silent no-op, exit 0                                          | `jj-hunk split --query '…NOPE…' "msg"` → exit 0, log unchanged                                                                       | **VERIFIED**          |
+| 40  | an invalid hunkset query is exit 1 with a cause                                                | `jj-hunk list --query 'added(content:'` → `Error: Invalid hunkset query`                                                             | **VERIFIED**          |
+| 41  | a **stale spec** exits 0 and creates an **empty commit**                                       | `jj-hunk split --spec-file <pre-edit spec>` → `Warning: No changes have been selected, so the new revision will be empty.`, exit 0   | **VERIFIED**          |
+| 42  | hunk ids regenerate on any edit                                                                | pre/post `// touch` id comparison → changed                                                                                          | **VERIFIED**          |
+| 43  | `jj-hunk` outside a repo is exit 1 with a specific message                                     | `jj-hunk list` in a non-repo → `Error: jj diff failed: Error: There is no jj repo in "."`                                            | **VERIFIED**          |
+| 44  | a guard `deny` reaches the model as exactly `Error: <reason>`                                  | `dsh-tools/lib/index.js:3241-3256`                                                                                                   | **VERIFIED** (source) |
+| 45  | `ToolErrorInfo` is `{name, code, reason?}`                                                     | `dsh-tools/lib/types/index.d.ts:378`                                                                                                 | **VERIFIED** (source) |
+| 46  | a throwing `pre-execute` listener becomes a tool error, not a pass-through                     | `dsh-tools/lib/index.js:3221-3225` inside `try`, `:3198` `toolErrorResult`                                                           | **VERIFIED** (source) |
+| 47  | `ShellRunResult` carries `timedOut` / `aborted` / `sandbox`                                    | `dsh-shell/lib/types/types.d.ts`                                                                                                     | **VERIFIED** (source) |
+| 48  | `ShellExecRequest` accepts `timeoutMs`, `onExpiry`, `signal`                                   | same file                                                                                                                            | **VERIFIED** (source) |
+| 49  | `ctx.shell.execute()` rejects only for infrastructure failures                                 | `dsh-shell/lib/types/index.d.ts`                                                                                                     | **VERIFIED** (source) |
+| 50  | `ctx.fs.stat(target)` returns `FsInfo \| undefined`, with `type: 'file'\|'directory'\|'other'` | `dsh-fs/lib/types/index.d.ts:138`, `types.d.ts:67-74`                                                                                | **VERIFIED** (source) |
+| 51  | `exec.agent?.session.header.cwd` is the workspace-root accessor                                | used verbatim in `dsh-tool-skill/lib/index.js:141,175,208`                                                                           | **VERIFIED** (source) |
+| 52  | `tools/post-execute` `accept` can attach `additionalContexts`                                  | `dsh-tools/lib/types/index.d.ts:465`; shipping use in `dsh-hooks-claude-code/lib/index.js:265`                                       | **VERIFIED** (source) |
+| 53  | the bash executor defaults to 120 s and caps at 600 s                                          | `dsh-bash-local/lib/index.js:71-72`                                                                                                  | **VERIFIED** (source) |
+| 54  | no user config was written by any probe                                                        | `~/.config/jj/repos/` does not exist after all runs                                                                                  | **VERIFIED**          |
 
 All `jj` runs used `JJ_CONFIG=/dev/null`, or
 `JJ_CONFIG="/dev/null:<scratch>.toml"` where identity was needed. No
@@ -689,36 +689,36 @@ removed; the pre-existing `/tmp/jjverify*` and `/tmp/jjnocol` fixtures from
 
 ### D.2 UNVERIFIED — do not build on these without testing first
 
-| Claim | Why it is unverified | What would settle it |
-|---|---|---|
-| behaviour of `jj` **< 0.46.0** | no older binary installed; none was fetched | install 0.45.x in a container and run the capability probes |
-| behaviour of `jj-hunk` **< 0.5.1**, and whether the 64-hex id shape actually discriminates 0.5.0 | no older binary; the crate version is not recoverable from the binary | build 0.5.0 from source and compare `list --format json` ids |
-| `.jj/repo/store/git_target` exists with this layout in other `jj` versions | internal layout detail, read from one version only | run the 5-fixture script against 0.44 / 0.45 / 0.47 |
-| the pinned install form `cargo install --git … --rev <sha>` | not run; only the unpinned form was measured (37.25 s, [19](19-jj-hunk-provisioning.md)) | run it once with a real sha |
-| `cargo binstall --git …` | `cargo-binstall` absent | install it and time the run |
-| a push to a **network** remote (GitHub, SSH auth, `--allow-new`) | only a local bare repo was used | configure a real remote |
-| `sandbox.denied` / `runnerFailed` interaction with the probes | no sandboxed executor was exercised from a plugin context | mount `dsh-bash-sandbox` and force a denial |
-| the plugin's own `ctx.shell` calls behave exactly like this session's `bash` tool | every command here ran through the session's `bash`, not through a plugin's `ctx.shell` | write the preflight module and run it |
-| Windows behaviour of every check (PATH, `.cargo/bin`, permission bits) | not on Windows | CI matrix |
-| whether `jj config list user` warns on stderr in every unset combination | only the `user.email`-alone case was captured | broaden the probe matrix |
+| Claim                                                                                            | Why it is unverified                                                                     | What would settle it                                         |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| behaviour of `jj` **< 0.46.0**                                                                   | no older binary installed; none was fetched                                              | install 0.45.x in a container and run the capability probes  |
+| behaviour of `jj-hunk` **< 0.5.1**, and whether the 64-hex id shape actually discriminates 0.5.0 | no older binary; the crate version is not recoverable from the binary                    | build 0.5.0 from source and compare `list --format json` ids |
+| `.jj/repo/store/git_target` exists with this layout in other `jj` versions                       | internal layout detail, read from one version only                                       | run the 5-fixture script against 0.44 / 0.45 / 0.47          |
+| the pinned install form `cargo install --git … --rev <sha>`                                      | not run; only the unpinned form was measured (37.25 s, [19](19-jj-hunk-provisioning.md)) | run it once with a real sha                                  |
+| `cargo binstall --git …`                                                                         | `cargo-binstall` absent                                                                  | install it and time the run                                  |
+| a push to a **network** remote (GitHub, SSH auth, `--allow-new`)                                 | only a local bare repo was used                                                          | configure a real remote                                      |
+| `sandbox.denied` / `runnerFailed` interaction with the probes                                    | no sandboxed executor was exercised from a plugin context                                | mount `dsh-bash-sandbox` and force a denial                  |
+| the plugin's own `ctx.shell` calls behave exactly like this session's `bash` tool                | every command here ran through the session's `bash`, not through a plugin's `ctx.shell`  | write the preflight module and run it                        |
+| Windows behaviour of every check (PATH, `.cargo/bin`, permission bits)                           | not on Windows                                                                           | CI matrix                                                    |
+| whether `jj config list user` warns on stderr in every unset combination                         | only the `user.email`-alone case was captured                                            | broaden the probe matrix                                     |
 
 ### D.3 Claims inherited from other documents, not re-measured here
 
-| Claim | Source | Status as used |
-|---|---|---|
-| `.jj` is a directory in both primary and secondary workspaces | [13 §2](13-empirical-verification.md) | relied on for P8; re-observed incidentally |
-| `rm -rf .git` is unrecoverable in a colocated repo and a no-op when native | [SPEC §5.7](../SPEC.md) | relied on for P9's message; the broken state itself was re-measured (rows 20-23) |
-| `jj-hunk` install takes ~37 s and lands in `~/.cargo/bin` | [19](19-jj-hunk-provisioning.md) | relied on for the offer's wording; not re-run |
-| hunk ids are SHA-256 over the materialized comparison | [13 §6](13-empirical-verification.md) | relied on for `HUNK_SPEC_STALE`'s message; the regeneration was re-measured (row 42) |
+| Claim                                                                      | Source                                | Status as used                                                                       |
+| -------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `.jj` is a directory in both primary and secondary workspaces              | [13 §2](13-empirical-verification.md) | relied on for P8; re-observed incidentally                                           |
+| `rm -rf .git` is unrecoverable in a colocated repo and a no-op when native | [SPEC §5.7](../SPEC.md)               | relied on for P9's message; the broken state itself was re-measured (rows 20-23)     |
+| `jj-hunk` install takes ~37 s and lands in `~/.cargo/bin`                  | [19](19-jj-hunk-provisioning.md)      | relied on for the offer's wording; not re-run                                        |
+| hunk ids are SHA-256 over the materialized comparison                      | [13 §6](13-empirical-verification.md) | relied on for `HUNK_SPEC_STALE`'s message; the regeneration was re-measured (row 42) |
 
 ### D.4 Checks whose correct posture could not be decided
 
 Recorded honestly rather than guessed:
 
 1. **`JJ_HUNK_VERSION_TOO_OLD` when the version cannot be read at all.** §A.4
-   proposes *warn and proceed*, on the argument that the 0.5.1 ID contract is
+   proposes _warn and proceed_, on the argument that the 0.5.1 ID contract is
    self-detecting because ids never cross turns. The counter-argument is that
-   `--query` and `--spec-template` are *not* self-detecting, and an older binary
+   `--query` and `--spec-template` are _not_ self-detecting, and an older binary
    may lack them. The plugin could probe those two capabilities directly and
    refuse on their absence — which would make the version check unnecessary —
    but which older `jj-hunk` releases have them is **UNVERIFIED**, so the
@@ -728,10 +728,10 @@ Recorded honestly rather than guessed:
    `jj_hunk_apply` on a conflicted path and warns elsewhere. `jj_new` on a
    conflicted working copy is arguably the same hazard — it leaves the conflict
    behind on a parent and the model may not notice — but `jj new` is also the
-   documented way to *escape* a conflicted state, so refusing it would remove
+   documented way to _escape_ a conflicted state, so refusing it would remove
    the recovery path. Leaning: keep it open with a warning. Not settled.
 3. **Whether P6 should be re-probed on `bash` calls that create commits.** The
    post-execute advisory (§A.5) tells the model after the fact. Blocking the
-   `bash` call would violate R1, but attaching the warning *before* the call
+   `bash` call would violate R1, but attaching the warning _before_ the call
    (via the guard's `ask`, which shows a reason) is possible and was not
    evaluated against [17](17-bypass-and-approval.md)'s approval semantics.

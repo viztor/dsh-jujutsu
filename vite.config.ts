@@ -40,11 +40,7 @@ export default defineConfig({
       sourcemap: false,
       clean: false,
       deps: {
-        neverBundle: [
-          "react",
-          "react/jsx-runtime",
-          "@deepseek-ai/dsh-client-ui-primitives",
-        ],
+        neverBundle: ["react", "react/jsx-runtime", "@deepseek-ai/dsh-client-ui-primitives"],
       },
       banner: [
         "(function () {",

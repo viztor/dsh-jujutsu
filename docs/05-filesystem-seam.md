@@ -16,13 +16,13 @@ The harness mounts the filesystem as a swappable Cordis **service**
 (`dsh-fs` declares `FileSystem extends Service`). Backends are separate
 packages, and the profile chooses one:
 
-| Package | Role |
-|---|---|
-| `dsh-fs` | the service definition and vocabulary |
-| `dsh-fs-local` | direct access to the real disk |
-| `dsh-fs-sandbox` | the confined backend |
-| `dsh-fs-observation-policy` | the read-before-edit / observation policy |
-| `dsh-tool-fs`, `dsh-tool-fs-search` | the model-facing tools on top |
+| Package                             | Role                                      |
+| ----------------------------------- | ----------------------------------------- |
+| `dsh-fs`                            | the service definition and vocabulary     |
+| `dsh-fs-local`                      | direct access to the real disk            |
+| `dsh-fs-sandbox`                    | the confined backend                      |
+| `dsh-fs-observation-policy`         | the read-before-edit / observation policy |
+| `dsh-tool-fs`, `dsh-tool-fs-search` | the model-facing tools on top             |
 
 A plugin that reaches for `node:fs` bypasses the mounted backend entirely: it
 writes to the real disk even when the composition says the agent is confined,

@@ -21,7 +21,7 @@ jj-hunk v0.5.1 (https://github.com/laulauland/jj-hunk#53838e93):
     jj-hunk
 ```
 
-`cargo install --list` reports both the version *and* the source revision. So
+`cargo install --list` reports both the version _and_ the source revision. So
 the tiered probe in [26](26-preflight-and-error-taxonomy.md) §A.4 stands, and
 tier 1 is stronger than expected: it also confirms the install came from the
 pinned revision rather than a crates.io release.
@@ -36,7 +36,7 @@ remains the honest fallback.
 ## 2. Conflicts — `jj new` does **not** escape them
 
 This contradicts a claim made during the integration survey, and it matters
-because it was the stated reason for *not* refusing `jj_new` on a conflicted
+because it was the stated reason for _not_ refusing `jj_new` on a conflicted
 tree.
 
 ```
@@ -67,20 +67,20 @@ escape.
   [26](26-preflight-and-error-taxonomy.md) §A.8 already specifies.
 - A conflict propagates into every subsequent commit until resolved, which means
   an agent that does not notice will keep stacking conflicted commits. That is
-  an argument for surfacing the conflict *earlier* than per-call.
+  an argument for surfacing the conflict _earlier_ than per-call.
 
 ## 3. The identity matrix — and a correction to my own correction
 
 The question: with `user.name`/`user.email` unset, which commands produce an
-**unpushable** commit? Method: seed commits *with* a real identity, then run the
-command *without* one and inspect the resulting author.
+**unpushable** commit? Method: seed commits _with_ a real identity, then run the
+command _without_ one and inspect the resulting author.
 
-| Command (identity unset) | Warns | Author of the result |
-|---|---|---|
-| `jj new` | yes | **empty** — mints a fresh empty-author commit |
-| `jj commit` | yes | **empty** |
-| `jj describe -r <existing>` | yes | **preserved** (`real@example.com`) |
-| `jj squash --from <rev> --into <rev>` | **no** | **preserved** (`real@example.com`) |
+| Command (identity unset)              | Warns  | Author of the result                          |
+| ------------------------------------- | ------ | --------------------------------------------- |
+| `jj new`                              | yes    | **empty** — mints a fresh empty-author commit |
+| `jj commit`                           | yes    | **empty**                                     |
+| `jj describe -r <existing>`           | yes    | **preserved** (`real@example.com`)            |
+| `jj squash --from <rev> --into <rev>` | **no** | **preserved** (`real@example.com`)            |
 
 ```
 $ jj squash --from "$CHILD" --into "$BASE"     # no identity
@@ -91,7 +91,7 @@ xrptooyxxvsk base  author=[real@example.com]
 
 **This corrects a correction.** An intermediate test appeared to show `squash`
 minting an empty author; that reading was wrong — it was inspecting `@-`, which
-after the squash was the *newly created empty working-copy commit*, not the
+after the squash was the _newly created empty working-copy commit_, not the
 rewritten one. The original survey claim was right: **`jj describe` and
 `jj squash` preserve; `jj new` and `jj commit` mint.**
 
@@ -105,14 +105,14 @@ rewritten one. The original survey claim was right: **`jj describe` and
   commits; `squash` was not resolved by this probe (the no-op case produced no
   commit to inspect), and the conservative reading costs one prompt.
 - The warning text is emitted by `jj new`, `jj commit` and `jj describe` — so a
-  warning-based detection in `tools/post-execute` would fire on the *safe*
+  warning-based detection in `tools/post-execute` would fire on the _safe_
   commands too. Detection must be by author inspection, not by stderr text.
 
 ## 4. What is still open on the `jj` side
 
-| Item | Why it needs more |
-|---|---|
-| `jj-hunk` version floor when the version is unreadable | needs a 0.5.0 binary; none available here |
-| `jj_hunk_apply(mode:'squash')` author behaviour | the probe's no-op produced no commit; needs a case that actually moves a hunk |
-| `JJ_CONFLICTS_PRESENT` on `jj_new` | now has an answer (refuse — `jj new` does not escape), but the *message* needs a verified remedy string |
-| Older `jj` (< 0.46) behaviour | no older binary available |
+| Item                                                   | Why it needs more                                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `jj-hunk` version floor when the version is unreadable | needs a 0.5.0 binary; none available here                                                               |
+| `jj_hunk_apply(mode:'squash')` author behaviour        | the probe's no-op produced no commit; needs a case that actually moves a hunk                           |
+| `JJ_CONFLICTS_PRESENT` on `jj_new`                     | now has an answer (refuse — `jj new` does not escape), but the _message_ needs a verified remedy string |
+| Older `jj` (< 0.46) behaviour                          | no older binary available                                                                               |

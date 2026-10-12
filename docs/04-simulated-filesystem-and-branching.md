@@ -22,16 +22,16 @@
 
 ## What is actually true
 
-| Claim | Verdict |
-|---|---|
-| `vfs_read` / `vfs_write` tools exist | **CONTRADICTED.** No such tools. The filesystem tools are `read`, `write`, `edit`, `glob`, `grep`, backed by `dsh-tool-fs` / `dsh-tool-fs-search` |
-| A "simulated file system" mode exists | **CONTRADICTED as described.** There *is* a sandbox backend (`dsh-fs-sandbox`) and a policy layer (`dsh-fs-observation-policy`), but the filesystem is the real one, confined — not a virtual tree |
-| "State Snapshot Isolation" / "Parallel Reasoning Trails" | **UNVERIFIED.** No such mechanism found. Branching in the harness is `jj`'s job, not the harness's |
-| `/sandbox/jiujitsu-core` style virtual paths | **CONTRADICTED.** Paths are real paths under the workspace root |
-| The harness clones JSON state objects to branch | **CONTRADICTED.** Nothing in the harness does this |
+| Claim                                                    | Verdict                                                                                                                                                                                            |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vfs_read` / `vfs_write` tools exist                     | **CONTRADICTED.** No such tools. The filesystem tools are `read`, `write`, `edit`, `glob`, `grep`, backed by `dsh-tool-fs` / `dsh-tool-fs-search`                                                  |
+| A "simulated file system" mode exists                    | **CONTRADICTED as described.** There _is_ a sandbox backend (`dsh-fs-sandbox`) and a policy layer (`dsh-fs-observation-policy`), but the filesystem is the real one, confined — not a virtual tree |
+| "State Snapshot Isolation" / "Parallel Reasoning Trails" | **UNVERIFIED.** No such mechanism found. Branching in the harness is `jj`'s job, not the harness's                                                                                                 |
+| `/sandbox/jiujitsu-core` style virtual paths             | **CONTRADICTED.** Paths are real paths under the workspace root                                                                                                                                    |
+| The harness clones JSON state objects to branch          | **CONTRADICTED.** Nothing in the harness does this                                                                                                                                                 |
 
-The only salvageable idea is the general one: *if the filesystem were virtual,
-the guard would key off the virtual path instead of the real one.* Since the
+The only salvageable idea is the general one: _if the filesystem were virtual,
+the guard would key off the virtual path instead of the real one._ Since the
 filesystem is real, that branch of the design is dead.
 
 ## Why this turn is worth keeping
@@ -40,7 +40,7 @@ It is the clearest demonstration of the failure mode that runs through the
 whole conversation: **plausible-sounding architecture invented to satisfy a
 question, with no grounding in the installed system.** "State Snapshot
 Isolation" and "Parallel Reasoning Trails" are not DSH concepts; they are
-capitalised nouns that make an answer *feel* authoritative.
+capitalised nouns that make an answer _feel_ authoritative.
 
 The correct answer to "what about branching?" in a `jj` context is:
 

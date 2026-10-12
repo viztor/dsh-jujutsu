@@ -3,8 +3,8 @@
 **Decision:** deny by default; an explicit, per-call bypass is available through
 the harness's own approval channel; never auto-allow.
 
-**Your question was:** *"is it possible we have an explicit bypass required, and
-otherwise deny?"* — **Yes.** The harness ships exactly that mechanism, and it
+**Your question was:** _"is it possible we have an explicit bypass required, and
+otherwise deny?"_ — **Yes.** The harness ships exactly that mechanism, and it
 is a better fit than anything we would have built.
 
 ## The mechanism: `{ kind: 'ask' }`
@@ -14,10 +14,10 @@ is a better fit than anything we would have built.
 
 ```ts
 type PreToolDecision =
-  | { kind: 'allow' }
-  | { kind: 'deny';  reason: string; info?: ToolErrorInfo }
-  | { kind: 'cancel' }
-  | { kind: 'ask';   reason?: string; displayReason?: { en: string; [locale: string]: string } };
+  | { kind: "allow" }
+  | { kind: "deny"; reason: string; info?: ToolErrorInfo }
+  | { kind: "cancel" }
+  | { kind: "ask"; reason?: string; displayReason?: { en: string; [locale: string]: string } };
 ```
 
 `ask` is routed by `dsh-tools` into the approval service
@@ -25,12 +25,12 @@ type PreToolDecision =
 which prompts the user. The outcome set is
 (`@deepseek-ai/dsh-user-approval`):
 
-| Outcome | Effect |
-|---|---|
+| Outcome        | Effect                                      |
+| -------------- | ------------------------------------------- |
 | `allowed-once` | **the only grant** — this one call proceeds |
-| `rejected` | the call is denied |
-| `cancelled` | the ask was withdrawn (abort signal) |
-| `unavailable` | no answerer is composed — fail-closed |
+| `rejected`     | the call is denied                          |
+| `cancelled`    | the ask was withdrawn (abort signal)        |
+| `unavailable`  | no answerer is composed — fail-closed       |
 
 So "explicit bypass required, otherwise deny" is the harness's native shape:
 the guard says `ask`, the human says yes or no, and a yes is scoped to **one
@@ -46,7 +46,7 @@ call**.
 - `'never'` — **never prompts anyone: every ask resolves `'rejected'`
   deterministically.** The documented stance for CI and unattended runs.
 
-And when an ask is rejected, `dsh-tools` does not relay *our* reason — it
+And when an ask is rejected, `dsh-tools` does not relay _our_ reason — it
 substitutes its own:
 
 ```js
@@ -63,32 +63,33 @@ verb mapper. The guard must not ask blindly.
 Read the policy first, then choose:
 
 ```ts
-const approval = ctx.get('approval');
-const policy = approval === undefined
-  ? 'ask'
-  : approval.overrideOf(session) ?? approval.config.policy ?? 'ask';
+const approval = ctx.get("approval");
+const policy =
+  approval === undefined
+    ? "ask"
+    : (approval.overrideOf(session) ?? approval.config.policy ?? "ask");
 
-if (policy === 'never') {
-  return { kind: 'deny', reason: verb.reason };          // keep our message
+if (policy === "never") {
+  return { kind: "deny", reason: verb.reason }; // keep our message
 }
-return { kind: 'ask', reason: verb.reason, displayReason: verb.display };
+return { kind: "ask", reason: verb.reason, displayReason: verb.display };
 ```
 
 **The three-term expression is not optional — an earlier draft of this document
-had it wrong.** `overrideOf(session)` deliberately returns only the *session
-override* and excludes the deployment default, so `overrideOf(session) ?? 'ask'`
+had it wrong.** `overrideOf(session)` deliberately returns only the _session
+override_ and excludes the deployment default, so `overrideOf(session) ?? 'ask'`
 misreads every deployment that configured a default. The service's own
 resolution is `overrideOf(session) ?? this.config.policy ?? 'ask'`
 (`dsh-user-approval/lib/index.js:152-153`), and the base composition sets that
 default from the permission mode (`dsh-base/cordis.patch.yml:245-248`):
 
 ```js
-policy: (DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'
+policy: (DSH_PERMISSION_MODE ?? "workspace-write") === "danger-full-access" ? "never" : "ask";
 ```
 
 So under the shipped `danger-full-access` mode, the two-term version concludes
 `'ask'` while the service short-circuits to `'rejected'`, and `dsh-tools`
-substitutes *"the user rejected tool bash"* — exactly the failure this section
+substitutes _"the user rejected tool bash"_ — exactly the failure this section
 exists to prevent. `ApprovalService.config` is public
 (`dsh-user-approval/lib/types/index.d.ts:106`); `effectivePolicy` is private
 (`:143`), so this expression is the only plugin-reachable equivalent.
@@ -99,14 +100,14 @@ exists to prevent. `ApprovalService.config` is public
 
 ### Outcome matrix
 
-| Policy | Command | Guard returns | User sees | Result |
-|---|---|---|---|---|
-| `ask` | `git commit -m x` | `ask` + our reason | a prompt naming `jj commit` | yes → runs once; no → denied with our reason |
-| `ask` | `git status` | `ask` + our reason | a prompt naming `jj status` | same |
-| `never` | `git commit -m x` | `deny` + our reason | nothing | denied, model gets the `jj` command |
-| **deployment default `never`, no session override** | `git commit -m x` | **`deny` + our reason** | nothing | denied with *our* message — this is the row the two-term expression got wrong |
-| `ask`, no answerer | anything | `ask` | nothing | `unavailable` → denied |
-| any | `jj new` | `next()` | nothing | allowed |
+| Policy                                              | Command           | Guard returns           | User sees                   | Result                                                                        |
+| --------------------------------------------------- | ----------------- | ----------------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| `ask`                                               | `git commit -m x` | `ask` + our reason      | a prompt naming `jj commit` | yes → runs once; no → denied with our reason                                  |
+| `ask`                                               | `git status`      | `ask` + our reason      | a prompt naming `jj status` | same                                                                          |
+| `never`                                             | `git commit -m x` | `deny` + our reason     | nothing                     | denied, model gets the `jj` command                                           |
+| **deployment default `never`, no session override** | `git commit -m x` | **`deny` + our reason** | nothing                     | denied with _our_ message — this is the row the two-term expression got wrong |
+| `ask`, no answerer                                  | anything          | `ask`                   | nothing                     | `unavailable` → denied                                                        |
+| any                                                 | `jj new`          | `next()`                | nothing                     | allowed                                                                       |
 
 ## The repetition problem
 
@@ -119,7 +120,7 @@ Two options, and the second is better:
 1. **Accept the repetition.** Correct, annoying.
 2. **Session-scoped allowlist owned by the plugin.** When the user approves a
    verb, remember `(session, verb)` in memory and return `next()` for that verb
-   for the rest of the session. This is *our* state, not the harness's, so it
+   for the rest of the session. This is _our_ state, not the harness's, so it
    must be explicit in the config and visible in the log:
 
    ```ts

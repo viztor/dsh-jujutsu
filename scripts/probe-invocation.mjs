@@ -61,75 +61,187 @@ const MAX_DEPTH = 5;
 // flagged low-confidence because what it execs depends on stdin (docs/15 §4
 // argues for leaving `xargs` alone entirely; see docs/21 §b for the trade-off).
 const WRAPPERS = new Set([
-  'env', 'command', 'nohup', 'time', 'sudo', 'doas', 'exec', 'nice',
-  'stdbuf', 'setsid', 'ionice', 'chrt', 'builtin', 'xargs',
+  "env",
+  "command",
+  "nohup",
+  "time",
+  "sudo",
+  "doas",
+  "exec",
+  "nice",
+  "stdbuf",
+  "setsid",
+  "ionice",
+  "chrt",
+  "builtin",
+  "xargs",
 ]);
 
 // Flags that consume the *next* token, per wrapper. Getting this wrong shifts
 // the head by one and invents a program, so it is per-wrapper, not global.
 const WRAPPER_VALUE_FLAGS = {
-  env: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']),
-  sudo: new Set(['-u', '--user', '-g', '--group', '-p', '--prompt', '-C',
-    '--close-from', '-h', '--host', '-r', '--role', '-t', '--type',
-    '-U', '--other-user', '-D', '--chdir']),
-  doas: new Set(['-u', '-C']),
-  nice: new Set(['-n', '--adjustment']),
+  env: new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]),
+  sudo: new Set([
+    "-u",
+    "--user",
+    "-g",
+    "--group",
+    "-p",
+    "--prompt",
+    "-C",
+    "--close-from",
+    "-h",
+    "--host",
+    "-r",
+    "--role",
+    "-t",
+    "--type",
+    "-U",
+    "--other-user",
+    "-D",
+    "--chdir",
+  ]),
+  doas: new Set(["-u", "-C"]),
+  nice: new Set(["-n", "--adjustment"]),
   time: new Set([]),
   nohup: new Set([]),
   command: new Set([]),
   builtin: new Set([]),
-  exec: new Set(['-a']),
+  exec: new Set(["-a"]),
   setsid: new Set([]),
-  stdbuf: new Set(['-i', '-o', '-e', '--input', '--output', '--error']),
-  ionice: new Set(['-c', '-n', '-p']),
-  chrt: new Set(['-p', '-T', '-P', '-R', '-O', '-D', '-H']),
-  xargs: new Set(['-I', '-i', '-n', '--max-args', '-P', '--max-procs', '-s',
-    '--max-chars', '-a', '--arg-file', '-E', '-e', '-d', '--delimiter', '-L',
-    '--max-lines', '-o', '--open-tty', '-x', '--process-slot-var']),
+  stdbuf: new Set(["-i", "-o", "-e", "--input", "--output", "--error"]),
+  ionice: new Set(["-c", "-n", "-p"]),
+  chrt: new Set(["-p", "-T", "-P", "-R", "-O", "-D", "-H"]),
+  xargs: new Set([
+    "-I",
+    "-i",
+    "-n",
+    "--max-args",
+    "-P",
+    "--max-procs",
+    "-s",
+    "--max-chars",
+    "-a",
+    "--arg-file",
+    "-E",
+    "-e",
+    "-d",
+    "--delimiter",
+    "-L",
+    "--max-lines",
+    "-o",
+    "--open-tty",
+    "-x",
+    "--process-slot-var",
+  ]),
 };
 
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'fish',
-  'csh', 'tcsh', 'busybox']);
+const SHELLS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "ash",
+  "fish",
+  "csh",
+  "tcsh",
+  "busybox",
+]);
 
 // Reserved words that can precede a command without being one.
-const RESERVED_SKIP = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif',
-  'fi', 'while', 'until', 'do', 'done', '[[', ']]', 'function', 'coproc']);
+const RESERVED_SKIP = new Set([
+  "{",
+  "}",
+  "!",
+  "if",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "while",
+  "until",
+  "do",
+  "done",
+  "[[",
+  "]]",
+  "function",
+  "coproc",
+]);
 // Reserved words whose *fragment* is a header, not a command list.
-const RESERVED_SKIP_FRAGMENT = new Set(['for', 'case', 'select']);
+const RESERVED_SKIP_FRAGMENT = new Set(["for", "case", "select"]);
 
-const INTERPRETERS = new Set(['python', 'python2', 'python3', 'node', 'nodejs',
-  'deno', 'bun', 'ruby', 'perl', 'php', 'lua', 'rscript', 'osascript', 'pwsh',
-  'powershell']);
+const INTERPRETERS = new Set([
+  "python",
+  "python2",
+  "python3",
+  "node",
+  "nodejs",
+  "deno",
+  "bun",
+  "ruby",
+  "perl",
+  "php",
+  "lua",
+  "rscript",
+  "osascript",
+  "pwsh",
+  "powershell",
+]);
 
 // Programs that dispatch to commands defined outside the command text.
-const OPAQUE_RUNNERS = new Set(['make', 'just', 'task', 'npm', 'pnpm', 'yarn',
-  'npx', 'pnpx', 'bunx', 'cargo', 'rake', 'gradle', 'mvn', 'docker', 'podman',
-  'poetry', 'uv', 'hatch', 'tox', 'bazel', 'buck2', 'ninja', 'cmake', 'xcodebuild',
-  'source', '.']);
+const OPAQUE_RUNNERS = new Set([
+  "make",
+  "just",
+  "task",
+  "npm",
+  "pnpm",
+  "yarn",
+  "npx",
+  "pnpx",
+  "bunx",
+  "cargo",
+  "rake",
+  "gradle",
+  "mvn",
+  "docker",
+  "podman",
+  "poetry",
+  "uv",
+  "hatch",
+  "tox",
+  "bazel",
+  "buck2",
+  "ninja",
+  "cmake",
+  "xcodebuild",
+  "source",
+  ".",
+]);
 
-const SCRIPT_EXT =
-  /\.(sh|bash|zsh|ksh|fish|csh|py|rb|pl|php|js|mjs|cjs|ts|tsx|ps1|bat|cmd|exe)$/i;
+const SCRIPT_EXT = /\.(sh|bash|zsh|ksh|fish|csh|py|rb|pl|php|js|mjs|cjs|ts|tsx|ps1|bat|cmd|exe)$/i;
 
+// eslint-disable-next-line no-control-regex -- the NUL delimiter is the sentinel
 const SUB = (id) => `\u0000SUB${id}\u0000`;
+// eslint-disable-next-line no-control-regex -- the NUL delimiter is the sentinel
 const SUB_RE = /^\u0000SUB(\d+)\u0000$/;
-const FUNC_SENTINEL = '\u0000FUNCDEF\u0000';
+const FUNC_SENTINEL = "\u0000FUNCDEF\u0000";
 
 /* ── small helpers ───────────────────────────────────────────────────────── */
 
 const basename = (p) => {
   const s = String(p);
-  const i = s.lastIndexOf('/');
+  const i = s.lastIndexOf("/");
   return i === -1 ? s : s.slice(i + 1);
 };
 
-const stripParens = (s) => s.replace(/^\(+/, '').replace(/\)+$/, '');
+const stripParens = (s) => s.replace(/^\(+/, "").replace(/\)+$/, "");
 
-const isAssignment = (v) =>
-  /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/.test(v);
+const isAssignment = (v) => /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/.test(v);
 
 /** `git status` → `` `git status` ``, but survives embedded backticks. */
 function code(s) {
-  return s.includes('`') ? '`` ' + s + ' ``' : '`' + s + '`';
+  return s.includes("`") ? "`` " + s + " ``" : "`" + s + "`";
 }
 
 /* ── tokenizer ───────────────────────────────────────────────────────────── */
@@ -146,21 +258,44 @@ function tokenize(text) {
   const tokens = [];
   let i = 0;
   const n = text.length;
-  let value = '', quoted = false, escaped = false, started = false, start = -1;
+  let value = "",
+    quoted = false,
+    escaped = false,
+    started = false,
+    start = -1;
 
   const flush = (end) => {
     if (started) tokens.push({ value, quoted, escaped, start, end });
-    value = ''; quoted = false; escaped = false; started = false; start = -1;
+    value = "";
+    quoted = false;
+    escaped = false;
+    started = false;
+    start = -1;
   };
-  const begin = () => { if (!started) { started = true; start = i; } };
+  const begin = () => {
+    if (!started) {
+      started = true;
+      start = i;
+    }
+  };
 
   while (i < n) {
     const c = text[i];
 
-    if (c === '\\') {
-      if (text[i + 1] === '\n') { i += 2; continue; }          // continuation
-      if (i + 1 < n) { begin(); value += text[i + 1]; escaped = true; i += 2; continue; }
-      i++; continue;
+    if (c === "\\") {
+      if (text[i + 1] === "\n") {
+        i += 2;
+        continue;
+      } // continuation
+      if (i + 1 < n) {
+        begin();
+        value += text[i + 1];
+        escaped = true;
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
     }
 
     if (c === "'") {
@@ -176,40 +311,78 @@ function tokenize(text) {
       begin();
       i++;
       while (i < n && text[i] !== '"') {
-        if (text[i] === '\\' && i + 1 < n && '"\\$`'.includes(text[i + 1])) {
-          value += text[i + 1]; i += 2; continue;
+        if (text[i] === "\\" && i + 1 < n && '"\\$`'.includes(text[i + 1])) {
+          value += text[i + 1];
+          i += 2;
+          continue;
         }
-        value += text[i]; i++;
+        value += text[i];
+        i++;
       }
       i++; // closing quote (or EOF)
       quoted = true;
       continue;
     }
 
-    if (c === ' ' || c === '\t' || c === '\r') { flush(i); i++; continue; }
-    if (c === '\n') { flush(i); tokens.push({ op: '\n' }); i++; continue; }
-
-    if (c === '#' && !started) {                    // comment to end of line
-      while (i < n && text[i] !== '\n') i++;
+    if (c === " " || c === "\t" || c === "\r") {
+      flush(i);
+      i++;
+      continue;
+    }
+    if (c === "\n") {
+      flush(i);
+      tokens.push({ op: "\n" });
+      i++;
       continue;
     }
 
-    if (c === ';') { flush(i); tokens.push({ op: ';' }); i++; continue; }
-    if (c === '&' && text[i + 1] === '>') { begin(); value += '&>'; i += 2; continue; }
-    if (c === '&') {
-      flush(i);
-      if (text[i + 1] === '&') { tokens.push({ op: '&&' }); i += 2; }
-      else { tokens.push({ op: '&' }); i++; }
+    if (c === "#" && !started) {
+      // comment to end of line
+      while (i < n && text[i] !== "\n") i++;
       continue;
     }
-    if ((c === '>' || c === '<') && text[i + 1] === '&') {
-      begin(); value += c + '&'; i += 2; continue;      // `2>&1`, `<&0`
-    }
-    if (c === '|') {
+
+    if (c === ";") {
       flush(i);
-      if (text[i + 1] === '|') { tokens.push({ op: '||' }); i += 2; }
-      else if (text[i + 1] === '&') { tokens.push({ op: '|&' }); i += 2; }
-      else { tokens.push({ op: '|' }); i++; }
+      tokens.push({ op: ";" });
+      i++;
+      continue;
+    }
+    if (c === "&" && text[i + 1] === ">") {
+      begin();
+      value += "&>";
+      i += 2;
+      continue;
+    }
+    if (c === "&") {
+      flush(i);
+      if (text[i + 1] === "&") {
+        tokens.push({ op: "&&" });
+        i += 2;
+      } else {
+        tokens.push({ op: "&" });
+        i++;
+      }
+      continue;
+    }
+    if ((c === ">" || c === "<") && text[i + 1] === "&") {
+      begin();
+      value += c + "&";
+      i += 2;
+      continue; // `2>&1`, `<&0`
+    }
+    if (c === "|") {
+      flush(i);
+      if (text[i + 1] === "|") {
+        tokens.push({ op: "||" });
+        i += 2;
+      } else if (text[i + 1] === "&") {
+        tokens.push({ op: "|&" });
+        i += 2;
+      } else {
+        tokens.push({ op: "|" });
+        i++;
+      }
       continue;
     }
 
@@ -226,12 +399,16 @@ function splitFragments(tokens, replaced) {
   let cur = [];
   const emit = () => {
     if (!cur.length) return;
-    const first = cur[0], last = cur[cur.length - 1];
+    const first = cur[0],
+      last = cur[cur.length - 1];
     frags.push({ tokens: cur, raw: replaced.slice(first.start, last.end).trim() });
     cur = [];
   };
   for (const t of tokens) {
-    if (t.op) { emit(); continue; }
+    if (t.op) {
+      emit();
+      continue;
+    }
     cur.push(t);
   }
   emit();
@@ -241,25 +418,43 @@ function splitFragments(tokens, replaced) {
 /* ── substitution extraction ─────────────────────────────────────────────── */
 
 function findMatchingParen(text, start) {
-  let depth = 1, i = start, quote = null;   // caller is just past the `(`
+  let depth = 1,
+    i = start,
+    quote = null; // caller is just past the `(`
   for (; i < text.length; i++) {
     const c = text[i];
-    if (quote === "'") { if (c === "'") quote = null; continue; }
-    if (c === '\\') { i++; continue; }
-    if (c === "'" && quote === null) { quote = "'"; continue; }
-    if (c === '"') { quote = quote === '"' ? null : '"'; continue; }
-    if (c === '(') depth++;
-    else if (c === ')') { depth--; if (depth === 0) return i; }
+    if (quote === "'") {
+      if (c === "'") quote = null;
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === "'" && quote === null) {
+      quote = "'";
+      continue;
+    }
+    if (c === '"') {
+      quote = quote === '"' ? null : '"';
+      continue;
+    }
+    if (c === "(") depth++;
+    else if (c === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
   }
   return -1;
 }
 
 function findArithEnd(text, start) {
-  let depth = 0, i = start;
+  let depth = 0,
+    i = start;
   for (; i < text.length; i++) {
-    if (text[i] === '(') depth++;
-    else if (text[i] === ')') {
-      if (depth === 0 && text[i + 1] === ')') return i + 2;
+    if (text[i] === "(") depth++;
+    else if (text[i] === ")") {
+      if (depth === 0 && text[i + 1] === ")") return i + 2;
       depth--;
     }
   }
@@ -268,8 +463,11 @@ function findArithEnd(text, start) {
 
 function findBacktickEnd(text, start) {
   for (let i = start; i < text.length; i++) {
-    if (text[i] === '\\') { i++; continue; }
-    if (text[i] === '`') return i;
+    if (text[i] === "\\") {
+      i++;
+      continue;
+    }
+    if (text[i] === "`") return i;
   }
   return -1;
 }
@@ -282,7 +480,7 @@ function findBacktickEnd(text, start) {
  */
 function extractSubstitutions(text) {
   const bodies = [];
-  let out = '';
+  let out = "";
   let i = 0;
   const n = text.length;
   let quote = null;
@@ -290,32 +488,60 @@ function extractSubstitutions(text) {
   while (i < n) {
     const c = text[i];
 
-    if (quote === "'") { out += c; if (c === "'") quote = null; i++; continue; }
-    if (c === '\\' && quote !== "'") { out += text.slice(i, i + 2); i += 2; continue; }
-    if (c === "'" && quote === null) { quote = "'"; out += c; i++; continue; }
-    if (c === '"') { quote = quote === '"' ? null : '"'; out += c; i++; continue; }
+    if (quote === "'") {
+      out += c;
+      if (c === "'") quote = null;
+      i++;
+      continue;
+    }
+    if (c === "\\" && quote !== "'") {
+      out += text.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c === "'" && quote === null) {
+      quote = "'";
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      quote = quote === '"' ? null : '"';
+      out += c;
+      i++;
+      continue;
+    }
 
-    if (c === '$' && text[i + 1] === '(') {
-      if (text[i + 2] === '(') {                       // arithmetic, skip
+    if (c === "$" && text[i + 1] === "(") {
+      if (text[i + 2] === "(") {
+        // arithmetic, skip
         const end = findArithEnd(text, i + 3);
-        out += text.slice(i, end); i = end; continue;
+        out += text.slice(i, end);
+        i = end;
+        continue;
       }
       const end = findMatchingParen(text, i + 2);
       if (end === -1) {
-        bodies.push({ kind: 'unterminated `$(`', body: text.slice(i + 2) });
-        out += text.slice(i); i = n; continue;
+        bodies.push({ kind: "unterminated `$(`", body: text.slice(i + 2) });
+        out += text.slice(i);
+        i = n;
+        continue;
       }
       const body = text.slice(i + 2, end);
-      bodies.push({ kind: 'command substitution `$(…)`', body, raw: text.slice(i, end + 1) });
+      bodies.push({ kind: "command substitution `$(…)`", body, raw: text.slice(i, end + 1) });
       out += SUB(bodies.length - 1);
       i = end + 1;
       continue;
     }
 
-    if (c === '`') {
+    if (c === "`") {
       const end = findBacktickEnd(text, i + 1);
       const body = end === -1 ? text.slice(i + 1) : text.slice(i + 1, end);
-      bodies.push({ kind: 'backtick substitution', body, raw: text.slice(i, (end === -1 ? n : end) + 1) });
+      bodies.push({
+        kind: "backtick substitution",
+        body,
+        raw: text.slice(i, (end === -1 ? n : end) + 1),
+      });
       out += SUB(bodies.length - 1);
       i = end === -1 ? n : end + 1;
       continue;
@@ -333,17 +559,35 @@ function findVariableRefs(text) {
   let quote = null;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c === '\\') { i++; continue; }
-    if (c === "'" && quote !== "'") { quote = quote === null ? "'" : null; continue; }
-    if (c === '"' && quote !== "'") { quote = quote === '"' ? null : '"'; continue; }
-    if (c !== '$') continue;
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === "'" && quote !== "'") {
+      quote = quote === null ? "'" : null;
+      continue;
+    }
+    if (c === '"' && quote !== "'") {
+      quote = quote === '"' ? null : '"';
+      continue;
+    }
+    if (c !== "$") continue;
     const rest = text.slice(i);
     let m = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}/.exec(rest);
-    if (m) { found.add('${' + m[1] + '}'); continue; }
+    if (m) {
+      found.add("${" + m[1] + "}");
+      continue;
+    }
     m = /^\$([A-Za-z_][A-Za-z0-9_]*)/.exec(rest);
-    if (m) { found.add('$' + m[1]); continue; }
+    if (m) {
+      found.add("$" + m[1]);
+      continue;
+    }
     m = /^\$([@*])/.exec(rest);
-    if (m) { found.add('$' + m[1]); continue; }
+    if (m) {
+      found.add("$" + m[1]);
+      continue;
+    }
   }
   return [...found];
 }
@@ -360,14 +604,14 @@ function findVariableRefs(text) {
 function maskFunctionDefs(text) {
   const names = [];
   let out = text;
-  out = out.replace(
-    /(^|[;&|\n])\s*function\s+([A-Za-z_][A-Za-z0-9_.-]*)/g,
-    (_m, p1, name) => { names.push(name); return p1 + ' ' + FUNC_SENTINEL; },
-  );
-  out = out.replace(
-    /(^|[;&|\n])\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\(\s*\)/g,
-    (_m, p1, name) => { names.push(name); return p1 + ' ' + FUNC_SENTINEL; },
-  );
+  out = out.replace(/(^|[;&|\n])\s*function\s+([A-Za-z_][A-Za-z0-9_.-]*)/g, (_m, p1, name) => {
+    names.push(name);
+    return p1 + " " + FUNC_SENTINEL;
+  });
+  out = out.replace(/(^|[;&|\n])\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\(\s*\)/g, (_m, p1, name) => {
+    names.push(name);
+    return p1 + " " + FUNC_SENTINEL;
+  });
   return { text: out, names };
 }
 
@@ -377,10 +621,13 @@ function skipFlags(tokens, i, wrapper) {
   const takesValue = WRAPPER_VALUE_FLAGS[wrapper] || new Set();
   while (i < tokens.length) {
     const v = tokens[i].value;
-    if (v === '--') return i + 1;
-    if (!v.startsWith('-')) return i;
-    if (takesValue.has(v)) { i += 2; continue; }
-    i += 1;                                   // plain flag or `-n10` style
+    if (v === "--") return i + 1;
+    if (!v.startsWith("-")) return i;
+    if (takesValue.has(v)) {
+      i += 2;
+      continue;
+    }
+    i += 1; // plain flag or `-n10` style
   }
   return i;
 }
@@ -389,8 +636,8 @@ function skipFlags(tokens, i, wrapper) {
 function findDashC(tokens, from) {
   for (let j = from; j < tokens.length; j++) {
     const v = tokens[j].value;
-    if (v === '--') return -1;
-    if (!v.startsWith('-')) return -1;
+    if (v === "--") return -1;
+    if (!v.startsWith("-")) return -1;
     if (/^-[A-Za-z]*c[A-Za-z]*$/.test(v)) return j;
   }
   return -1;
@@ -400,8 +647,9 @@ function record(state, prog, raw, isGit) {
   if (!prog || prog === FUNC_SENTINEL) return;
   if (!state.programs.includes(prog)) state.programs.push(prog);
   const shown = String(raw)
-    .replace(/\u0000SUB\d+\u0000/g, '$(…)')
-    .replace(new RegExp(FUNC_SENTINEL, 'g'), 'function')
+    // eslint-disable-next-line no-control-regex -- the NUL delimiter is the sentinel
+    .replace(/\u0000SUB\d+\u0000/g, "$(…)")
+    .replace(new RegExp(FUNC_SENTINEL, "g"), "function")
     .trim();
   if (isGit && !state.gitInvocations.includes(shown)) state.gitInvocations.push(shown);
 }
@@ -416,52 +664,78 @@ function analyzeFragment(frag, state, depth) {
     if (i >= tokens.length) return;
     const t = tokens[i];
     const v = t.value;
-    if (v === '') { i++; continue; }
+    if (v === "") {
+      i++;
+      continue;
+    }
 
     if (RESERVED_SKIP_FRAGMENT.has(v)) {
       state.low = true;
-      state.notes.push(`unresolved: control-flow keyword \`${v}\` — this fragment is a header; any command inside it is not analyzed`);
+      state.notes.push(
+        `unresolved: control-flow keyword \`${v}\` — this fragment is a header; any command inside it is not analyzed`,
+      );
       return;
     }
     if (RESERVED_SKIP.has(v)) {
       state.notes.push(`info: reserved word \`${v}\` skipped`);
-      i++; continue;
+      i++;
+      continue;
     }
-    if (/^[0-9]*(>>?|<<?|<>)$/.test(v) || /^&>>?$/.test(v)) { i += 2; continue; } // `> file`: operator + target
-    if (/^[0-9]*[<>]/.test(v) || /^\d+$/.test(v)) { i++; continue; }   // self-contained redirection (`>f`, `2>&1`)
+    if (/^[0-9]*(>>?|<<?|<>)$/.test(v) || /^&>>?$/.test(v)) {
+      i += 2;
+      continue;
+    } // `> file`: operator + target
+    if (/^[0-9]*[<>]/.test(v) || /^\d+$/.test(v)) {
+      i++;
+      continue;
+    } // self-contained redirection (`>f`, `2>&1`)
     if (isAssignment(v) && !t.quoted) {
       if (/^PATH(\[[^\]]*\])?\+?=/.test(v)) {
         state.low = true;
-        state.notes.push('unresolved: `PATH` is reassigned in this command text — program resolution may change');
+        state.notes.push(
+          "unresolved: `PATH` is reassigned in this command text — program resolution may change",
+        );
       }
-      i++; continue;
+      i++;
+      continue;
     }
 
     const base = basename(v);
-    if (base === 'alias' || base === 'unalias' || base === 'shopt') {
+    if (base === "alias" || base === "unalias" || base === "shopt") {
       state.low = true;
-      state.notes.push(`unresolved: \`${base}\` changes shell name resolution (aliases/options) which is not modeled`);
+      state.notes.push(
+        `unresolved: \`${base}\` changes shell name resolution (aliases/options) which is not modeled`,
+      );
       record(state, base, raw, false);
       return;
     }
-    if (base === 'set' && tokens.slice(i + 1).some((x) => x.value === '-o')) {
+    if (base === "set" && tokens.slice(i + 1).some((x) => x.value === "-o")) {
       state.low = true;
-      state.notes.push('unresolved: `set -o` changes shell options');
+      state.notes.push("unresolved: `set -o` changes shell options");
       record(state, base, raw, false);
       return;
     }
     if (WRAPPERS.has(base)) {
-      if (base === 'command') functionBypassed = true;
-      if (base === 'xargs') {
+      if (base === "command") functionBypassed = true;
+      if (base === "xargs") {
         state.low = true;
-        state.notes.push('unresolved: `xargs` — the program it runs is assembled from stdin; detection here is best-effort');
+        state.notes.push(
+          "unresolved: `xargs` — the program it runs is assembled from stdin; detection here is best-effort",
+        );
       }
       i = skipFlags(tokens, i + 1, base);
       continue;
     }
-    if (base === 'eval') {
-      const body = tokens.slice(i + 1).map((x) => x.value).join(' ');
-      if (!body.trim()) { state.low = true; state.notes.push('unresolved: `eval` with an empty body'); return; }
+    if (base === "eval") {
+      const body = tokens
+        .slice(i + 1)
+        .map((x) => x.value)
+        .join(" ");
+      if (!body.trim()) {
+        state.low = true;
+        state.notes.push("unresolved: `eval` with an empty body");
+        return;
+      }
       state.notes.push(`recursed: \`eval\` body → ${code(body.trim())}`);
       analyze(body, state, depth + 1);
       return;
@@ -471,30 +745,38 @@ function analyzeFragment(frag, state, depth) {
 
   const head = tokens[i];
   let hv = stripParens(head.value);
-  if (hv === '') return;
+  if (hv === "") return;
 
   if (SUB_RE.test(hv)) {
     state.low = true;
-    state.notes.push('unresolved: command substitution in program position — the program name is computed at run time');
+    state.notes.push(
+      "unresolved: command substitution in program position — the program name is computed at run time",
+    );
     return;
   }
-  if (hv.includes('\u0000SUB')) {
+  // eslint-disable-next-line no-control-regex -- the NUL delimiter is the sentinel
+  if (hv.includes("\u0000SUB")) {
     state.low = true;
-    state.notes.push(`unresolved: command substitution inside the word \`${hv.replace(/\u0000SUB\d+\u0000/g, '$(…)')}\``);
+    state.notes.push(
+      // eslint-disable-next-line no-control-regex -- the NUL delimiter is the sentinel
+      `unresolved: command substitution inside the word \`${hv.replace(/\u0000SUB\d+\u0000/g, "$(…)")}\``,
+    );
     return;
   }
-  if (hv.startsWith('$')) {
+  if (hv.startsWith("$")) {
     state.low = true;
     state.notes.push(`unresolved: variable expansion in program position: \`${hv}\``);
     return;
   }
-  if (/^[0-9]*[<>]/.test(hv) || /^\d+$/.test(hv)) return;   // redirection / fd noise
+  if (/^[0-9]*[<>]/.test(hv) || /^\d+$/.test(hv)) return; // redirection / fd noise
   if (hv === FUNC_SENTINEL) {
-    state.notes.push('unresolved: shell function definition — body not analyzed (a definition alone invokes nothing)');
+    state.notes.push(
+      "unresolved: shell function definition — body not analyzed (a definition alone invokes nothing)",
+    );
     return;
   }
 
-  const prog = basename(hv).replace(/\.exe$/i, '');
+  const prog = basename(hv).replace(/\.exe$/i, "");
   const shadowed = state.functionDefs.has(prog) && !functionBypassed && !head.escaped;
 
   /* shells: recurse into `-c` bodies, otherwise treat the file as opaque */
@@ -505,7 +787,7 @@ function analyzeFragment(frag, state, depth) {
       const body = tokens[ci + 1].value;
       state.notes.push(`recursed: \`${prog} ${tokens[ci].value}\` body → ${code(body.trim())}`);
       analyze(body, state, depth + 1);
-    } else if (tokens.slice(i + 1).some((t) => !t.value.startsWith('-'))) {
+    } else if (tokens.slice(i + 1).some((t) => !t.value.startsWith("-"))) {
       state.low = true;
       state.notes.push(`unresolved: \`${prog}\` runs a script file — contents not read`);
     }
@@ -513,15 +795,15 @@ function analyzeFragment(frag, state, depth) {
   }
 
   /* find/xargs style: the token after -exec is a program by definition */
-  if (prog === 'find') {
+  if (prog === "find") {
     record(state, prog, raw, false);
     for (let j = i + 1; j < tokens.length; j++) {
       const v = tokens[j].value;
-      if (v === '-exec' || v === '-execdir' || v === '-ok' || v === '-okdir') {
+      if (v === "-exec" || v === "-execdir" || v === "-ok" || v === "-okdir") {
         const nx = tokens[j + 1];
         if (nx) {
-          const p = basename(stripParens(nx.value)).replace(/\.exe$/i, '');
-          record(state, p, raw, p === 'git');
+          const p = basename(stripParens(nx.value)).replace(/\.exe$/i, "");
+          record(state, p, raw, p === "git");
           state.notes.push(`info: \`find ${v}\` — program token \`${p}\` read statically`);
         }
       }
@@ -534,15 +816,19 @@ function analyzeFragment(frag, state, depth) {
     record(state, prog, raw, false);
     state.low = true;
     const inline = tokens.slice(i + 1).find((t) => /^-[A-Za-z]*[ce]$/.test(t.value));
-    state.notes.push(inline
-      ? `unresolved: \`${prog} ${inline.value}\` — inline code is not analyzed`
-      : `unresolved: \`${prog}\` runs a file whose contents are not analyzed`);
+    state.notes.push(
+      inline
+        ? `unresolved: \`${prog} ${inline.value}\` — inline code is not analyzed`
+        : `unresolved: \`${prog}\` runs a file whose contents are not analyzed`,
+    );
     return;
   }
   if (OPAQUE_RUNNERS.has(prog)) {
     record(state, prog, raw, false);
     state.low = true;
-    state.notes.push(`unresolved: \`${prog}\` dispatches to a target defined outside the command text`);
+    state.notes.push(
+      `unresolved: \`${prog}\` dispatches to a target defined outside the command text`,
+    );
     return;
   }
   if (SCRIPT_EXT.test(prog)) {
@@ -552,14 +838,16 @@ function analyzeFragment(frag, state, depth) {
     return;
   }
 
-  if (prog === 'git' && shadowed) {
+  if (prog === "git" && shadowed) {
     state.low = true;
-    state.notes.push(`unresolved: \`${prog}\` is also defined as a shell function in this command text; the function runs, not the binary`);
+    state.notes.push(
+      `unresolved: \`${prog}\` is also defined as a shell function in this command text; the function runs, not the binary`,
+    );
     record(state, prog, raw, false);
     return;
   }
 
-  record(state, prog, raw, prog === 'git');
+  record(state, prog, raw, prog === "git");
 }
 
 /* ── driver ──────────────────────────────────────────────────────────────── */
@@ -567,15 +855,17 @@ function analyzeFragment(frag, state, depth) {
 function analyze(text, state, depth) {
   if (depth > MAX_DEPTH) {
     state.low = true;
-    state.notes.push(`unresolved: recursion depth cap (${MAX_DEPTH}) reached — nested command text not analyzed`);
+    state.notes.push(
+      `unresolved: recursion depth cap (${MAX_DEPTH}) reached — nested command text not analyzed`,
+    );
     return;
   }
 
   const { text: substituted, bodies } = extractSubstitutions(text);
   for (const b of bodies) {
-    if (b.kind.includes('unterminated')) {
+    if (b.kind.includes("unterminated")) {
       state.low = true;
-      state.notes.push('unresolved: unterminated command substitution');
+      state.notes.push("unresolved: unterminated command substitution");
       continue;
     }
     state.notes.push(`recursed: ${b.kind} → ${code(b.body.trim())}`);
@@ -583,14 +873,18 @@ function analyze(text, state, depth) {
   }
 
   for (const v of findVariableRefs(substituted)) {
-    state.notes.push(`info: variable expansion \`${v}\` in arguments — does not change the program`);
+    state.notes.push(
+      `info: variable expansion \`${v}\` in arguments — does not change the program`,
+    );
   }
 
   const masked = maskFunctionDefs(substituted);
   for (const name of masked.names) {
     state.low = true;
     state.functionDefs.add(name);
-    state.notes.push(`unresolved: shell function definition \`${name}\` — later calls to that name are ambiguous`);
+    state.notes.push(
+      `unresolved: shell function definition \`${name}\` — later calls to that name are ambiguous`,
+    );
   }
 
   for (const frag of splitFragments(tokenize(masked.text), masked.text)) {
@@ -604,15 +898,21 @@ function analyze(text, state, depth) {
  * @returns {{programs: string[], gitInvocations: string[], confidence: 'high'|'low', notes: string[]}}
  */
 export function classifyInvocation(command) {
-  const state = { programs: [], gitInvocations: [], notes: [], low: false, functionDefs: new Set() };
-  if (typeof command !== 'string' || command.trim() === '') {
-    return { programs: [], gitInvocations: [], confidence: 'high', notes: ['info: empty command'] };
+  const state = {
+    programs: [],
+    gitInvocations: [],
+    notes: [],
+    low: false,
+    functionDefs: new Set(),
+  };
+  if (typeof command !== "string" || command.trim() === "") {
+    return { programs: [], gitInvocations: [], confidence: "high", notes: ["info: empty command"] };
   }
   analyze(command, state, 0);
   return {
     programs: state.programs,
     gitInvocations: state.gitInvocations,
-    confidence: state.low ? 'low' : 'high',
+    confidence: state.low ? "low" : "high",
     notes: [...new Set(state.notes)],
   };
 }
@@ -624,81 +924,183 @@ export function classifyInvocation(command) {
 
 export const CORPUS = [
   // ── direct
-  { cmd: 'git status', truth: 'git', what: 'Git runs; in a colocated repo it reads jj-maintained state' },
-  { cmd: 'git commit -m x', truth: 'git', what: 'Git commits; jj then re-parents the working copy' },
-  { cmd: 'git commit -m "x" && git push', truth: 'git', what: 'two Git invocations joined by &&' },
-  { cmd: 'cd /tmp && git log', truth: 'git', what: 'Git outside the workspace' },
-  { cmd: 'git status; jj log', truth: 'git', what: 'Git then jj; only the first is a violation' },
-  { cmd: 'git --version', truth: 'git', what: 'Git with no subcommand' },
-  { cmd: 'git status 2>&1 | tee log', truth: 'git', what: 'redirection and a pipe after the program' },
+  {
+    cmd: "git status",
+    truth: "git",
+    what: "Git runs; in a colocated repo it reads jj-maintained state",
+  },
+  {
+    cmd: "git commit -m x",
+    truth: "git",
+    what: "Git commits; jj then re-parents the working copy",
+  },
+  { cmd: 'git commit -m "x" && git push', truth: "git", what: "two Git invocations joined by &&" },
+  { cmd: "cd /tmp && git log", truth: "git", what: "Git outside the workspace" },
+  { cmd: "git status; jj log", truth: "git", what: "Git then jj; only the first is a violation" },
+  { cmd: "git --version", truth: "git", what: "Git with no subcommand" },
+  {
+    cmd: "git status 2>&1 | tee log",
+    truth: "git",
+    what: "redirection and a pipe after the program",
+  },
   // ── wrappers
-  { cmd: 'command git status', truth: 'git', what: '`command` bypasses functions/aliases, still runs Git' },
-  { cmd: 'env FOO=1 git push', truth: 'git', what: 'env execs Git with an extra variable' },
-  { cmd: 'env -i git status', truth: 'git', what: 'clears the environment, but the default PATH still finds /usr/bin/git' },
-  { cmd: 'nohup git fetch', truth: 'git', what: 'nohup execs Git' },
-  { cmd: 'time git log', truth: 'git', what: 'the `time` keyword runs Git' },
-  { cmd: 'sudo git status', truth: 'git', method: 'reasoned', what: 'sudo execs Git as root' },
-  { cmd: 'exec git status', truth: 'git', what: 'exec replaces the shell with Git' },
-  { cmd: 'nice git log', truth: 'git', what: 'nice execs Git' },
-  { cmd: 'nice -n 10 git log', truth: 'git', what: '`-n 10` belongs to nice, not to the program' },
-  { cmd: 'sudo -u root -- git push', truth: 'git', method: 'reasoned', what: 'sudo flag, value and `--` before the program' },
-  { cmd: 'sudo sh -c \'git push\'', truth: 'git', method: 'reasoned', what: 'wrapper, then a nested shell body' },
-  { cmd: 'env FOO=1 sh -c "git push"', truth: 'git', what: 'assignment, wrapper, nested shell' },
-  { cmd: '\\git status', truth: 'git', what: 'backslash suppresses alias/function lookup, runs the binary' },
-  { cmd: 'FOO=1 BAR=2 git status', truth: 'git', what: 'bare assignments prefix a simple command' },
+  {
+    cmd: "command git status",
+    truth: "git",
+    what: "`command` bypasses functions/aliases, still runs Git",
+  },
+  { cmd: "env FOO=1 git push", truth: "git", what: "env execs Git with an extra variable" },
+  {
+    cmd: "env -i git status",
+    truth: "git",
+    what: "clears the environment, but the default PATH still finds /usr/bin/git",
+  },
+  { cmd: "nohup git fetch", truth: "git", what: "nohup execs Git" },
+  { cmd: "time git log", truth: "git", what: "the `time` keyword runs Git" },
+  { cmd: "sudo git status", truth: "git", method: "reasoned", what: "sudo execs Git as root" },
+  { cmd: "exec git status", truth: "git", what: "exec replaces the shell with Git" },
+  { cmd: "nice git log", truth: "git", what: "nice execs Git" },
+  { cmd: "nice -n 10 git log", truth: "git", what: "`-n 10` belongs to nice, not to the program" },
+  {
+    cmd: "sudo -u root -- git push",
+    truth: "git",
+    method: "reasoned",
+    what: "sudo flag, value and `--` before the program",
+  },
+  {
+    cmd: "sudo sh -c 'git push'",
+    truth: "git",
+    method: "reasoned",
+    what: "wrapper, then a nested shell body",
+  },
+  { cmd: 'env FOO=1 sh -c "git push"', truth: "git", what: "assignment, wrapper, nested shell" },
+  {
+    cmd: "\\git status",
+    truth: "git",
+    what: "backslash suppresses alias/function lookup, runs the binary",
+  },
+  { cmd: "FOO=1 BAR=2 git status", truth: "git", what: "bare assignments prefix a simple command" },
   // ── path forms
-  { cmd: '/usr/bin/git status', truth: 'git', method: 'reasoned', what: 'Apple Git at an absolute path' },
-  { cmd: '/opt/homebrew/bin/git --version', truth: 'git', method: 'reasoned', what: 'Homebrew Git at an absolute path' },
-  { cmd: './git status', truth: 'git', what: 'a relative path to a binary named git' },
-  { cmd: 'git-lfs pull', truth: 'none', what: 'a different binary; it internally execs `git version` and `git rev-parse` (observed)' },
-  { cmd: 'jj-hunk list', truth: 'none', what: 'a different binary again' },
+  {
+    cmd: "/usr/bin/git status",
+    truth: "git",
+    method: "reasoned",
+    what: "Apple Git at an absolute path",
+  },
+  {
+    cmd: "/opt/homebrew/bin/git --version",
+    truth: "git",
+    method: "reasoned",
+    what: "Homebrew Git at an absolute path",
+  },
+  { cmd: "./git status", truth: "git", what: "a relative path to a binary named git" },
+  {
+    cmd: "git-lfs pull",
+    truth: "none",
+    what: "a different binary; it internally execs `git version` and `git rev-parse` (observed)",
+  },
+  { cmd: "jj-hunk list", truth: "none", what: "a different binary again" },
   // ── nesting
-  { cmd: "sh -c 'git commit'", truth: 'git', what: 'the nested body is the command' },
-  { cmd: 'bash -lc "git push"', truth: 'git', what: 'login shell resets PATH, then the -c body runs Git' },
-  { cmd: "zsh -c 'git status'", truth: 'git', what: 'zsh nested body' },
-  { cmd: "bash -c 'echo hi; git status'", truth: 'git', what: 'two commands inside one nested body' },
-  { cmd: "eval 'git log'", truth: 'git', what: 'eval parses its argument as a command' },
-  { cmd: 'echo "v=$(git rev-parse HEAD)"', truth: 'git', what: 'substitution runs Git although the head program is echo' },
-  { cmd: 'echo "v=`git rev-parse HEAD`"', truth: 'git', what: 'same, with backticks' },
-  { cmd: 'echo "$(echo git)"', truth: 'none', what: 'a substitution that never invokes Git' },
+  { cmd: "sh -c 'git commit'", truth: "git", what: "the nested body is the command" },
+  {
+    cmd: 'bash -lc "git push"',
+    truth: "git",
+    what: "login shell resets PATH, then the -c body runs Git",
+  },
+  { cmd: "zsh -c 'git status'", truth: "git", what: "zsh nested body" },
+  {
+    cmd: "bash -c 'echo hi; git status'",
+    truth: "git",
+    what: "two commands inside one nested body",
+  },
+  { cmd: "eval 'git log'", truth: "git", what: "eval parses its argument as a command" },
+  {
+    cmd: 'echo "v=$(git rev-parse HEAD)"',
+    truth: "git",
+    what: "substitution runs Git although the head program is echo",
+  },
+  { cmd: 'echo "v=`git rev-parse HEAD`"', truth: "git", what: "same, with backticks" },
+  { cmd: 'echo "$(echo git)"', truth: "none", what: "a substitution that never invokes Git" },
   // ── indirection
-  { cmd: 'g=git; $g status', truth: 'git', what: 'the program name comes from a variable' },
-  { cmd: "alias gs='git status'; gs", truth: 'none', what: 'aliases are off in a non-interactive shell, so `gs` runs Ghostscript (which is on PATH) instead' },
-  { cmd: "shopt -s expand_aliases; alias gs='git status'; gs", truth: 'none', what: 'still no alias expansion: with `;` the whole line is parsed before the alias exists' },
-  { cmd: "shopt -s expand_aliases\nalias gs='git status'\ngs", truth: 'git', what: 'on separate input lines the alias is defined before use, and really runs Git' },
-  { cmd: 'echo hi | xargs git add', truth: 'git', what: 'xargs execs Git on the piped input' },
-  { cmd: "printf 'a\\n' | xargs -n1 git add", truth: 'git', what: 'xargs with a flag before the program' },
-  { cmd: 'find . -exec git status \\;', truth: 'git', what: 'find -exec runs Git' },
-  { cmd: 'git() { command git "$@"; }', truth: 'none', what: 'a definition is inert; nothing runs' },
-  { cmd: 'git() { command git "$@"; }; git status', truth: 'git', what: 'the call runs the function, which reaches the real Git via `command`' },
+  { cmd: "g=git; $g status", truth: "git", what: "the program name comes from a variable" },
+  {
+    cmd: "alias gs='git status'; gs",
+    truth: "none",
+    what: "aliases are off in a non-interactive shell, so `gs` runs Ghostscript (which is on PATH) instead",
+  },
+  {
+    cmd: "shopt -s expand_aliases; alias gs='git status'; gs",
+    truth: "none",
+    what: "still no alias expansion: with `;` the whole line is parsed before the alias exists",
+  },
+  {
+    cmd: "shopt -s expand_aliases\nalias gs='git status'\ngs",
+    truth: "git",
+    what: "on separate input lines the alias is defined before use, and really runs Git",
+  },
+  { cmd: "echo hi | xargs git add", truth: "git", what: "xargs execs Git on the piped input" },
+  {
+    cmd: "printf 'a\\n' | xargs -n1 git add",
+    truth: "git",
+    what: "xargs with a flag before the program",
+  },
+  { cmd: "find . -exec git status \\;", truth: "git", what: "find -exec runs Git" },
+  {
+    cmd: 'git() { command git "$@"; }',
+    truth: "none",
+    what: "a definition is inert; nothing runs",
+  },
+  {
+    cmd: 'git() { command git "$@"; }; git status',
+    truth: "git",
+    what: "the call runs the function, which reaches the real Git via `command`",
+  },
   // ── scripts and other runners
-  { cmd: 'make commit', truth: 'git', what: 'the Makefile target shells out to Git' },
-  { cmd: './scripts/commit.sh', truth: 'git', what: 'the script shells out to Git' },
-  { cmd: 'bash scripts/release.sh', truth: 'git', what: 'bash runs a file that shells out to Git' },
-  { cmd: 'npm run release', truth: 'git', what: 'the package.json script shells out to Git' },
-  { cmd: 'npm run git:check', truth: 'none', what: 'a script whose *name* contains git; its body is echo' },
-  { cmd: 'python3 scripts/deploy.py', truth: 'git', what: 'the Python file spawns Git' },
+  { cmd: "make commit", truth: "git", what: "the Makefile target shells out to Git" },
+  { cmd: "./scripts/commit.sh", truth: "git", what: "the script shells out to Git" },
+  { cmd: "bash scripts/release.sh", truth: "git", what: "bash runs a file that shells out to Git" },
+  { cmd: "npm run release", truth: "git", what: "the package.json script shells out to Git" },
+  {
+    cmd: "npm run git:check",
+    truth: "none",
+    what: "a script whose *name* contains git; its body is echo",
+  },
+  { cmd: "python3 scripts/deploy.py", truth: "git", what: "the Python file spawns Git" },
   // ── other runtimes
-  { cmd: 'python3 -c "import subprocess; subprocess.run([\'git\',\'status\'])"', truth: 'git', what: 'Python spawns Git' },
-  { cmd: 'node -e "require(\'child_process\').execSync(\'git status\')"', truth: 'git', what: 'Node spawns Git' },
-  { cmd: 'git -C /tmp status', truth: 'git', what: '`-C` changes directory; still Git' },
+  {
+    cmd: "python3 -c \"import subprocess; subprocess.run(['git','status'])\"",
+    truth: "git",
+    what: "Python spawns Git",
+  },
+  {
+    cmd: "node -e \"require('child_process').execSync('git status')\"",
+    truth: "git",
+    what: "Node spawns Git",
+  },
+  { cmd: "git -C /tmp status", truth: "git", what: "`-C` changes directory; still Git" },
   // ── false-positive bait
-  { cmd: 'echo "git commit -m x"', truth: 'none', what: 'a string argument' },
-  { cmd: 'echo git', truth: 'none', what: 'git as an argument' },
-  { cmd: 'grep -rn "git status" docs/', truth: 'none', what: 'a grep pattern' },
-  { cmd: 'cat .git/config', truth: 'none', what: 'a path containing `.git`' },
-  { cmd: 'jj git export', truth: 'none', what: 'jj subcommand; jj does not exec the git binary' },
-  { cmd: 'jj git push', truth: 'none', what: 'jj subcommand' },
-  { cmd: 'jj config get git.executable-path', truth: 'none', what: 'a jj subcommand whose argument is a config key containing the token git' },
-  { cmd: '# git commit -m x', truth: 'none', what: 'a whole-line comment' },
-  { cmd: 'echo hi # git commit', truth: 'none', what: 'a trailing comment' },
-  { cmd: 'if git status; then echo ok; fi', truth: 'git', what: 'Git in an if-condition' },
-  { cmd: '(git status)', truth: 'git', what: 'a subshell' },
+  { cmd: 'echo "git commit -m x"', truth: "none", what: "a string argument" },
+  { cmd: "echo git", truth: "none", what: "git as an argument" },
+  { cmd: 'grep -rn "git status" docs/', truth: "none", what: "a grep pattern" },
+  { cmd: "cat .git/config", truth: "none", what: "a path containing `.git`" },
+  { cmd: "jj git export", truth: "none", what: "jj subcommand; jj does not exec the git binary" },
+  { cmd: "jj git push", truth: "none", what: "jj subcommand" },
+  {
+    cmd: "jj config get git.executable-path",
+    truth: "none",
+    what: "a jj subcommand whose argument is a config key containing the token git",
+  },
+  { cmd: "# git commit -m x", truth: "none", what: "a whole-line comment" },
+  { cmd: "echo hi # git commit", truth: "none", what: "a trailing comment" },
+  { cmd: "if git status; then echo ok; fi", truth: "git", what: "Git in an if-condition" },
+  { cmd: "(git status)", truth: "git", what: "a subshell" },
   // ── the hole
   {
-    cmd: 'rm -rf .git', truth: 'none', acceptable: false,
-    what: 'deletes the Git directory; invokes no git program at all',
-    why: 'destroys a colocated repo and is far more damaging than `git status`; a program-resolving guard cannot see it',
+    cmd: "rm -rf .git",
+    truth: "none",
+    acceptable: false,
+    what: "deletes the Git directory; invokes no git program at all",
+    why: "destroys a colocated repo and is far more damaging than `git status`; a program-resolving guard cannot see it",
   },
 ];
 
@@ -706,44 +1108,47 @@ export const CORPUS = [
 
 function verdictOf(entry, result) {
   const detected = result.gitInvocations.length > 0;
-  const real = entry.truth === 'git';
-  if (real && detected) return 'correct';
-  if (real && !detected) return 'false negative';
-  if (!real && detected) return 'false positive';
-  return 'correct';
+  const real = entry.truth === "git";
+  if (real && detected) return "correct";
+  if (real && !detected) return "false negative";
+  if (!real && detected) return "false positive";
+  return "correct";
 }
 
 function probeCell(result) {
-  if (result.gitInvocations.length === 0) return 'no git invocation';
-  return 'git: ' + result.gitInvocations.map((s) => '`' + s + '`').join(', ');
+  if (result.gitInvocations.length === 0) return "no git invocation";
+  return "git: " + result.gitInvocations.map((s) => "`" + s + "`").join(", ");
 }
 
 function esc(s) {
-  return String(s).replace(/\|/g, '\\|').replace(/\n/g, '\\n');
+  return String(s).replace(/\|/g, "\\|").replace(/\n/g, "\\n");
 }
 
 function table(rows) {
   const out = [];
-  for (const r of rows) out.push('| ' + r.map(esc).join(' | ') + ' |');
-  return out.join('\n');
+  for (const r of rows) out.push("| " + r.map(esc).join(" | ") + " |");
+  return out.join("\n");
 }
 
 function runCorpus() {
   const rows = [];
-  const counts = { correct: 0, 'false negative': 0, 'false positive': 0 };
+  const counts = { correct: 0, "false negative": 0, "false positive": 0 };
   let lowConfidence = 0;
 
   for (const entry of CORPUS) {
     const r = classifyInvocation(entry.cmd);
     const verdict = verdictOf(entry, r);
     counts[verdict]++;
-    if (r.confidence === 'low') lowConfidence++;
-    const acceptable = entry.acceptable === false ? 'NO' : 'yes';
+    if (r.confidence === "low") lowConfidence++;
+    const acceptable = entry.acceptable === false ? "NO" : "yes";
     rows.push({
-      entry, r, verdict, acceptable,
+      entry,
+      r,
+      verdict,
+      acceptable,
       cells: [
         code(entry.cmd),
-        entry.what + (entry.method === 'reasoned' ? ' _(reasoned)_' : ''),
+        entry.what + (entry.method === "reasoned" ? " _(reasoned)_" : ""),
         probeCell(r),
         verdict,
         r.confidence,
@@ -755,43 +1160,63 @@ function runCorpus() {
 }
 
 function main(argv) {
-  if (argv.includes('-c') || argv.includes('--command')) {
-    const idx = argv.findIndex((a) => a === '-c' || a === '--command');
-    const cmd = argv[idx + 1] ?? '';
-    process.stdout.write(JSON.stringify(classifyInvocation(cmd), null, 2) + '\n');
+  if (argv.includes("-c") || argv.includes("--command")) {
+    const idx = argv.findIndex((a) => a === "-c" || a === "--command");
+    const cmd = argv[idx + 1] ?? "";
+    process.stdout.write(JSON.stringify(classifyInvocation(cmd), null, 2) + "\n");
     return;
   }
 
   const { rows, counts, lowConfidence } = runCorpus();
 
-  if (argv.includes('--json')) {
-    process.stdout.write(JSON.stringify({
-      corpusSize: CORPUS.length, counts, lowConfidence,
-      results: rows.map((x) => ({
-        command: x.entry.cmd, truth: x.entry.truth, ...x.r,
-        verdict: x.verdict, acceptable: x.acceptable,
-      })),
-    }, null, 2) + '\n');
+  if (argv.includes("--json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          corpusSize: CORPUS.length,
+          counts,
+          lowConfidence,
+          results: rows.map((x) => ({
+            command: x.entry.cmd,
+            truth: x.entry.truth,
+            ...x.r,
+            verdict: x.verdict,
+            acceptable: x.acceptable,
+          })),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
     return;
   }
 
   const out = [];
-  out.push(`corpus=${CORPUS.length} correct=${counts.correct} ` +
-    `falseNegatives=${counts['false negative']} falsePositives=${counts['false positive']} ` +
-    `lowConfidence=${lowConfidence}`);
-  out.push('');
-  out.push(table([
-    ['#', 'command', 'what it really does', 'probe result', 'verdict', 'conf.', 'ok?'],
-    ...rows.map((x, i) => [String(i + 1), ...x.cells]),
-  ]));
-  out.push('');
-  out.push('### notes (low-confidence rows)');
-  out.push('');
+  out.push(
+    `corpus=${CORPUS.length} correct=${counts.correct} ` +
+      `falseNegatives=${counts["false negative"]} falsePositives=${counts["false positive"]} ` +
+      `lowConfidence=${lowConfidence}`,
+  );
+  out.push("");
+  out.push(
+    table([
+      ["#", "command", "what it really does", "probe result", "verdict", "conf.", "ok?"],
+      ...rows.map((x, i) => [String(i + 1), ...x.cells]),
+    ]),
+  );
+  out.push("");
+  out.push("### notes (low-confidence rows)");
+  out.push("");
   for (const x of rows) {
-    if (x.r.confidence !== 'low') continue;
-    out.push(`- ${code(x.entry.cmd)} — ${x.r.notes.filter((n) => n.startsWith('unresolved:')).map((n) => n.replace(/^unresolved: /, '')).join('; ')}`);
+    if (x.r.confidence !== "low") continue;
+    out.push(
+      `- ${code(x.entry.cmd)} — ${x.r.notes
+        .filter((n) => n.startsWith("unresolved:"))
+        .map((n) => n.replace(/^unresolved: /, ""))
+        .join("; ")}`,
+    );
   }
-  process.stdout.write(out.join('\n') + '\n');
+  process.stdout.write(out.join("\n") + "\n");
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {

@@ -12,27 +12,27 @@ around the spawned process. There is no in-memory shell simulation.
 
 ## What is real
 
-| Package | Role |
-|---|---|
-| `dsh-shell` | the shell capability seam (`ctx.shell`) |
-| `dsh-shell-env` | shell environment |
-| `dsh-bash-local` | runs `bash -c` as a plain subprocess with the user's permissions |
-| `dsh-bash-sandbox` | runs the same command under an OS-level confinement |
-| `dsh-sandbox`, `dsh-sandbox-local`, `dsh-sandbox-policy`, `dsh-sandbox-windows-acl` | the sandbox backends and policy |
-| `dsh-tool-bash` | the model-facing `bash` tool |
-| `dsh-tool-bash-persistent` | the stateful variant |
+| Package                                                                             | Role                                                             |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `dsh-shell`                                                                         | the shell capability seam (`ctx.shell`)                          |
+| `dsh-shell-env`                                                                     | shell environment                                                |
+| `dsh-bash-local`                                                                    | runs `bash -c` as a plain subprocess with the user's permissions |
+| `dsh-bash-sandbox`                                                                  | runs the same command under an OS-level confinement              |
+| `dsh-sandbox`, `dsh-sandbox-local`, `dsh-sandbox-policy`, `dsh-sandbox-windows-acl` | the sandbox backends and policy                                  |
+| `dsh-tool-bash`                                                                     | the model-facing `bash` tool                                     |
+| `dsh-tool-bash-persistent`                                                          | the stateful variant                                             |
 
-So the conversation's core structural claim — *a modular shell executor seam
-that swaps between a local executor and a sandboxed one* — is **VERIFIED**.
+So the conversation's core structural claim — _a modular shell executor seam
+that swaps between a local executor and a sandboxed one_ — is **VERIFIED**.
 
 Its package names are not:
 
-| Claimed | Verdict |
-|---|---|
-| `dsh-bash-local` | **VERIFIED** |
-| `dsh-bash-sandbox` | **VERIFIED** |
-| `dsh-terminal-bash` | **CONTRADICTED** — the stateful tool ships as `dsh-tool-bash-persistent` |
-| `dsh-tool-bash` | **VERIFIED** |
+| Claimed                                                                                 | Verdict                                                                                                              |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `dsh-bash-local`                                                                        | **VERIFIED**                                                                                                         |
+| `dsh-bash-sandbox`                                                                      | **VERIFIED**                                                                                                         |
+| `dsh-terminal-bash`                                                                     | **CONTRADICTED** — the stateful tool ships as `dsh-tool-bash-persistent`                                             |
+| `dsh-tool-bash`                                                                         | **VERIFIED**                                                                                                         |
 | confinement via bubblewrap/Landlock (Linux), **Seatbelt (macOS)**, ACL tokens (Windows) | **PLAUSIBLE** — `dsh-sandbox-windows-acl` confirms the Windows mechanism; the others were not opened in this session |
 
 ## The tool name
@@ -59,11 +59,11 @@ belongs:
 That is an endorsement of the design in
 [02](02-git-blocking-at-tool-call-level.md) from the harness authors.
 
-## What the sandbox does *not* do
+## What the sandbox does _not_ do
 
 The conversation implies the sandbox can express "no Git in this project".
-It cannot. `dsh-bash-sandbox` confines *where* commands may write (the
-`workspace-write` boundary and its siblings), not *which binaries* may run.
+It cannot. `dsh-bash-sandbox` confines _where_ commands may write (the
+`workspace-write` boundary and its siblings), not _which binaries_ may run.
 Blocking a specific command is a policy concern, and policy lives in
 `tools/pre-execute` — not in the sandbox backend.
 

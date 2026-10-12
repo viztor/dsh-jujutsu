@@ -37,8 +37,9 @@ Nothing has run yet.
 `dsh-tools` dispatches (`dsh-tools/lib/index.js:3225`):
 
 ```js
-const gate = await this.ctx.waterfall(carrier, 'tools/pre-execute', exec,
-  () => Promise.resolve({ kind: 'allow' }));
+const gate = await this.ctx.waterfall(carrier, "tools/pre-execute", exec, () =>
+  Promise.resolve({ kind: "allow" }),
+);
 ```
 
 Every listener — ours and every other plugin's — runs in order. Ours is:
@@ -50,13 +51,11 @@ ctx.on('tools/pre-execute', async (exec, next) => { … });
 ## Step 3 — detection
 
 ```ts
-if (exec.name !== 'bash') return next();                 // not our call
-const session = exec.agent?.session.header.cwd;          // canonical session root
-if (session === undefined) return next();                // fail open
+if (exec.name !== "bash") return next(); // not our call
+const session = exec.agent?.session.header.cwd; // canonical session root
+if (session === undefined) return next(); // fail open
 // the bash tool exposes `workdir`; the command runs THERE, not at the session root
-const root = exec.arguments.workdir
-  ? resolve(session, exec.arguments.workdir)
-  : session;
+const root = exec.arguments.workdir ? resolve(session, exec.arguments.workdir) : session;
 const kind = await detect(root);
 // .jj/ is a directory        → it is a jj workspace
 // .git/ is also a directory  → colocated
@@ -84,8 +83,8 @@ carve-out needs no exception list, because `jj git …` never resolves to the
 ## Step 5 — choose ask or deny
 
 ```ts
-const approval = ctx.get('approval');
-const policy = approval?.overrideOf(agent.session) ?? 'ask';
+const approval = ctx.get("approval");
+const policy = approval?.overrideOf(agent.session) ?? "ask";
 ```
 
 - `policy === 'never'` → return `{ kind: 'deny', reason }`. Our message survives.
@@ -135,7 +134,7 @@ Error: the user rejected tool "bash"
 Our carefully written reason is **gone**. This looks like a defect in the
 design and is not one:
 
-> A rejection is a human saying *stop*. The model should not immediately run
+> A rejection is a human saying _stop_. The model should not immediately run
 > the `jj` equivalent. The jj guidance belongs on the **default** path, where
 > the model self-corrects without a human in the loop. On the ask path the
 > human is the loop.

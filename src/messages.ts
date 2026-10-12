@@ -70,8 +70,7 @@ export const DISPLAY_REASONS = {
     "Run a Git branch command? Jujutsu calls these bookmarks: jj bookmark list / create / delete.",
   checkout:
     "Run a Git checkout or switch? The Jujutsu equivalents are jj new <rev> and jj edit <rev>.",
-  rebase:
-    "Run a Git rebase or merge? The Jujutsu equivalents are jj rebase and jj new @ <rev>.",
+  rebase: "Run a Git rebase or merge? The Jujutsu equivalents are jj rebase and jj new @ <rev>.",
   reset:
     "Run a Git reset, restore, or stash? The Jujutsu equivalents are jj restore <paths>, jj abandon, and jj new @-.",
   remote:
@@ -191,8 +190,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     match: ["branch", "<name>"],
     classification: "deny",
     message: {
-      reason:
-        "Refused: git branch <name>. Run: jj bookmark create <name> -r <rev>.",
+      reason: "Refused: git branch <name>. Run: jj bookmark create <name> -r <rev>.",
       display: DISPLAY_REASONS.branch,
     },
   },

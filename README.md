@@ -1,7 +1,7 @@
 # Jujutsu for DeepSeek Harness
 
 Makes the harness **jj-native**. Inside a [Jujutsu](https://jj-vcs.dev) workspace
-the agent stops reaching for Git and uses `jj` instead — and it is *told* why,
+the agent stops reaching for Git and uses `jj` instead — and it is _told_ why,
 rather than just being blocked.
 
 - **Refuses Git where it would mislead.** `git status` in a colocated repo
@@ -29,37 +29,37 @@ defaults are chosen to be safe.
 
 ### Requirements
 
-| | |
-|---|---|
-| `jj` | **Required.** 0.46.0 or newer. `brew install jj` |
+|           |                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jj`      | **Required.** 0.46.0 or newer. `brew install jj`                                                                                                                                   |
 | `jj-hunk` | Optional. Adds hunk-level `split`/`squash`. Without it those two tools report unavailable rather than failing. `cargo install --git https://github.com/laulauland/jj-hunk jj-hunk` |
-| Node | 24 or newer |
+| Node      | 24 or newer                                                                                                                                                                        |
 
 ## What it does
 
 ### Refuses Git, and says what to run instead
 
-| You run | What happens |
-|---|---|
-| `git status` | `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
-| `git commit -m "…"` | `Refused: git commit -m. Run: jj commit -m "<msg>".` |
-| `git rebase -i` | Refused — it needs a terminal. Suggests `jj rebase`, `jj squash`, `jj absorb`. |
-| `rm -rf .git` | Refused, and explains that `jj`'s commit objects live there |
-| `jj status`, `jj log`, … | Run normally |
-| `echo "git commit"` | Runs — it never touched Git |
+| You run                  | What happens                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `git status`             | `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
+| `git commit -m "…"`      | `Refused: git commit -m. Run: jj commit -m "<msg>".`                                        |
+| `git rebase -i`          | Refused — it needs a terminal. Suggests `jj rebase`, `jj squash`, `jj absorb`.              |
+| `rm -rf .git`            | Refused, and explains that `jj`'s commit objects live there                                 |
+| `jj status`, `jj log`, … | Run normally                                                                                |
+| `echo "git commit"`      | Runs — it never touched Git                                                                 |
 
 Reads and writes are configured separately. A user who is happy to let the model
-*look* with Git has not thereby agreed to let it *write*.
+_look_ with Git has not thereby agreed to let it _write_.
 
 ### Eleven `jj` tools
 
-| Tool | What it does |
-|---|---|
-| `jj_status` | The working copy, including whether it is **conflicted** |
-| `jj_log`, `jj_diff`, `jj_op_log` | History, changes, and the operation log |
-| `jj_new`, `jj_describe`, `jj_squash` | Start, describe and fold changes |
-| `jj_bookmark`, `jj_op_restore` | Name revisions; undo anything |
-| `jj_hunk_list`, `jj_hunk_apply` | Select and apply individual hunks |
+| Tool                                 | What it does                                             |
+| ------------------------------------ | -------------------------------------------------------- |
+| `jj_status`                          | The working copy, including whether it is **conflicted** |
+| `jj_log`, `jj_diff`, `jj_op_log`     | History, changes, and the operation log                  |
+| `jj_new`, `jj_describe`, `jj_squash` | Start, describe and fold changes                         |
+| `jj_bookmark`, `jj_op_restore`       | Name revisions; undo anything                            |
+| `jj_hunk_list`, `jj_hunk_apply`      | Select and apply individual hunks                        |
 
 All of them return **structured JSON**, never prose. Revisions are addressed by
 **change ID**, which survives a rewrite — a commit ID does not.
@@ -78,17 +78,17 @@ still works).
 
 Open **Plugins → Jujutsu**. Everything is on that page.
 
-| Setting | Default | What it changes |
-|---|---|---|
-| Guard | `deny` | `off` leaves the guard mounted but inert — useful to see what it *would* have caught |
-| Read-only Git | `ask` | What to do with `git status`, `git log`, … |
-| Writing Git | `ask` | What to do with `git commit`, `git push`, … |
-| Remember approvals | on | Stop re-asking about a verb you already approved, for this session |
-| Mention missing version control | on | Tell the model when a directory has no repository |
-| Prefer Jujutsu | on | Suggest `jj git init` rather than `git init` |
-| Explain Jujutsu in the prompt | on | Off means the guard still refuses Git but the model is not told why |
-| Offer the jj manual | on | Ship the `jj` manual as an on-demand skill |
-| jj / jj-hunk executable | `jj`, `jj-hunk` | Set these when they are not on `PATH` |
+| Setting                         | Default         | What it changes                                                                      |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------ |
+| Guard                           | `deny`          | `off` leaves the guard mounted but inert — useful to see what it _would_ have caught |
+| Read-only Git                   | `ask`           | What to do with `git status`, `git log`, …                                           |
+| Writing Git                     | `ask`           | What to do with `git commit`, `git push`, …                                          |
+| Remember approvals              | on              | Stop re-asking about a verb you already approved, for this session                   |
+| Mention missing version control | on              | Tell the model when a directory has no repository                                    |
+| Prefer Jujutsu                  | on              | Suggest `jj git init` rather than `git init`                                         |
+| Explain Jujutsu in the prompt   | on              | Off means the guard still refuses Git but the model is not told why                  |
+| Offer the jj manual             | on              | Ship the `jj` manual as an on-demand skill                                           |
+| jj / jj-hunk executable         | `jj`, `jj-hunk` | Set these when they are not on `PATH`                                                |
 
 ### Turning it off for one project
 
@@ -108,17 +108,17 @@ ignored rather than obeyed, so a typo cannot silently disable the guard.
 
 ## Troubleshooting
 
-**"Refused" when I wanted Git.** That is the plugin working. Set *Read-only Git*
-or *Writing Git* to `allow`, or add a `.dsh-jujutsu.json` with
+**"Refused" when I wanted Git.** That is the plugin working. Set _Read-only Git_
+or _Writing Git_ to `allow`, or add a `.dsh-jujutsu.json` with
 `{"enabled": false}` for that project.
 
 **Nothing happens at all.** The plugin only acts inside a Jujutsu workspace —
 a directory with a `.jj` directory, in it or any parent. Check with
-`jj status`; if that says *"There is no jj repo in '.'"*, the plugin is correctly
+`jj status`; if that says _"There is no jj repo in '.'"_, the plugin is correctly
 inactive. `jj git init` creates one (colocated by default).
 
 **The hunk tools say unavailable.** `jj-hunk` is not installed or not on `PATH`.
-Set *jj-hunk executable* to an absolute path, or install it.
+Set _jj-hunk executable_ to an absolute path, or install it.
 
 **`jj new` or `jj commit` is refused.** The plugin refuses commit-creating
 commands when `jj` has no identity configured, because `jj` would create a commit
@@ -129,7 +129,7 @@ jj config set --user user.name "Your Name"
 jj config set --user user.email "you@example.com"
 ```
 
-Commands that *preserve* an author — `jj describe`, `jj squash` — are not
+Commands that _preserve_ an author — `jj describe`, `jj squash` — are not
 affected.
 
 ## For developers
@@ -158,14 +158,14 @@ pnpm publish       # prepublishOnly runs the build and the full suite first
 
 ### Layout
 
-| | |
-|---|---|
-| `src/` | The host half — guard, tools, prompt, detection. See [`src/README.md`](src/README.md). |
-| `client/` | The panel. Built-in harness components only. |
-| `locale/` | Display name and one-liner, per language. |
-| `SPEC.md` | The build specification. |
-| `docs/` | 36 documents: verified contracts, measurements, decisions. |
-| `research/digest.md` | The durable record of the conversation that seeded the design. |
+|                      |                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `src/`               | The host half — guard, tools, prompt, detection. See [`src/README.md`](src/README.md). |
+| `client/`            | The panel. Built-in harness components only.                                           |
+| `locale/`            | Display name and one-liner, per language.                                              |
+| `SPEC.md`            | The build specification.                                                               |
+| `docs/`              | 36 documents: verified contracts, measurements, decisions.                             |
+| `research/digest.md` | The durable record of the conversation that seeded the design.                         |
 
 ### What is verified, and how
 

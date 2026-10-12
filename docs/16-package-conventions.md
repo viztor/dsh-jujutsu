@@ -8,11 +8,11 @@ inventions.
 
 A package's `dsh` field is read by two independent subsystems:
 
-| key | reader | effect |
-|---|---|---|
-| `dsh.bundle` | `dsh-app-boot` | the package's patch joins the composition |
-| `dsh.client` | `dsh-client-modules` | the web client loads `lib/client.js` |
-| `dsh.profile` | `dsh-app-boot` | only meaningful in a profile manifest |
+| key           | reader               | effect                                    |
+| ------------- | -------------------- | ----------------------------------------- |
+| `dsh.bundle`  | `dsh-app-boot`       | the package's patch joins the composition |
+| `dsh.client`  | `dsh-client-modules` | the web client loads `lib/client.js`      |
+| `dsh.profile` | `dsh-app-boot`       | only meaningful in a profile manifest     |
 
 `dsh-jujutsu` needs **only `dsh.bundle`**. It has no UI, so no `dsh.client`,
 no `lib/client.js`, no React, no locale files.
@@ -118,11 +118,11 @@ What is still absent, and still deliberate:
 **Measured, and it costs an afternoon if you do not know it.** Iterating on a
 plugin that is already mounted does not pick up source changes:
 
-| Action | Result |
-|---|---|
-| `install_bundle` again, same source | `application: applied` — the **patch** re-applies, the **module** stays cached and the old code keeps running |
-| Point `main` at a new file, reinstall | still `applied`; the new file is never imported |
-| `install_bundle` from a **different source path** | `application: restart-required`, with `Replaced "…" ("link:…") with "…" from a different source` |
+| Action                                            | Result                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `install_bundle` again, same source               | `application: applied` — the **patch** re-applies, the **module** stays cached and the old code keeps running |
+| Point `main` at a new file, reinstall             | still `applied`; the new file is never imported                                                               |
+| `install_bundle` from a **different source path** | `application: restart-required`, with `Replaced "…" ("link:…") with "…" from a different source`              |
 
 How that was established, rather than guessed: a diagnostic wrapper that appended
 to `/tmp` on import produced an **empty log** across two reinstall cycles while
@@ -135,7 +135,7 @@ removing and reinstalling, and replacing the package source were all tried.
 
 **What to do instead.** Put everything you can behind tests that do not need the
 harness (`test/` here runs the plugin against a harness double and real fixture
-repos), and treat the live install as a check of *first* mount and of *patch*
+repos), and treat the live install as a check of _first_ mount and of _patch_
 changes only. When a live check does matter, plan for a restart rather than
 discovering the need mid-investigation.
 

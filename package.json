@@ -8,11 +8,23 @@
     "dsh",
     "dsh-bundle",
     "dsh-plugin",
-    "jujutsu",
     "jj",
-    "jj-hunk"
+    "jj-hunk",
+    "jujutsu"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viztor/dsh-jujutsu.git"
+  },
+  "files": [
+    "lib",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -29,19 +41,11 @@
     },
     "./locale/*.json": "./locale/*.json"
   },
-  "files": [
-    "lib",
-    "locale/*.json",
-    "icon.svg",
-    "cordis.patch.yml",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vp pack && node scripts/name-client-bundle.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "ci": "tsc --noEmit && pnpm run build && vitest run",
+    "ci": "tsc --noEmit && vp check && pnpm run build && vitest run",
     "prepublishOnly": "pnpm run build && pnpm run ci",
     "prepare": "pnpm run build"
   },
@@ -69,6 +73,7 @@
     "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0",
     "@deepseek-ai/dsh-tools": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0"
   },
+  "icon": "./icon.svg",
   "engines": {
     "node": ">=24"
   },
@@ -91,10 +96,5 @@
       "platform": "web",
       "immediately": true
     }
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/viztor/dsh-jujutsu.git"
-  },
-  "icon": "./icon.svg"
+  }
 }

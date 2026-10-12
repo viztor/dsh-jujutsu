@@ -129,7 +129,9 @@ describe("jj output parsing — real jj 0.46.0 shapes", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.values).toHaveLength(2);
-    expect((parsed.values[0] as { change_id: string }).change_id).toBe("nqmnskmmvnttwxkzqmttkqpvtnzrroqx");
+    expect((parsed.values[0] as { change_id: string }).change_id).toBe(
+      "nqmnskmmvnttwxkzqmttkqpvtnzrroqx",
+    );
   });
 
   it("confirms json(self) carries no conflict key", async () => {
@@ -165,14 +167,19 @@ describe("jj bookmark rename takes two positional names", () => {
     // `jj bookmark rename <OLD> <NEW>` — one name is a usage error.
     const { bookmarkArgv } = await import("../src/tools.ts");
     expect(bookmarkArgv("rename", "old", undefined, "new")).toEqual([
-      "bookmark", "rename", "old", "new",
+      "bookmark",
+      "rename",
+      "old",
+      "new",
     ]);
   });
 
   it("does not append a stray new name for other actions", async () => {
     const { bookmarkArgv } = await import("../src/tools.ts");
     expect(bookmarkArgv("delete", "feat", undefined, "ignored")).toEqual([
-      "bookmark", "delete", "feat",
+      "bookmark",
+      "delete",
+      "feat",
     ]);
   });
 });

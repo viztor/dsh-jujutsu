@@ -54,12 +54,7 @@ describe("the ported invocation resolver", () => {
 
 describe("the rules that carry the most weight", () => {
   it("resolves `jj git <sub>` to jj, not git — the carve-out needs no exception list", () => {
-    for (const command of [
-      "jj git export",
-      "jj git fetch",
-      "jj git push",
-      "jj git init",
-    ]) {
+    for (const command of ["jj git export", "jj git fetch", "jj git push", "jj git init"]) {
       expect(classifyInvocation(command).gitInvocations, command).toEqual([]);
     }
   });
@@ -83,7 +78,7 @@ describe("the rules that carry the most weight", () => {
       'bash -lc "git push"',
       "\\git status",
       "/usr/bin/git status",
-      "echo \"v=$(git rev-parse HEAD)\"",
+      'echo "v=$(git rev-parse HEAD)"',
     ]) {
       expect(classifyInvocation(command).gitInvocations.length, command).toBeGreaterThan(0);
     }

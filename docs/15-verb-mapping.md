@@ -13,54 +13,54 @@ below was additionally executed locally in a scratch repo.
 `classification`: **DENY** = block and name the replacement · **ALLOW** = never
 block · **SPECIAL** = needs different treatment, see footnote.
 
-| Git command | jj equivalent | classification | denial message |
-|---|---|---|---|
-| `git status` | `jj status` (`jj st`) | DENY | Refused `git status`: this is a Jujutsu workspace. Run `jj status` (alias `jj st`) — it shows the working-copy change and its parent commit. |
-| `git diff` | `jj diff` | DENY | Refused `git diff`: Jujutsu has no staging index. Run `jj diff` for the working-copy change, or `jj diff -r <rev>` for another revision. |
-| `git log` | `jj log` | DENY | Refused `git log`: run `jj log`. Use `-r '::@'` for ancestors of `@`, or `-r 'all()'` for everything reachable. |
-| `git add <path>` | none — auto-tracked | DENY | Refused `git add`: Jujutsu has no staging area. New files are tracked automatically — just edit the file and `jj status` / `jj diff` will show it. |
-| `git add -p` | `jj-hunk split\|commit\|squash --query` | DENY | Refused `git add -p`: there is no index to stage into. For hunk-level selection run `jj-hunk commit --query '<hunkset>' "msg"` (`split` / `squash` also work). |
-| `git commit` | `jj commit` | DENY | Refused `git commit`: run `jj commit -m "..."`. The Jujutsu working copy *is* a commit, so this finalizes it and starts a new empty change on top. |
-| `git commit --amend` | `jj describe` (message) / `jj squash` (content) | DENY | Refused `git commit --amend`: `--amend` does not exist. Reword with `jj describe -m "..."`; fold edits into the parent with `jj squash`. |
-| `git commit -m "msg"` | `jj commit -m "msg"` | DENY | Refused `git commit -m`: run `jj commit -m "..."`. |
-| `git branch` | `jj bookmark list` (`jj b l`) | DENY | Refused `git branch`: Jujutsu calls branches *bookmarks*. Run `jj bookmark list` (alias `jj b l`). |
-| `git branch -a` | `jj bookmark list --all-remotes` | DENY | Refused `git branch -a`: run `jj bookmark list --all-remotes` to include remote-tracking bookmarks. |
-| `git branch <name>` | `jj bookmark create <name> -r <rev>` | DENY | Refused `git branch <name>`: run `jj bookmark create <name> -r <rev>`. |
-| `git branch -d <name>` | `jj bookmark delete <name>` | DENY | Refused `git branch -d`: run `jj bookmark delete <name>`. |
-| `git checkout -b <name>` | `jj new` + `jj bookmark create <name> -r @-` | DENY | Refused `git checkout -b`: run `jj new` to start a change, then `jj bookmark create <name> -r @-`. Jujutsu has no branch-switch step. |
-| `git checkout <branch>` | `jj new <rev>` / `jj edit <rev>` | DENY | Refused `git checkout <rev>`: run `jj new <rev>` to start a change on top of it, or `jj edit <rev>` to make it the working copy. |
-| `git switch <branch>` | `jj new <rev>` / `jj edit <rev>` | DENY | Refused `git switch`: run `jj new <rev>` to start a change on top, or `jj edit <rev>` to make that revision the working copy. |
-| `git merge <rev>` | `jj new @ <rev>` | DENY | Refused `git merge`: run `jj new @ <rev>`. A merge is just a change with two parents; conflicts are recorded in-tree, so there is no `--continue`. |
-| `git rebase` | `jj rebase` | DENY | Refused `git rebase`: run `jj rebase -s <src> -o <dest>` (move a subtree) or `jj rebase -b <bookmark> -o <dest>` (move a branch). |
-| `git rebase -i` | `jj rebase -r … -B/-A`, `jj squash`, `jj split`, `jj absorb` | DENY | Refused `git rebase -i`: it is interactive and unusable headless. Reorder with `jj rebase -r <rev> -B <rev>`; fold with `jj squash`; auto-place fixes with `jj absorb`. |
-| `git reset --hard` | `jj abandon` / `jj restore` | DENY | Refused `git reset --hard`. Discard edits with `jj restore <paths>`; drop the current change with `jj abandon`. Both are reversible via `jj undo`. |
-| `git reset --soft HEAD~1` | `jj squash --from @-` | DENY | Refused `git reset --soft`: run `jj squash --from @-` to fold the parent's diff into the working copy. Jujutsu never rewrites a commit in place. |
-| `git stash` | `jj new @-` | DENY | Refused `git stash`: Jujutsu has no stash. Run `jj new @-` to park the current change as a sibling commit; find it later in `jj log`. |
-| `git stash pop` | `jj edit <change-id>` | DENY | Refused `git stash pop`: there is no stash to pop. Re-enter the parked change with `jj edit <change-id>` (locate it with `jj log`). |
-| `git cherry-pick <rev>` | `jj duplicate <rev> -o <dest>` | DENY | Refused `git cherry-pick`: run `jj duplicate <rev> -o <dest>` to copy that change onto another commit. |
-| `git revert <rev>` | `jj revert -r <rev> -B @` | DENY | Refused `git revert`: run `jj revert -r <rev> -B @` to insert the inverse of `<rev>` just before the working copy. |
-| `git tag` | `jj tag set` / `jj tag list` / `jj tag delete` | DENY | Refused `git tag`: run `jj tag list`, `jj tag set <name> -r <rev>`, or `jj tag delete <name>`. |
-| `git push` | `jj git push --bookmark <name>` | DENY | Refused `git push`: run `jj git push --bookmark <name>`. Jujutsu pushes bookmarks explicitly — there is no implicit current-branch push. |
-| `git push --force` | `jj git push` (already force-with-lease) | DENY | Refused `git push --force`: no force flag is needed. `jj git push` updates the remote only if it matches what you last fetched. |
-| `git pull` | `jj git fetch` + `jj rebase` | DENY | Refused `git pull`: Jujutsu has no pull. Run `jj git fetch`, then `jj rebase -b <bookmark> -o <remote-bookmark>` to integrate. |
-| `git fetch` | `jj git fetch` | DENY | Refused `git fetch`: run `jj git fetch`. Note the `jj` prefix — `jj git fetch` is a Jujutsu command and is never blocked. |
-| `git clone <url>` | `jj git clone <url>` | DENY | Refused `git clone`: run `jj git clone <url> [<dir>]`. It creates a colocated repo by default. |
-| `git remote -v` | `jj git remote list` | DENY | Refused `git remote -v`: run `jj git remote list`; add one with `jj git remote add <name> <url>`. |
-| `git remote add <n> <url>` | `jj git remote add <n> <url>` | DENY | Refused `git remote add`: run `jj git remote add <name> <url>`. |
-| `git worktree add <path>` | `jj workspace add <path>` | DENY | Refused `git worktree add`: run `jj workspace add <path>`. Workspaces are Jujutsu's native multi-working-copy feature. |
-| `git submodule …` | none | SPECIAL | Refused `git submodule`: Jujutsu has no submodule support. If the task truly needs submodules, do it in a separate plain Git clone, not in this workspace. |
-| `git bisect …` | `jj bisect run` | DENY | Refused `git bisect`: run `jj bisect run <cmd>` — it finds the first bad revision automatically. |
-| `git blame <file>` | `jj file annotate <path>` | DENY | Refused `git blame`: run `jj file annotate <path>` to show the change that last modified each line. |
-| `git show <rev>` | `jj show <rev>` | DENY | Refused `git show`: run `jj show <rev>` for the description plus diff. |
-| `git clean -fd` | none | SPECIAL | Refused `git clean -fd`: Jujutsu has no "untracked" state to clean. Inspect with `jj status`, then delete the files yourself with `rm`. |
-| `git restore <path>` | `jj restore <path>` | DENY | Refused `git restore`: run `jj restore <paths>` to restore from the parent, or `jj restore --from <rev> <paths>`. |
-| `git init` | `jj git init` | DENY | Refused `git init`: run `jj git init` (colocated by default) or `jj git init --no-colocate`. |
-| `git -C <dir> <sub>` | `jj -R <dir> <sub>` | DENY | Refused `git -C <dir>`: run `jj -R <dir> <sub>`, or `cd <dir>` first. |
-| `git config …` | `jj config …` | SPECIAL | Refused `git config`: Jujutsu reads identity from its own config, not `.git/config`. Use `jj config set --user user.name "…"` / `jj config list`. |
-| `git lfs …` | none | SPECIAL | Refused `git lfs`: the `git` binary fronts this subcommand, so it cannot be allowed through. Jujutsu has no LFS integration; fetch LFS objects with a plain Git checkout outside this workspace. |
-| `jj <anything>` | — | ALLOW | — (never denied) |
-| `jj git export\|fetch\|push\|clone\|init\|import\|remote\|root\|colocation` | — | ALLOW | — (carve-out, see §2) |
-| `gh pr create` / `gh …` | — | ALLOW | — (not a Git command; the guard matches the invoked program, not the string `gh`) |
+| Git command                                                                 | jj equivalent                                                | classification | denial message                                                                                                                                                                                   |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `git status`                                                                | `jj status` (`jj st`)                                        | DENY           | Refused `git status`: this is a Jujutsu workspace. Run `jj status` (alias `jj st`) — it shows the working-copy change and its parent commit.                                                     |
+| `git diff`                                                                  | `jj diff`                                                    | DENY           | Refused `git diff`: Jujutsu has no staging index. Run `jj diff` for the working-copy change, or `jj diff -r <rev>` for another revision.                                                         |
+| `git log`                                                                   | `jj log`                                                     | DENY           | Refused `git log`: run `jj log`. Use `-r '::@'` for ancestors of `@`, or `-r 'all()'` for everything reachable.                                                                                  |
+| `git add <path>`                                                            | none — auto-tracked                                          | DENY           | Refused `git add`: Jujutsu has no staging area. New files are tracked automatically — just edit the file and `jj status` / `jj diff` will show it.                                               |
+| `git add -p`                                                                | `jj-hunk split\|commit\|squash --query`                      | DENY           | Refused `git add -p`: there is no index to stage into. For hunk-level selection run `jj-hunk commit --query '<hunkset>' "msg"` (`split` / `squash` also work).                                   |
+| `git commit`                                                                | `jj commit`                                                  | DENY           | Refused `git commit`: run `jj commit -m "..."`. The Jujutsu working copy _is_ a commit, so this finalizes it and starts a new empty change on top.                                               |
+| `git commit --amend`                                                        | `jj describe` (message) / `jj squash` (content)              | DENY           | Refused `git commit --amend`: `--amend` does not exist. Reword with `jj describe -m "..."`; fold edits into the parent with `jj squash`.                                                         |
+| `git commit -m "msg"`                                                       | `jj commit -m "msg"`                                         | DENY           | Refused `git commit -m`: run `jj commit -m "..."`.                                                                                                                                               |
+| `git branch`                                                                | `jj bookmark list` (`jj b l`)                                | DENY           | Refused `git branch`: Jujutsu calls branches _bookmarks_. Run `jj bookmark list` (alias `jj b l`).                                                                                               |
+| `git branch -a`                                                             | `jj bookmark list --all-remotes`                             | DENY           | Refused `git branch -a`: run `jj bookmark list --all-remotes` to include remote-tracking bookmarks.                                                                                              |
+| `git branch <name>`                                                         | `jj bookmark create <name> -r <rev>`                         | DENY           | Refused `git branch <name>`: run `jj bookmark create <name> -r <rev>`.                                                                                                                           |
+| `git branch -d <name>`                                                      | `jj bookmark delete <name>`                                  | DENY           | Refused `git branch -d`: run `jj bookmark delete <name>`.                                                                                                                                        |
+| `git checkout -b <name>`                                                    | `jj new` + `jj bookmark create <name> -r @-`                 | DENY           | Refused `git checkout -b`: run `jj new` to start a change, then `jj bookmark create <name> -r @-`. Jujutsu has no branch-switch step.                                                            |
+| `git checkout <branch>`                                                     | `jj new <rev>` / `jj edit <rev>`                             | DENY           | Refused `git checkout <rev>`: run `jj new <rev>` to start a change on top of it, or `jj edit <rev>` to make it the working copy.                                                                 |
+| `git switch <branch>`                                                       | `jj new <rev>` / `jj edit <rev>`                             | DENY           | Refused `git switch`: run `jj new <rev>` to start a change on top, or `jj edit <rev>` to make that revision the working copy.                                                                    |
+| `git merge <rev>`                                                           | `jj new @ <rev>`                                             | DENY           | Refused `git merge`: run `jj new @ <rev>`. A merge is just a change with two parents; conflicts are recorded in-tree, so there is no `--continue`.                                               |
+| `git rebase`                                                                | `jj rebase`                                                  | DENY           | Refused `git rebase`: run `jj rebase -s <src> -o <dest>` (move a subtree) or `jj rebase -b <bookmark> -o <dest>` (move a branch).                                                                |
+| `git rebase -i`                                                             | `jj rebase -r … -B/-A`, `jj squash`, `jj split`, `jj absorb` | DENY           | Refused `git rebase -i`: it is interactive and unusable headless. Reorder with `jj rebase -r <rev> -B <rev>`; fold with `jj squash`; auto-place fixes with `jj absorb`.                          |
+| `git reset --hard`                                                          | `jj abandon` / `jj restore`                                  | DENY           | Refused `git reset --hard`. Discard edits with `jj restore <paths>`; drop the current change with `jj abandon`. Both are reversible via `jj undo`.                                               |
+| `git reset --soft HEAD~1`                                                   | `jj squash --from @-`                                        | DENY           | Refused `git reset --soft`: run `jj squash --from @-` to fold the parent's diff into the working copy. Jujutsu never rewrites a commit in place.                                                 |
+| `git stash`                                                                 | `jj new @-`                                                  | DENY           | Refused `git stash`: Jujutsu has no stash. Run `jj new @-` to park the current change as a sibling commit; find it later in `jj log`.                                                            |
+| `git stash pop`                                                             | `jj edit <change-id>`                                        | DENY           | Refused `git stash pop`: there is no stash to pop. Re-enter the parked change with `jj edit <change-id>` (locate it with `jj log`).                                                              |
+| `git cherry-pick <rev>`                                                     | `jj duplicate <rev> -o <dest>`                               | DENY           | Refused `git cherry-pick`: run `jj duplicate <rev> -o <dest>` to copy that change onto another commit.                                                                                           |
+| `git revert <rev>`                                                          | `jj revert -r <rev> -B @`                                    | DENY           | Refused `git revert`: run `jj revert -r <rev> -B @` to insert the inverse of `<rev>` just before the working copy.                                                                               |
+| `git tag`                                                                   | `jj tag set` / `jj tag list` / `jj tag delete`               | DENY           | Refused `git tag`: run `jj tag list`, `jj tag set <name> -r <rev>`, or `jj tag delete <name>`.                                                                                                   |
+| `git push`                                                                  | `jj git push --bookmark <name>`                              | DENY           | Refused `git push`: run `jj git push --bookmark <name>`. Jujutsu pushes bookmarks explicitly — there is no implicit current-branch push.                                                         |
+| `git push --force`                                                          | `jj git push` (already force-with-lease)                     | DENY           | Refused `git push --force`: no force flag is needed. `jj git push` updates the remote only if it matches what you last fetched.                                                                  |
+| `git pull`                                                                  | `jj git fetch` + `jj rebase`                                 | DENY           | Refused `git pull`: Jujutsu has no pull. Run `jj git fetch`, then `jj rebase -b <bookmark> -o <remote-bookmark>` to integrate.                                                                   |
+| `git fetch`                                                                 | `jj git fetch`                                               | DENY           | Refused `git fetch`: run `jj git fetch`. Note the `jj` prefix — `jj git fetch` is a Jujutsu command and is never blocked.                                                                        |
+| `git clone <url>`                                                           | `jj git clone <url>`                                         | DENY           | Refused `git clone`: run `jj git clone <url> [<dir>]`. It creates a colocated repo by default.                                                                                                   |
+| `git remote -v`                                                             | `jj git remote list`                                         | DENY           | Refused `git remote -v`: run `jj git remote list`; add one with `jj git remote add <name> <url>`.                                                                                                |
+| `git remote add <n> <url>`                                                  | `jj git remote add <n> <url>`                                | DENY           | Refused `git remote add`: run `jj git remote add <name> <url>`.                                                                                                                                  |
+| `git worktree add <path>`                                                   | `jj workspace add <path>`                                    | DENY           | Refused `git worktree add`: run `jj workspace add <path>`. Workspaces are Jujutsu's native multi-working-copy feature.                                                                           |
+| `git submodule …`                                                           | none                                                         | SPECIAL        | Refused `git submodule`: Jujutsu has no submodule support. If the task truly needs submodules, do it in a separate plain Git clone, not in this workspace.                                       |
+| `git bisect …`                                                              | `jj bisect run`                                              | DENY           | Refused `git bisect`: run `jj bisect run <cmd>` — it finds the first bad revision automatically.                                                                                                 |
+| `git blame <file>`                                                          | `jj file annotate <path>`                                    | DENY           | Refused `git blame`: run `jj file annotate <path>` to show the change that last modified each line.                                                                                              |
+| `git show <rev>`                                                            | `jj show <rev>`                                              | DENY           | Refused `git show`: run `jj show <rev>` for the description plus diff.                                                                                                                           |
+| `git clean -fd`                                                             | none                                                         | SPECIAL        | Refused `git clean -fd`: Jujutsu has no "untracked" state to clean. Inspect with `jj status`, then delete the files yourself with `rm`.                                                          |
+| `git restore <path>`                                                        | `jj restore <path>`                                          | DENY           | Refused `git restore`: run `jj restore <paths>` to restore from the parent, or `jj restore --from <rev> <paths>`.                                                                                |
+| `git init`                                                                  | `jj git init`                                                | DENY           | Refused `git init`: run `jj git init` (colocated by default) or `jj git init --no-colocate`.                                                                                                     |
+| `git -C <dir> <sub>`                                                        | `jj -R <dir> <sub>`                                          | DENY           | Refused `git -C <dir>`: run `jj -R <dir> <sub>`, or `cd <dir>` first.                                                                                                                            |
+| `git config …`                                                              | `jj config …`                                                | SPECIAL        | Refused `git config`: Jujutsu reads identity from its own config, not `.git/config`. Use `jj config set --user user.name "…"` / `jj config list`.                                                |
+| `git lfs …`                                                                 | none                                                         | SPECIAL        | Refused `git lfs`: the `git` binary fronts this subcommand, so it cannot be allowed through. Jujutsu has no LFS integration; fetch LFS objects with a plain Git checkout outside this workspace. |
+| `jj <anything>`                                                             | —                                                            | ALLOW          | — (never denied)                                                                                                                                                                                 |
+| `jj git export\|fetch\|push\|clone\|init\|import\|remote\|root\|colocation` | —                                                            | ALLOW          | — (carve-out, see §2)                                                                                                                                                                            |
+| `gh pr create` / `gh …`                                                     | —                                                            | ALLOW          | — (not a Git command; the guard matches the invoked program, not the string `gh`)                                                                                                                |
 
 **SPECIAL footnotes**
 
@@ -104,7 +104,7 @@ thing at all.
 4. **DENY only if that basename is exactly `git`** (or `git.exe` on Windows).
    `jj`, `jj-hunk`, `git-lfs`, `gh`, `lazygit` are not `git` and pass.
 
-Because step 3 reads the *program*, `jj git export` resolves to program `jj` and
+Because step 3 reads the _program_, `jj git export` resolves to program `jj` and
 is allowed with no special case. The carve-out is therefore not a list of
 exceptions — it falls out of the rule. The `jj git …` list below is what a
 naive "contains `git`" guard would have wrongly denied, and is the regression
@@ -114,17 +114,17 @@ suite for the parser.
 
 From `jj git --help`:
 
-| Subcommand | Note |
-|---|---|
-| `jj git clone` | creates a **colocated** repo by default (verified: output dir had both `.git` and `.jj`) |
-| `jj git colocation` | nested: `disable`, `enable`, `status` |
-| `jj git export` | in colocated repos prints `No export needed in colocated workspaces.` |
-| `jj git fetch` | |
-| `jj git import` | in colocated repos prints the same "does nothing automatically" notice |
-| `jj git init` | colocated by default; `--no-colocate` opts out |
-| `jj git push` | |
-| `jj git remote` | nested: `add`, `list`, `remove`, `rename`, `set-url` |
-| `jj git root` | prints the underlying Git directory |
+| Subcommand          | Note                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `jj git clone`      | creates a **colocated** repo by default (verified: output dir had both `.git` and `.jj`) |
+| `jj git colocation` | nested: `disable`, `enable`, `status`                                                    |
+| `jj git export`     | in colocated repos prints `No export needed in colocated workspaces.`                    |
+| `jj git fetch`      |                                                                                          |
+| `jj git import`     | in colocated repos prints the same "does nothing automatically" notice                   |
+| `jj git init`       | colocated by default; `--no-colocate` opts out                                           |
+| `jj git push`       |                                                                                          |
+| `jj git remote`     | nested: `add`, `list`, `remove`, `rename`, `set-url`                                     |
+| `jj git root`       | prints the underlying Git directory                                                      |
 
 Nine top-level subcommands. Note there is **no `jj git pull`** and no
 `jj git merge` — both are absent from `jj git --help`.
@@ -157,7 +157,7 @@ $ git status --short
 ### 3.2 `git commit` succeeds and silently re-parents the jj working copy
 
 **CONFIRMED in effect, CORRECTED in causation.** The instruction says `git
-commit` "leaves the repo in detached HEAD". In fact the repo is *already*
+commit` "leaves the repo in detached HEAD". In fact the repo is _already_
 detached before any `git commit` runs — jj writes a raw SHA into `.git/HEAD`
 as soon as it takes over the working copy:
 
@@ -191,7 +191,7 @@ Working copy  (@) : mtsqztou e7d4e8f1 (empty) (no description set)
 Parent commit (@-): ysulvrlp d114518c committed with git
 ```
 
-So: `git commit` does not *create* the detached HEAD, it *exploits* it. The real
+So: `git commit` does not _create_ the detached HEAD, it _exploits_ it. The real
 damage is the second half — jj auto-imports the Git commit and rewrites the
 working-copy parent, exactly as the instruction describes. Denying `git commit`
 in colocated repos is correct.
@@ -217,43 +217,43 @@ shell AST, no filesystem, and no view of what a subprocess will do.
 
 ### False positives — the guard would DENY something harmless
 
-| Command string | Guard behavior | Acceptable? |
-|---|---|---|
-| `jj git export` | ALLOW — program resolves to `jj` | Yes, if §2 rule 3 is implemented |
-| `echo "git commit -m x"` | ALLOW — program is `echo` | Yes |
-| `grep -rn "git status" docs/` | ALLOW — program is `grep` | Yes |
-| `cat .git/config` | ALLOW — program is `cat` | Yes; a substring scan would deny this |
-| `jj log -r 'git_head()'` | ALLOW — program is `jj` | Yes |
-| `npm run git:check` | ALLOW — program is `npm` | Yes |
-| `git-lfs pull` | ALLOW — basename `git-lfs` ≠ `git` | Yes, and correct: it is a different binary |
-| `rm -rf .git` | ALLOW — not a Git command | **No.** This destroys a colocated repo. Out of scope for a Git-verb guard; needs a separate destructive-path rule |
+| Command string                | Guard behavior                     | Acceptable?                                                                                                       |
+| ----------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `jj git export`               | ALLOW — program resolves to `jj`   | Yes, if §2 rule 3 is implemented                                                                                  |
+| `echo "git commit -m x"`      | ALLOW — program is `echo`          | Yes                                                                                                               |
+| `grep -rn "git status" docs/` | ALLOW — program is `grep`          | Yes                                                                                                               |
+| `cat .git/config`             | ALLOW — program is `cat`           | Yes; a substring scan would deny this                                                                             |
+| `jj log -r 'git_head()'`      | ALLOW — program is `jj`            | Yes                                                                                                               |
+| `npm run git:check`           | ALLOW — program is `npm`           | Yes                                                                                                               |
+| `git-lfs pull`                | ALLOW — basename `git-lfs` ≠ `git` | Yes, and correct: it is a different binary                                                                        |
+| `rm -rf .git`                 | ALLOW — not a Git command          | **No.** This destroys a colocated repo. Out of scope for a Git-verb guard; needs a separate destructive-path rule |
 
 ### False negatives — the guard would ALLOW but a Git command really runs
 
 All of the following were executed and did invoke Git:
 
-| Command string | Guard behavior | Acceptable? |
-|---|---|---|
-| `command git status` | DENY if `command` is stripped | Yes, with §2 rule 2 |
-| `env FOO=1 git push` | DENY if the assignment is stripped | Yes |
-| `sh -c 'git commit'` / `bash -lc 'git commit'` | DENY if `-c` bodies are recursed into | Yes, with recursion |
-| `eval 'git status'` | DENY via recursion | Yes |
-| `nohup git --version` | DENY if `nohup` is stripped | Yes |
-| `/usr/bin/git status` | DENY — basename is `git` | Yes. Note two gits exist here: `/opt/homebrew/bin/git` (2.56.0) and `/usr/bin/git` (Apple Git-157) |
-| `echo "v=$(git rev-parse HEAD)"` | DENY only via `$()` recursion | Partially; **inconsistent** — a guard that recurses into substitutions will also flag read-only introspection. Prefer denying it (self-correcting to `jj log -r @-`) |
-| `` echo "v=`git rev-parse HEAD`" `` | same as above | same |
-| `make commit` (Makefile target shells out to `git commit`) | ALLOW — the string contains no `git` | **No, and unfixable at this layer.** The guard cannot read the Makefile |
-| `./scripts/commit.sh` | ALLOW | **No, unfixable** |
-| `g=git; $g status` | ALLOW | **No, unfixable** — variable indirection |
-| `python -c "import subprocess; subprocess.run(['git','status'])"` | ALLOW | **No, unfixable** |
-| `alias gs='git status'; gs` | ALLOW | **No, unfixable** — alias expansion happens inside the shell |
-| `echo hi \| xargs git add` | ALLOW unless `xargs` is treated as a wrapper | Prefer ALLOW: treating `xargs` as a wrapper creates false positives on `xargs rm`, and `git add` is a no-op gesture anyway |
+| Command string                                                    | Guard behavior                               | Acceptable?                                                                                                                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command git status`                                              | DENY if `command` is stripped                | Yes, with §2 rule 2                                                                                                                                                  |
+| `env FOO=1 git push`                                              | DENY if the assignment is stripped           | Yes                                                                                                                                                                  |
+| `sh -c 'git commit'` / `bash -lc 'git commit'`                    | DENY if `-c` bodies are recursed into        | Yes, with recursion                                                                                                                                                  |
+| `eval 'git status'`                                               | DENY via recursion                           | Yes                                                                                                                                                                  |
+| `nohup git --version`                                             | DENY if `nohup` is stripped                  | Yes                                                                                                                                                                  |
+| `/usr/bin/git status`                                             | DENY — basename is `git`                     | Yes. Note two gits exist here: `/opt/homebrew/bin/git` (2.56.0) and `/usr/bin/git` (Apple Git-157)                                                                   |
+| `echo "v=$(git rev-parse HEAD)"`                                  | DENY only via `$()` recursion                | Partially; **inconsistent** — a guard that recurses into substitutions will also flag read-only introspection. Prefer denying it (self-correcting to `jj log -r @-`) |
+| ``echo "v=`git rev-parse HEAD`"``                                 | same as above                                | same                                                                                                                                                                 |
+| `make commit` (Makefile target shells out to `git commit`)        | ALLOW — the string contains no `git`         | **No, and unfixable at this layer.** The guard cannot read the Makefile                                                                                              |
+| `./scripts/commit.sh`                                             | ALLOW                                        | **No, unfixable**                                                                                                                                                    |
+| `g=git; $g status`                                                | ALLOW                                        | **No, unfixable** — variable indirection                                                                                                                             |
+| `python -c "import subprocess; subprocess.run(['git','status'])"` | ALLOW                                        | **No, unfixable**                                                                                                                                                    |
+| `alias gs='git status'; gs`                                       | ALLOW                                        | **No, unfixable** — alias expansion happens inside the shell                                                                                                         |
+| `echo hi \| xargs git add`                                        | ALLOW unless `xargs` is treated as a wrapper | Prefer ALLOW: treating `xargs` as a wrapper creates false positives on `xargs rm`, and `git add` is a no-op gesture anyway                                           |
 
 ### Conclusion for the guard
 
 Implement rules 1–4 of §2 (splitting, wrapper stripping, `-c`/`eval` recursion,
 substitution recursion) and accept the remaining false negatives. The
-unfixable set is dominated by *indirect* invocations, which are rare in agent
+unfixable set is dominated by _indirect_ invocations, which are rare in agent
 tool calls — the model emits `git commit`, not `make commit`, when it means to
 commit. A guard that also denied `rm -rf .git` and Makefile/script entry points
 would need filesystem and process inspection, which is a different feature.
@@ -266,15 +266,15 @@ meaningful; `commit` takes a message as a positional after the selection.
 
 ### Query language (verified by execution, not by reading)
 
-| Element | Verified behavior |
-|---|---|
-| Predicates | `added()`, `removed()`, `changed()`, `renamed()`, `mode_changed()`, `binary_changed()`, `all()`, `none()`, `id("hunk-…")` |
-| Fields | `content:` and `path:` are the two that work. `file:` parses but **never matches anything** (returned 0 hunks for `file:"*"`, `file:glob:"*"`, `file:regex:".*"`) — do not use it |
-| Value modifiers | `substring:` (default for `content`), `glob:`, `regex:`, `exact:`. `contains:`, `icontains:`, `starts_with:` are rejected: `unknown field` |
-| `path:` default | **glob**, not substring. `path:"*"` matched only top-level files; `path:"server.js"` matched nothing while `path:"**/server.js"` matched |
-| `content:` default | substring, case-sensitive: `content:"timeout"` missed `TIMEOUT_MS`; `content:regex:"TIMEOUT\|timeout"` and `content:regex:"(?i)todo"` both work |
-| Combinators | `\|`, `&`, `~`, parentheses |
-| `--query` exclusivity | cannot be combined with `--files`, `--include`, or `--exclude` (all three error). File scoping must go inside the query as `path:` |
+| Element               | Verified behavior                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Predicates            | `added()`, `removed()`, `changed()`, `renamed()`, `mode_changed()`, `binary_changed()`, `all()`, `none()`, `id("hunk-…")`                                                         |
+| Fields                | `content:` and `path:` are the two that work. `file:` parses but **never matches anything** (returned 0 hunks for `file:"*"`, `file:glob:"*"`, `file:regex:".*"`) — do not use it |
+| Value modifiers       | `substring:` (default for `content`), `glob:`, `regex:`, `exact:`. `contains:`, `icontains:`, `starts_with:` are rejected: `unknown field`                                        |
+| `path:` default       | **glob**, not substring. `path:"*"` matched only top-level files; `path:"server.js"` matched nothing while `path:"**/server.js"` matched                                          |
+| `content:` default    | substring, case-sensitive: `content:"timeout"` missed `TIMEOUT_MS`; `content:regex:"TIMEOUT\|timeout"` and `content:regex:"(?i)todo"` both work                                   |
+| Combinators           | `\|`, `&`, `~`, parentheses                                                                                                                                                       |
+| `--query` exclusivity | cannot be combined with `--files`, `--include`, or `--exclude` (all three error). File scoping must go inside the query as `path:`                                                |
 
 ### Hunk IDs regenerate — always prefer `--query`
 
@@ -297,7 +297,7 @@ A g.txt
 Worse: writing a spec file **into the repo working copy** invalidates the IDs
 it contains, so the spec can never match. This was observed live — a spec saved
 at `<repo>/spec.yaml` made `jj-hunk commit --spec-file spec.yaml` create an
-*empty* commit. The same spec at `/tmp/spec.yaml` worked. **Spec files must live
+_empty_ commit. The same spec at `/tmp/spec.yaml` worked. **Spec files must live
 outside the working copy.** Recommend `--query` for anything an agent does in
 one turn; use `--spec-file` only for a human-reviewed, out-of-tree artifact.
 
@@ -307,15 +307,15 @@ All run in a scratch repo with `src/server.js` (a `TIMEOUT_MS` constant plus a
 `console.log("timeout " + TIMEOUT_MS)` line), a gutted `src/legacy.js`, and a
 README edit.
 
-| # | Agent intent | Command | Result |
-|---|---|---|---|
-| 1 | Preview before applying | `jj-hunk list --query 'added(content:"TIMEOUT_MS")' --format text` | listed 2 hunks in `src/server.js` |
-| 2 | Commit only the new constant | `jj-hunk commit --query 'added(content:"TIMEOUT_MS")' "add request timeout"` | created `add request timeout`; leftover `jj diff --stat` showed only `src/legacy.js` |
-| 3 | Split out one file's work | `jj-hunk split --query 'added(path:"src/server.js")' "server work"` | `Selected changes: … server work` + `Remaining changes: …` |
-| 4 | Squash debug noise into the parent | `jj-hunk squash --query 'added(content:glob:"*console.log*")'` | `Rebased 1 descendant commits.`; the console.log hunks left the working copy |
-| 5 | Commit all deletions | `jj-hunk commit --query 'removed()' "drop dead code"` | committed the `legacy.js` removal and the README rewrite; inserts stayed |
-| 6 | Narrow by file **and** content | `jj-hunk commit --query 'added(path:"src/server.js") & added(content:"TIMEOUT_MS")' "timeout only"` | committed 1 hunk; `src/legacy.js` and `README.md` stayed |
-| 7 | Case-insensitive TODO sweep | `jj-hunk list --query 'added(content:regex:"(?i)todo\|fixme")' --format text` | matched the README hunk |
+| #   | Agent intent                       | Command                                                                                             | Result                                                                               |
+| --- | ---------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1   | Preview before applying            | `jj-hunk list --query 'added(content:"TIMEOUT_MS")' --format text`                                  | listed 2 hunks in `src/server.js`                                                    |
+| 2   | Commit only the new constant       | `jj-hunk commit --query 'added(content:"TIMEOUT_MS")' "add request timeout"`                        | created `add request timeout`; leftover `jj diff --stat` showed only `src/legacy.js` |
+| 3   | Split out one file's work          | `jj-hunk split --query 'added(path:"src/server.js")' "server work"`                                 | `Selected changes: … server work` + `Remaining changes: …`                           |
+| 4   | Squash debug noise into the parent | `jj-hunk squash --query 'added(content:glob:"*console.log*")'`                                      | `Rebased 1 descendant commits.`; the console.log hunks left the working copy         |
+| 5   | Commit all deletions               | `jj-hunk commit --query 'removed()' "drop dead code"`                                               | committed the `legacy.js` removal and the README rewrite; inserts stayed             |
+| 6   | Narrow by file **and** content     | `jj-hunk commit --query 'added(path:"src/server.js") & added(content:"TIMEOUT_MS")' "timeout only"` | committed 1 hunk; `src/legacy.js` and `README.md` stayed                             |
+| 7   | Case-insensitive TODO sweep        | `jj-hunk list --query 'added(content:regex:"(?i)todo\|fixme")' --format text`                       | matched the README hunk                                                              |
 
 ### ID-based fallback, if a spec is unavoidable
 

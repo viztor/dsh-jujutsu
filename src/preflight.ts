@@ -91,11 +91,7 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
  * — so version detection is tiered and the tier that always works is "does it
  * run" (`docs/33-probe-results-jj.md` §1).
  */
-async function hasJjHunk(
-  ctx: Context,
-  settings: Settings,
-  cwd: string,
-): Promise<boolean> {
+async function hasJjHunk(ctx: Context, settings: Settings, cwd: string): Promise<boolean> {
   try {
     const result = await runJj(ctx, settings.jjHunkPath, ["--help"], {
       cwd,

@@ -462,17 +462,7 @@ export function buildToolDefinitions(
     parameters: {
       action: {
         type: "string",
-        enum: [
-          "list",
-          "create",
-          "set",
-          "move",
-          "delete",
-          "forget",
-          "rename",
-          "track",
-          "untrack",
-        ],
+        enum: ["list", "create", "set", "move", "delete", "forget", "rename", "track", "untrack"],
         description: "What to do.",
         required: true,
       },
@@ -555,7 +545,8 @@ export function buildToolDefinitions(
       mode: {
         type: "string",
         enum: ["split", "commit", "squash"],
-        description: "split: put the selection in the first commit. commit: commit it. squash: move it into the parent.",
+        description:
+          "split: put the selection in the first commit. commit: commit it. squash: move it into the parent.",
         required: true,
       },
       query: {
@@ -644,8 +635,7 @@ export function applyTools(ctx: Context, settings: Settings): void {
   // when the property form is absent, a single-accessor check silently registers
   // nothing at all, which is exactly what happened on the first live install.
   const registry =
-    (ctx.tools as ToolRegistry | undefined) ??
-    (ctx.get("tools") as ToolRegistry | undefined);
+    (ctx.tools as ToolRegistry | undefined) ?? (ctx.get("tools") as ToolRegistry | undefined);
   if (registry === undefined) return;
 
   for (const definition of buildToolDefinitions(ctx, settings)) {

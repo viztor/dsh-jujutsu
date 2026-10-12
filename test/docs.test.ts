@@ -49,9 +49,7 @@ describe("the documented test count is the real one", () => {
   it("matches the number of tests that exist", () => {
     const real = declaredTests();
     const wrong = claims().filter((c) => c.count !== real);
-    expect(
-      wrong.map((c) => `${c.file}: says "${c.text}", actual is ${real}`),
-    ).toEqual([]);
+    expect(wrong.map((c) => `${c.file}: says "${c.text}", actual is ${real}`)).toEqual([]);
   });
 
   it("counts every test file, so a new one cannot be forgotten", () => {

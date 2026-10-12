@@ -5,12 +5,12 @@ read out of the installed `0.2.0-rc.2` source; citations are package-relative.
 
 ## 0. Verdicts at a glance
 
-| § | Surface | Owned by | Verdict | Effect on the spec |
-|---|---|---|---|---|
-| 1 | `storage` — persistent plugin state | `dsh-storage`, `dsh-storage-json`, `dsh-storage-domain` | **REJECT** (for the bypass allowlist) · **CONSIDER** (session log instead) | [17](17-bypass-and-approval.md) keeps its "dies with the session" invariant; the durable-within-a-session option moves to the session log, not a new store |
-| 2 | `settingsSchema` / `configForms` | `dsh-settings`, `dsh-client-ui-settings`, `dsh-client-ui-plugin-manager` | **CONSIDER** — `.volatile()` is required to be visible at all, but buys no controls | `SPEC.md` §6 gains per-field volatility annotations and a note that real controls need a browser half |
-| 3 | `sandboxPolicy` — resolved per-call policy | `dsh-sandbox-policy` | **USE** | Closes [24](24-implementation-plan.md) §6 unknown #7 — **definitively yes** |
-| 4 | `permissionPresets` — the preset table | `dsh-permission-presets` | **REJECT** (as a policy source) · **USE** `approval.config.policy` instead | Fixes a real defect in [17](17-bypass-and-approval.md) §"The design" |
+| §   | Surface                                    | Owned by                                                                 | Verdict                                                                             | Effect on the spec                                                                                                                                         |
+| --- | ------------------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `storage` — persistent plugin state        | `dsh-storage`, `dsh-storage-json`, `dsh-storage-domain`                  | **REJECT** (for the bypass allowlist) · **CONSIDER** (session log instead)          | [17](17-bypass-and-approval.md) keeps its "dies with the session" invariant; the durable-within-a-session option moves to the session log, not a new store |
+| 2   | `settingsSchema` / `configForms`           | `dsh-settings`, `dsh-client-ui-settings`, `dsh-client-ui-plugin-manager` | **CONSIDER** — `.volatile()` is required to be visible at all, but buys no controls | `SPEC.md` §6 gains per-field volatility annotations and a note that real controls need a browser half                                                      |
+| 3   | `sandboxPolicy` — resolved per-call policy | `dsh-sandbox-policy`                                                     | **USE**                                                                             | Closes [24](24-implementation-plan.md) §6 unknown #7 — **definitively yes**                                                                                |
+| 4   | `permissionPresets` — the preset table     | `dsh-permission-presets`                                                 | **REJECT** (as a policy source) · **USE** `approval.config.policy` instead          | Fixes a real defect in [17](17-bypass-and-approval.md) §"The design"                                                                                       |
 
 ## 1. `storage` — persistent plugin state
 
@@ -19,10 +19,10 @@ read out of the installed `0.2.0-rc.2` source; citations are package-relative.
 Three packages, one stack. The hub does no IO; a backend owns a medium; the
 domain layer owns semantics.
 
-| Package | Provides | Key surface |
-|---|---|---|
-| `dsh-storage` | `ctx.storage` hub + named backend registry | `Storage extends Service` (`dsh-storage/lib/types/index.d.ts:39`); `backend` registry `:41`; `form(key)` `:57`; `get domain()` `:59` |
-| `dsh-storage-json` | the `json` backend: one document per unit under a configured root | `Config { root: string }` (`dsh-storage-json/lib/types/index.d.ts:21-24`); registers as backend `json` `:39-43` |
+| Package              | Provides                                                          | Key surface                                                                                                                                                                                 |
+| -------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dsh-storage`        | `ctx.storage` hub + named backend registry                        | `Storage extends Service` (`dsh-storage/lib/types/index.d.ts:39`); `backend` registry `:41`; `form(key)` `:57`; `get domain()` `:59`                                                        |
+| `dsh-storage-json`   | the `json` backend: one document per unit under a configured root | `Config { root: string }` (`dsh-storage-json/lib/types/index.d.ts:21-24`); registers as backend `json` `:39-43`                                                                             |
 | `dsh-storage-domain` | the `domain` data form: zod-validated, change-emitting KV domains | `DomainFacility` (`dsh-storage-domain/lib/types/index.d.ts:52`), `open(spec)` `:83`; `ctx.storageDomain` `:27`; mounts `ctx.storage.domain` (`dsh-storage-domain/lib/index.js:444`, `:450`) |
 
 The unit vocabulary is `KvFacet.open(descriptor)` → `KvUnit`
@@ -40,15 +40,17 @@ A domain is declared once, with zod record schemas and a version
 
 ```ts
 const spec = defineDomain({
-  name: 'jujutsu_bypass',            // must match UNIT_NAME_RE
+  name: "jujutsu_bypass", // must match UNIT_NAME_RE
   version: 1,
-  layout: 'single',                  // default
-  tables: { grants: domainTable<GrantKey, Grant>(z.object({ /* … */ })) },
+  layout: "single", // default
+  tables: { grants: domainTable<GrantKey, Grant>(z.object({/* … */})) },
 });
 
-const domain = await ctx.storageDomain.open(spec);   // async
-ctx.effect(() => () => { void domain.close(); });     // the caller owns teardown
-domain.table('grants').put(key, value);               // durable, awaits the chain
+const domain = await ctx.storageDomain.open(spec); // async
+ctx.effect(() => () => {
+  void domain.close();
+}); // the caller owns teardown
+domain.table("grants").put(key, value); // durable, awaits the chain
 ```
 
 `ctx.storage.domain` throws `form-not-mounted` if the domain plugin is absent
@@ -60,12 +62,12 @@ composition-time hazard for a plugin that wants to stay optional.
 
 ### Scope
 
-| Question | Answer | Evidence |
-|---|---|---|
-| Per session? | **No.** One medium serves the process. | `Storage.backend` is one registry; `DomainFacility` owns one open-domain table (`dsh-storage-domain/lib/types/index.d.ts:52-63`) |
-| Per workspace? | **No.** No such medium exists. | The backend's only scoping knob is `root` (`dsh-storage-json/lib/types/index.d.ts:21-24`); the domain layer's only routing knob is `routes: domainName → backendName` (`dsh-storage-domain/lib/types/index.d.ts:40-45`) |
-| Per profile / DSH home? | **Yes** — this is the real scope. | `dsh-base` mounts one `storage-json` with `root: dshHomePath('storages')` and one `storage-domain` with `backend: json` (`dsh-base/cordis.patch.yml:168-176`). `dshHomePath` resolves under one harness home: `$DSH_HOME`, else `~/.dsh` (`dsh-home-paths/lib/types/index.d.ts:11`, `:40`, `:48`, `:54`) |
-| Partitionable by key? | **Yes**, and only by key. The store is global; the *partitioning* is the owner's choice. | `dsh-workspace` is the reference: a global `workspaces` table keyed by `WorkspaceId`, records carrying `path` (`dsh-workspace/lib/types/spec.d.ts:58`; opened at `dsh-workspace/lib/index.js:378`) |
+| Question                | Answer                                                                                   | Evidence                                                                                                                                                                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per session?            | **No.** One medium serves the process.                                                   | `Storage.backend` is one registry; `DomainFacility` owns one open-domain table (`dsh-storage-domain/lib/types/index.d.ts:52-63`)                                                                                                                                                                         |
+| Per workspace?          | **No.** No such medium exists.                                                           | The backend's only scoping knob is `root` (`dsh-storage-json/lib/types/index.d.ts:21-24`); the domain layer's only routing knob is `routes: domainName → backendName` (`dsh-storage-domain/lib/types/index.d.ts:40-45`)                                                                                  |
+| Per profile / DSH home? | **Yes** — this is the real scope.                                                        | `dsh-base` mounts one `storage-json` with `root: dshHomePath('storages')` and one `storage-domain` with `backend: json` (`dsh-base/cordis.patch.yml:168-176`). `dshHomePath` resolves under one harness home: `$DSH_HOME`, else `~/.dsh` (`dsh-home-paths/lib/types/index.d.ts:11`, `:40`, `:48`, `:54`) |
+| Partitionable by key?   | **Yes**, and only by key. The store is global; the _partitioning_ is the owner's choice. | `dsh-workspace` is the reference: a global `workspaces` table keyed by `WorkspaceId`, records carrying `path` (`dsh-workspace/lib/types/spec.d.ts:58`; opened at `dsh-workspace/lib/index.js:378`)                                                                                                       |
 
 **Is there a supported per-workspace store? No.** The nearest thing is a global
 domain whose table is keyed by a workspace identity, exactly as
@@ -79,21 +81,21 @@ become path segments and must match `[a-zA-Z0-9_-]+`, an unsafe key rejects
 ### Should the "remembered bypass" persist?
 
 [17](17-bypass-and-approval.md) §"The repetition problem" option 2 keeps
-`(session, verb)` in memory and states the rule explicitly: *"Not persistent
-beyond the session unless the user wrote it into config."* That rule is correct
+`(session, verb)` in memory and states the rule explicitly: _"Not persistent
+beyond the session unless the user wrote it into config."_ That rule is correct
 and `storage` cannot honour it.
 
-| Route | What it buys | What it costs |
-|---|---|---|
-| `ctx.storage` domain | Survives process restart | A **global-to-the-DSH-home** grant: approving `git commit` in one repo silently permits it in every other repo under the same home. Plus a new domain spec, versioned zod schemas, a write chain, a `ctx.effect` teardown, a fail-open path for compositions without the storage rows, and a path-keyed `single`-layout unit that rewrites wholesale |
-| Session log + projection | Survives restart **by replay of that session** — which is still "the session" | One `session.append(...)` call and one `ctx.sessionProjections.register(...)` unit. No new file, no new package, no new medium |
-| In-memory `Map` (status quo) | Nothing; dies with the process | Zero |
+| Route                        | What it buys                                                                  | What it costs                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.storage` domain         | Survives process restart                                                      | A **global-to-the-DSH-home** grant: approving `git commit` in one repo silently permits it in every other repo under the same home. Plus a new domain spec, versioned zod schemas, a write chain, a `ctx.effect` teardown, a fail-open path for compositions without the storage rows, and a path-keyed `single`-layout unit that rewrites wholesale |
+| Session log + projection     | Survives restart **by replay of that session** — which is still "the session" | One `session.append(...)` call and one `ctx.sessionProjections.register(...)` unit. No new file, no new package, no new medium                                                                                                                                                                                                                       |
+| In-memory `Map` (status quo) | Nothing; dies with the process                                                | Zero                                                                                                                                                                                                                                                                                                                                                 |
 
 The session-log route is the harness's own answer to this exact question.
 `dsh-sandbox-policy` documents the pattern for its own per-session override:
-*"the session log as the store … so an override survives restart by replay, two
+_"the session log as the store … so an override survives restart by replay, two
 sessions can never see each other's state, and there is no external config
-store"* (`dsh-sandbox-policy/lib/types/session-mode.d.ts:1-17`). The primitives
+store"_ (`dsh-sandbox-policy/lib/types/session-mode.d.ts:1-17`). The primitives
 are `session.append(type, data)` (`dsh-session/lib/types/index.d.ts:246`),
 declaration-merged event types via `SessionEventMap`, and
 `ctx.sessionProjections.register({key, stateVersion, stateSchema, init, apply})`
@@ -110,8 +112,8 @@ never crosses a project boundary — holds for the session log and fails for
 
 ### Concrete spec change
 
-- [17](17-bypass-and-approval.md) §"What the bypass must never be": keep *"Not
-  persistent beyond the session"* and add the reason — the only supported
+- [17](17-bypass-and-approval.md) §"What the bypass must never be": keep _"Not
+  persistent beyond the session"_ and add the reason — the only supported
   durable medium is global to the DSH home, so persisting there would silently
   widen the grant across projects.
 - [17](17-bypass-and-approval.md) §"The repetition problem": state that the
@@ -128,24 +130,24 @@ A two-half system. The host projects each configurable loader entry's exported
 `Config` schema into a form; the browser reads that form through a mirror and
 writes back through the settings remote.
 
-| Half | Package | Service | Role |
-|---|---|---|---|
-| Host | `dsh-settings` | `ctx.settings` (`SettingsForms`) (`dsh-settings/lib/types/index.d.ts:62`) | `describe()` → `SettingsDescriptor[]` keyed by profile entry id (`:96`, `:8-19`); `update` / `replace` / `mutate` write (`:102`, `:108`, `:114`) |
-| Host | `dsh-config-editor` | `ctx.configEditor` (`dsh-config-editor/lib/types/index.d.ts:10`) | `entries()` `:19`, `configuration()` `:23`, `edit(entry, change)` `:34`, `documentPath` `:15` — the profile patch YAML |
-| Host (wire) | `dsh-api-settings-controller` | — | carries `autoGenerate` and the redacted descriptor to the browser |
-| Client | `dsh-client-ui-settings` | `ctx.configForms` (`dsh-client-ui-settings/lib/types/client/config-form.d.ts:106`) | `get(entryId)` → `ConfigForm` `:142`; `describe()` `:137`; `whileServed(namespaces, register)` `:156` |
-| Client | `dsh-client-ui-settings` | `ctx.settingsSchema` (`.../client/schema.d.ts:11`) | `rehydrate(schema.toJSON())` `:19`, `validate` `:26`, `nodeAtPath` `:33`, `setPath` `:56`, `deletePath` `:64` |
+| Half        | Package                       | Service                                                                            | Role                                                                                                                                             |
+| ----------- | ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Host        | `dsh-settings`                | `ctx.settings` (`SettingsForms`) (`dsh-settings/lib/types/index.d.ts:62`)          | `describe()` → `SettingsDescriptor[]` keyed by profile entry id (`:96`, `:8-19`); `update` / `replace` / `mutate` write (`:102`, `:108`, `:114`) |
+| Host        | `dsh-config-editor`           | `ctx.configEditor` (`dsh-config-editor/lib/types/index.d.ts:10`)                   | `entries()` `:19`, `configuration()` `:23`, `edit(entry, change)` `:34`, `documentPath` `:15` — the profile patch YAML                           |
+| Host (wire) | `dsh-api-settings-controller` | —                                                                                  | carries `autoGenerate` and the redacted descriptor to the browser                                                                                |
+| Client      | `dsh-client-ui-settings`      | `ctx.configForms` (`dsh-client-ui-settings/lib/types/client/config-form.d.ts:106`) | `get(entryId)` → `ConfigForm` `:142`; `describe()` `:137`; `whileServed(namespaces, register)` `:156`                                            |
+| Client      | `dsh-client-ui-settings`      | `ctx.settingsSchema` (`.../client/schema.d.ts:11`)                                 | `rehydrate(schema.toJSON())` `:19`, `validate` `:26`, `nodeAtPath` `:33`, `setPath` `:56`, `deletePath` `:64`                                    |
 
 ### How a plugin's `Config` becomes a settings section
 
-| Step | Where | What happens |
-|---|---|---|
-| 1 | the plugin | `export const Config = z.object({ … })` — a `@deepseek-ai/schemastery` schema |
-| 2 | the loader | the entry becomes an addressable profile row (`ctx.configEditor.entries()`, `dsh-config-editor/lib/types/index.d.ts:19`); `describe()` iterates `configEditor.configuration()` (`dsh-settings/lib/index.js:415`) |
-| 3 | `dsh-settings` | reads the schema off the **running fiber**: `entry.fiber.runtime.Config` (`dsh-settings/lib/index.js:538-541`). Only an active fiber qualifies (`:417`) |
-| 4 | `dsh-settings` | `volatileForm(schema)` — and **if that is `undefined` the entry is dropped entirely** (`dsh-settings/lib/index.js:418-419`) |
-| 5 | `dsh-settings` | serializes `form.toJSON()` and hardcodes `applies: 'live'` (`:444`, `:446`) |
-| 6 | the browser | a page calls `ctx.configForms.get(entryId)` and writes with `set` / `unset` / `mutate` |
+| Step | Where          | What happens                                                                                                                                                                                                     |
+| ---- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | the plugin     | `export const Config = z.object({ … })` — a `@deepseek-ai/schemastery` schema                                                                                                                                    |
+| 2    | the loader     | the entry becomes an addressable profile row (`ctx.configEditor.entries()`, `dsh-config-editor/lib/types/index.d.ts:19`); `describe()` iterates `configEditor.configuration()` (`dsh-settings/lib/index.js:415`) |
+| 3    | `dsh-settings` | reads the schema off the **running fiber**: `entry.fiber.runtime.Config` (`dsh-settings/lib/index.js:538-541`). Only an active fiber qualifies (`:417`)                                                          |
+| 4    | `dsh-settings` | `volatileForm(schema)` — and **if that is `undefined` the entry is dropped entirely** (`dsh-settings/lib/index.js:418-419`)                                                                                      |
+| 5    | `dsh-settings` | serializes `form.toJSON()` and hardcodes `applies: 'live'` (`:444`, `:446`)                                                                                                                                      |
+| 6    | the browser    | a page calls `ctx.configForms.get(entryId)` and writes with `set` / `unset` / `mutate`                                                                                                                           |
 
 **So the answer to "does the plugin have to declare anything beyond exporting
 `Config`?" is: yes — every field that should be visible must carry
@@ -157,13 +159,13 @@ entry never appears in `describe()` at all
 
 ### What the schema modifiers do to rendering
 
-| Modifier | Effect on the form | Evidence |
-|---|---|---|
-| `.volatile()` | Makes the field part of the form, live-editable without remounting the plugin. Its runtime value becomes a `Volatile<T>` (`volatile` → `Volatile<T \| undefined>`, `volatile().required()` → `Volatile<T>`) | `schemastery/lib/types/index.d.ts:156`, `:205-207`; `cosmokit/lib/types/volatile.d.ts:7`, `:9`, `:22` |
-| (absent) | The field is **not** in the serialized form; a write addressed at it throws `Config field "x" is not volatile` | `dsh-settings/lib/index.js:507`; `dsh-settings/lib/types/schema.js:78-84` |
-| `.role('secret')` | Redaction: `default` and `required` are deleted from the serialized schema, and the field is **removed** from the value while a sidecar records its path and whether it holds a value, so a remote reader never receives the secret but a UI can still render a write-only input | `dsh-settings/lib/types/schema.js:23-26`; `dsh-settings/lib/types/redact.js:1-19` |
-| `.get()` | Not a modifier — the accessor on a volatile field's runtime value. `plainConfig` unwraps it with `isVolatile(value) → value.get()` | `dsh-settings/lib/types/schema.js:9-18`; `cosmokit/lib/types/volatile.d.ts:9`, `:22` |
-| `.description()` / `.comment()` / `.link()` / `.badges` / `.disabled()` / `.collapse()` / `.hidden()` | UI metadata carried through `toJSON()` for whatever renders it | `schemastery/lib/types/index.d.ts:158`, `:164`, `:168`, `:170`, `:172`, `:174`, `:106-120` |
+| Modifier                                                                                              | Effect on the form                                                                                                                                                                                                                                                               | Evidence                                                                                              |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `.volatile()`                                                                                         | Makes the field part of the form, live-editable without remounting the plugin. Its runtime value becomes a `Volatile<T>` (`volatile` → `Volatile<T \| undefined>`, `volatile().required()` → `Volatile<T>`)                                                                      | `schemastery/lib/types/index.d.ts:156`, `:205-207`; `cosmokit/lib/types/volatile.d.ts:7`, `:9`, `:22` |
+| (absent)                                                                                              | The field is **not** in the serialized form; a write addressed at it throws `Config field "x" is not volatile`                                                                                                                                                                   | `dsh-settings/lib/index.js:507`; `dsh-settings/lib/types/schema.js:78-84`                             |
+| `.role('secret')`                                                                                     | Redaction: `default` and `required` are deleted from the serialized schema, and the field is **removed** from the value while a sidecar records its path and whether it holds a value, so a remote reader never receives the secret but a UI can still render a write-only input | `dsh-settings/lib/types/schema.js:23-26`; `dsh-settings/lib/types/redact.js:1-19`                     |
+| `.get()`                                                                                              | Not a modifier — the accessor on a volatile field's runtime value. `plainConfig` unwraps it with `isVolatile(value) → value.get()`                                                                                                                                               | `dsh-settings/lib/types/schema.js:9-18`; `cosmokit/lib/types/volatile.d.ts:9`, `:22`                  |
+| `.description()` / `.comment()` / `.link()` / `.badges` / `.disabled()` / `.collapse()` / `.hidden()` | UI metadata carried through `toJSON()` for whatever renders it                                                                                                                                                                                                                   | `schemastery/lib/types/index.d.ts:158`, `:164`, `:168`, `:170`, `:172`, `:174`, `:106-120`            |
 
 `plainSchema` deletes `meta.volatile` before serialization
 (`dsh-settings/lib/types/schema.js:19-37`), so the browser sees an ordinary
@@ -185,12 +187,12 @@ The package's own README says so:
 client). No client plugin branches on it. Every shipped settings page is a
 hand-written browser plugin:
 
-| Slot | Declared by | Used for |
-|---|---|---|
-| `settings.section` | `dsh-client-ui-settings` (`.../contract/slots.d.ts:73`) | a whole page in the Settings shell |
-| `settings.plugins.tab` | same `:86` | a tab inside the Plugins section; e.g. the read-only inventory registers one (`dsh-client-ui-settings-plugin-inventory/lib/client.js:792`) |
-| `settings.general.item` | same `:120` | one preference row in General |
-| `plugins.item` · `plugins.bundle.config` · `plugins.row.config` | `dsh-client-ui-plugin-manager` | a plugin's own config page on the sidebar **Plugins** page; the page supplies `configForm: (id) => ctx.configForms.get(id)` to those slots (`dsh-client-ui-plugin-manager/lib/client.js:937-939`, `:3307-3317`) |
+| Slot                                                            | Declared by                                             | Used for                                                                                                                                                                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings.section`                                              | `dsh-client-ui-settings` (`.../contract/slots.d.ts:73`) | a whole page in the Settings shell                                                                                                                                                                              |
+| `settings.plugins.tab`                                          | same `:86`                                              | a tab inside the Plugins section; e.g. the read-only inventory registers one (`dsh-client-ui-settings-plugin-inventory/lib/client.js:792`)                                                                      |
+| `settings.general.item`                                         | same `:120`                                             | one preference row in General                                                                                                                                                                                   |
+| `plugins.item` · `plugins.bundle.config` · `plugins.row.config` | `dsh-client-ui-plugin-manager`                          | a plugin's own config page on the sidebar **Plugins** page; the page supplies `configForm: (id) => ctx.configForms.get(id)` to those slots (`dsh-client-ui-plugin-manager/lib/client.js:937-939`, `:3307-3317`) |
 
 ### Verdict
 
@@ -216,12 +218,12 @@ hand-written browser plugin:
 - `SPEC.md` §6: annotate each field. All nine are read at call time and none
   requires a remount, so all nine can be `.volatile()`:
 
-  | Field | Volatile | Why |
-  |---|---|---|
-  | `enabled`, `guard`, `bypass`, `readOnlyGit`, `rememberBypass` | yes | read per `tools/pre-execute` call |
-  | `jjPath`, `jjHunkPath` | yes | read per invocation |
-  | `hunkInstall` | yes | read only when a provisioning prompt is reached |
-  | `injectContext` | yes | the `systemPrompt` provider is a function evaluated per assembly ([22](22-context-injection.md)) |
+  | Field                                                         | Volatile | Why                                                                                              |
+  | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+  | `enabled`, `guard`, `bypass`, `readOnlyGit`, `rememberBypass` | yes      | read per `tools/pre-execute` call                                                                |
+  | `jjPath`, `jjHunkPath`                                        | yes      | read per invocation                                                                              |
+  | `hunkInstall`                                                 | yes      | read only when a provisioning prompt is reached                                                  |
+  | `injectContext`                                               | yes      | the `systemPrompt` provider is a function evaluated per assembly ([22](22-context-injection.md)) |
 
 - `SPEC.md` §6: add the note that `Config` + `.volatile()` yields live,
   path-addressable config through the settings service, and that user-facing
@@ -246,37 +248,38 @@ contribution at `systemPrompt.getContextOrder('SANDBOX_POLICY')`
 (`dsh-sandbox-policy/lib/index.js:121-130`) — that is the `Current DSH file
 policy: …` line the model sees.
 
-| Member | Signature | Source |
-|---|---|---|
-| `resolve(request?)` | `(req?: { session?: Session; mode?: SandboxMode }) => SandboxExecutionPolicy` | `dsh-sandbox-policy/lib/types/index.d.ts:88` |
-| `overrideOf(session)` | `(session) => SandboxMode \| undefined` — the session override without the deployment default | `:94` |
-| `defaultMode` | the deployment default | `:75` |
-| `workspaceRoot` | the absolute fallback root for agentless / cwd-less calls | `:77` |
-| `Config` | `{ mode?: SandboxMode (default 'read-only'); workspaceRoot?: string (default process.cwd()) }` | `:40-48`; `dsh-sandbox-policy/lib/index.js:97-104`, `:113` |
+| Member                | Signature                                                                                      | Source                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `resolve(request?)`   | `(req?: { session?: Session; mode?: SandboxMode }) => SandboxExecutionPolicy`                  | `dsh-sandbox-policy/lib/types/index.d.ts:88`               |
+| `overrideOf(session)` | `(session) => SandboxMode \| undefined` — the session override without the deployment default  | `:94`                                                      |
+| `defaultMode`         | the deployment default                                                                         | `:75`                                                      |
+| `workspaceRoot`       | the absolute fallback root for agentless / cwd-less calls                                      | `:77`                                                      |
+| `Config`              | `{ mode?: SandboxMode (default 'read-only'); workspaceRoot?: string (default process.cwd()) }` | `:40-48`; `dsh-sandbox-policy/lib/index.js:97-104`, `:113` |
 
 `SandboxExecutionPolicy` is the resolved per-call policy and **yes, it carries a
 `workspaceRoot`**:
 
 ```ts
 interface SandboxExecutionPolicy {
-  mode: SandboxMode;          // 'read-only' | 'workspace-write' | 'danger-full-access'
-  workspaceRoot: string;      // absolute root `workspace-write` may write under
-  sessionId?: SessionId;      // absent for agentless calls
+  mode: SandboxMode; // 'read-only' | 'workspace-write' | 'danger-full-access'
+  workspaceRoot: string; // absolute root `workspace-write` may write under
+  sessionId?: SessionId; // absent for agentless calls
 }
 ```
+
 — `dsh-sandbox/lib/types/index.d.ts:19`, `:27-40` (`workspaceRoot` at `:31`).
 It is carried "even under modes that do not consume it so callers can resolve
 policy once before choosing the enforcement path" (`:23-25`).
 
 ### The exact code path
 
-| Step | `bash` tool | a `tools/pre-execute` listener |
-|---|---|---|
-| gate | `const defaultMode = ctx.shell.sandboxMode` — `dsh-tool-bash/lib/index.js:344` | mirror: `ctx.shell.sandboxMode !== undefined` |
-| resolve service | `const sandboxPolicy = defaultMode === undefined ? undefined : ctx.get('sandboxPolicy')` — `:346`; **throws at plugin load** if confining and missing — `:347` | `ctx.get('sandboxPolicy')` |
-| build request | `sandboxPolicy?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })` — `:349` | identical expression |
-| call | `SandboxPolicyService.resolve(request)` — `dsh-sandbox-policy/lib/index.js:141-148` | identical |
-| consume | `resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoot)` — `dsh-tool-bash/lib/index.js:649`, body at `:293-299` | `resolveWorkdir(args.workdir, exec, policy?.workspaceRoot)` |
+| Step            | `bash` tool                                                                                                                                                    | a `tools/pre-execute` listener                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| gate            | `const defaultMode = ctx.shell.sandboxMode` — `dsh-tool-bash/lib/index.js:344`                                                                                 | mirror: `ctx.shell.sandboxMode !== undefined`               |
+| resolve service | `const sandboxPolicy = defaultMode === undefined ? undefined : ctx.get('sandboxPolicy')` — `:346`; **throws at plugin load** if confining and missing — `:347` | `ctx.get('sandboxPolicy')`                                  |
+| build request   | `sandboxPolicy?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })` — `:349`                                                             | identical expression                                        |
+| call            | `SandboxPolicyService.resolve(request)` — `dsh-sandbox-policy/lib/index.js:141-148`                                                                            | identical                                                   |
+| consume         | `resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoot)` — `dsh-tool-bash/lib/index.js:649`, body at `:293-299`                                     | `resolveWorkdir(args.workdir, exec, policy?.workspaceRoot)` |
 
 `resolve` is a pure function of its inputs
 (`dsh-sandbox-policy/lib/index.js:141-148`):
@@ -303,7 +306,7 @@ that same call.
 `bash` tool computes, for the same `exec`.** The expression is:
 
 ```ts
-const sandboxPolicy = ctx.shell.sandboxMode === undefined ? undefined : ctx.get('sandboxPolicy');
+const sandboxPolicy = ctx.shell.sandboxMode === undefined ? undefined : ctx.get("sandboxPolicy");
 const policyWorkspaceRoot = sandboxPolicy?.resolve(
   exec.agent === undefined ? {} : { session: exec.agent.session },
 )?.workspaceRoot;
@@ -326,7 +329,7 @@ service removes even the corner case.
 
 Two residuals, both stated rather than silently taken:
 
-1. **Mirror the gate.** In a composition with an *unconfining* executor
+1. **Mirror the gate.** In a composition with an _unconfining_ executor
    (`ctx.shell.sandboxMode === undefined`) and a session with no `header.cwd`,
    `bash` passes `undefined` as `policyWorkspaceRoot`, so `resolveWorkdir`
    falls back to `headerCwd` — also `undefined` — while an unconditional
@@ -335,7 +338,7 @@ Two residuals, both stated rather than silently taken:
    (`dsh-shell/lib/types/index.d.ts:54`).
 2. **Ordering.** Our listener reads inside the `tools/pre-execute` waterfall;
    the `bash` body reads after the whole waterfall and the monotonic guards
-   (`dsh-tools/lib/index.js:3225-3226`). A *later* listener that appends
+   (`dsh-tools/lib/index.js:3225-3226`). A _later_ listener that appends
    `sandbox/mode` would move the fold between the two reads. No shipped
    listener does this, and `setSandboxMode` is a user-facing write path
    (`dsh-sandbox-policy/lib/types/session-mode.d.ts:40-49`); log the resolved
@@ -381,16 +384,16 @@ composing this plugin over an unconfined executor is a misconfiguration"
 
 ### The interface a plugin uses
 
-| Member | Signature | Source |
-|---|---|---|
-| `names` | `readonly string[]` — configured keys, plus live `auto` | `dsh-permission-presets/lib/types/index.d.ts:133` |
-| `catalog()` | `() => PermissionCatalog` `{ options, defaultOptions, defaultPreset }` | `:138`, `:24-31` |
-| `current(session)` | `(session) => string` — the effective preset name, or `'custom'` | `:162` |
-| `resolve(name)` | `(name) => PresetSpec` `{ sandbox, approval, name?, description? }`; throws on an unknown name | `:171`, `:35-44` |
-| `optionOf(name)` | `(name) => PresetOption` — the client-facing label | `:179`, `:12-19` |
-| `defaultPreset` | the resolved default for future sessions | `:151` |
-| `set(session, name)` | **the write path** — appends `permission/preset` then each changed knob | `:186`; `dsh-permission-presets/lib/index.js:344-348` |
-| `registerAuto(admit)` | publishes the fixed `auto` preset for an integration's effect lifetime | `:145` |
+| Member                | Signature                                                                                      | Source                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `names`               | `readonly string[]` — configured keys, plus live `auto`                                        | `dsh-permission-presets/lib/types/index.d.ts:133`     |
+| `catalog()`           | `() => PermissionCatalog` `{ options, defaultOptions, defaultPreset }`                         | `:138`, `:24-31`                                      |
+| `current(session)`    | `(session) => string` — the effective preset name, or `'custom'`                               | `:162`                                                |
+| `resolve(name)`       | `(name) => PresetSpec` `{ sandbox, approval, name?, description? }`; throws on an unknown name | `:171`, `:35-44`                                      |
+| `optionOf(name)`      | `(name) => PresetOption` — the client-facing label                                             | `:179`, `:12-19`                                      |
+| `defaultPreset`       | the resolved default for future sessions                                                       | `:151`                                                |
+| `set(session, name)`  | **the write path** — appends `permission/preset` then each changed knob                        | `:186`; `dsh-permission-presets/lib/index.js:344-348` |
+| `registerAuto(admit)` | publishes the fixed `auto` preset for an integration's effect lifetime                         | `:145`                                                |
 
 **Can a plugin read the current preset for a session? Yes** —
 `ctx.get('permissionPresets')?.current(session)` returns the preset key, or
@@ -409,26 +412,26 @@ already states for `approval.setPolicy`.
 
 Package default (`dsh-permission-presets/lib/index.js:138-159`):
 
-| Preset | `sandbox` | `approval` | `name` | `description` |
-|---|---|---|---|---|
-| `workspace-write` | `workspace-write` | `ask` | `workspace-write` | "Write inside the workspace and permitted temporary directories; wider retries require approval." |
-| `danger-full-access` | `danger-full-access` | `never` | `danger-full-access` | "Full file access without approval prompts." |
+| Preset               | `sandbox`            | `approval` | `name`               | `description`                                                                                     |
+| -------------------- | -------------------- | ---------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| `workspace-write`    | `workspace-write`    | `ask`      | `workspace-write`    | "Write inside the workspace and permitted temporary directories; wider retries require approval." |
+| `danger-full-access` | `danger-full-access` | `never`    | `danger-full-access` | "Full file access without approval prompts."                                                      |
 
 The shipped base composition declares its own three-entry table
 (`dsh-base/cordis.patch.yml:250-262`):
 
-| Preset | `sandbox` | `approval` |
-|---|---|---|
-| `read-only` | `read-only` | `ask` |
-| `workspace-write` | `workspace-write` | `ask` |
-| `danger-full-access` | `danger-full-access` | `never` |
+| Preset               | `sandbox`            | `approval` |
+| -------------------- | -------------------- | ---------- |
+| `read-only`          | `read-only`          | `ask`      |
+| `workspace-write`    | `workspace-write`    | `ask`      |
+| `danger-full-access` | `danger-full-access` | `never`    |
 
 Two derived or fixed extras:
 
-| Name | Bundle | Note |
-|---|---|---|
-| `auto` | `danger-full-access` + `ask` | fixed bundle (`dsh-permission-presets/lib/index.js:58-61`), live only while an integration holds `registerAuto` (`:258-268`); a *stored* `auto` identity also matches `never` so a delegated child's reviewer denials stay final (`:302`) |
-| `custom` | — | derived when nothing matches (`:305`); reserved — the constructor throws if the table names it (`:175`) |
+| Name     | Bundle                       | Note                                                                                                                                                                                                                                      |
+| -------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto`   | `danger-full-access` + `ask` | fixed bundle (`dsh-permission-presets/lib/index.js:58-61`), live only while an integration holds `registerAuto` (`:258-268`); a _stored_ `auto` identity also matches `never` so a delegated child's reviewer denials stay final (`:302`) |
+| `custom` | —                            | derived when nothing matches (`:305`); reserved — the constructor throws if the table names it (`:175`)                                                                                                                                   |
 
 `defaultPreset` is inferred as the preset matching the composed sandbox and
 approval defaults when the Config field is omitted
@@ -451,7 +454,7 @@ policy. The guard needs a policy, not a preset name.
 presets are what exposed it:
 
 ```ts
-const policy = approval?.overrideOf(session) ?? 'ask';   // undefined → deployment default
+const policy = approval?.overrideOf(session) ?? "ask"; // undefined → deployment default
 ```
 
 `overrideOf` deliberately does **not** apply the deployment default — "Read the
@@ -462,6 +465,7 @@ is:
 ```js
 effectivePolicy(session) { return this.overrideOf(session) ?? this.config.policy ?? "ask"; }
 ```
+
 — `dsh-user-approval/lib/index.js:152-153`, `config` being the public
 `ApprovalService.config: Config` (`dsh-user-approval/lib/types/index.d.ts:106`).
 
@@ -471,10 +475,11 @@ shipped configuration:
 
 ```yaml
 - id: approval
-  name: '@deepseek-ai/dsh-user-approval'
+  name: "@deepseek-ai/dsh-user-approval"
   config:
     policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
 ```
+
 — `dsh-base/cordis.patch.yml:245-248`.
 
 Under `DSH_PERMISSION_MODE=danger-full-access` the guard as written concludes
@@ -500,20 +505,22 @@ and the model never sees the `jj` verb — the exact failure
 - [17](17-bypass-and-approval.md) §"The design": replace
 
   ```ts
-  const policy = approval?.overrideOf(session) ?? 'ask';
+  const policy = approval?.overrideOf(session) ?? "ask";
   ```
 
   with
 
   ```ts
-  const policy = approval === undefined
-    ? 'ask'
-    : approval.overrideOf(session) ?? approval.config.policy ?? 'ask';
+  const policy =
+    approval === undefined
+      ? "ask"
+      : (approval.overrideOf(session) ?? approval.config.policy ?? "ask");
   ```
 
   and delete the "`undefined → 'ask'` is right in practice" sentence, replacing
   it with the base composition's `danger-full-access → 'never'` expression as
   the counter-example.
+
 - [17](17-bypass-and-approval.md) §"Outcome matrix": the `never` row is
   reachable from the deployment default, not only from a session override. Add
   a row for "deployment default `never`, no session event".
@@ -526,28 +533,28 @@ and the model never sees the `jj` verb — the exact failure
 
 ## 5. What these four settle, together
 
-| Open item | Status after this document |
-|---|---|
-| [24](24-implementation-plan.md) §6 #7 — can the guard read the tool's `policyWorkspaceRoot`? | **Settled: yes**, and for any session with a cwd it is simply `session.header.cwd` (§3) |
-| [17](17-bypass-and-approval.md) §"The design" — how to read the approval policy | **Corrected**: `overrideOf(session) ?? approval.config.policy ?? 'ask'` (§4) |
-| [17](17-bypass-and-approval.md) §"The repetition problem" — should the bypass persist? | **Answered: not through `storage`.** The medium is global to the DSH home; the session log is the only durable per-session store (§1) |
-| `SPEC.md` §6 — how the nine fields reach a user | **Answered: `.volatile()` makes them live and addressable; controls need a browser half nobody has written a generator for** (§2) |
+| Open item                                                                                    | Status after this document                                                                                                            |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [24](24-implementation-plan.md) §6 #7 — can the guard read the tool's `policyWorkspaceRoot`? | **Settled: yes**, and for any session with a cwd it is simply `session.header.cwd` (§3)                                               |
+| [17](17-bypass-and-approval.md) §"The design" — how to read the approval policy              | **Corrected**: `overrideOf(session) ?? approval.config.policy ?? 'ask'` (§4)                                                          |
+| [17](17-bypass-and-approval.md) §"The repetition problem" — should the bypass persist?       | **Answered: not through `storage`.** The medium is global to the DSH home; the session log is the only durable per-session store (§1) |
+| `SPEC.md` §6 — how the nine fields reach a user                                              | **Answered: `.volatile()` makes them live and addressable; controls need a browser half nobody has written a generator for** (§2)     |
 
 ## Verification status
 
-| Claim | Status |
-|---|---|
-| `storage` stack, scope, interface, `form-not-mounted`, path-key key restriction | **VERIFIED** — read from `dsh-storage`, `dsh-storage-json`, `dsh-storage-domain`, `dsh-home-paths`, `dsh-base` |
-| No per-workspace store; `dsh-workspace` is a keyed global domain | **VERIFIED** — read from `dsh-workspace` and the domain facility |
-| Session log + projection is the harness's durable per-session pattern | **VERIFIED** — the `dsh-sandbox-policy` session-mode module doc states it as the design |
-| `Config` + `.volatile()` → `settings.describe()`; non-volatile paths reject writes | **VERIFIED** — read from `dsh-settings` |
-| `autoGenerate` has no shipped client consumer | **VERIFIED** — exhaustive grep; corroborated by `dsh-settings/README.md:39` |
-| Real settings pages are hand-written client plugins over `configForms.get(entryId)` | **VERIFIED** — read from `dsh-client-ui-settings`, `dsh-client-ui-plugin-manager`, and three shipped pages |
-| `sandboxPolicy.resolve` is pure and returns the same `workspaceRoot` for the same session | **VERIFIED** — read from `dsh-sandbox-policy`; the two call sites read from `dsh-tool-bash` and `dsh-tools` |
-| `SandboxExecutionPolicy` carries an absolute `workspaceRoot` | **VERIFIED** — `dsh-sandbox/lib/types/index.d.ts:27-40` |
-| Default preset tables and the `auto` / `custom` extras | **VERIFIED** — read from `dsh-permission-presets` and `dsh-base` |
-| `approval.overrideOf(session) ?? 'ask'` misreads a deployment-default `never` | **VERIFIED by reading**; the end-to-end consequence (model sees "the user rejected tool bash") is **UNVERIFIED** — it is the same live-flow gap as [17](17-bypass-and-approval.md) §"Verification status", and the M0 spike in [24](24-implementation-plan.md) §4 should assert this specific case |
-| A later `tools/pre-execute` listener could move the sandbox fold between the guard's read and dispatch | **PLAUSIBLE** — no shipped listener does; stated as a residual in §3 |
+| Claim                                                                                                  | Status                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage` stack, scope, interface, `form-not-mounted`, path-key key restriction                        | **VERIFIED** — read from `dsh-storage`, `dsh-storage-json`, `dsh-storage-domain`, `dsh-home-paths`, `dsh-base`                                                                                                                                                                                     |
+| No per-workspace store; `dsh-workspace` is a keyed global domain                                       | **VERIFIED** — read from `dsh-workspace` and the domain facility                                                                                                                                                                                                                                   |
+| Session log + projection is the harness's durable per-session pattern                                  | **VERIFIED** — the `dsh-sandbox-policy` session-mode module doc states it as the design                                                                                                                                                                                                            |
+| `Config` + `.volatile()` → `settings.describe()`; non-volatile paths reject writes                     | **VERIFIED** — read from `dsh-settings`                                                                                                                                                                                                                                                            |
+| `autoGenerate` has no shipped client consumer                                                          | **VERIFIED** — exhaustive grep; corroborated by `dsh-settings/README.md:39`                                                                                                                                                                                                                        |
+| Real settings pages are hand-written client plugins over `configForms.get(entryId)`                    | **VERIFIED** — read from `dsh-client-ui-settings`, `dsh-client-ui-plugin-manager`, and three shipped pages                                                                                                                                                                                         |
+| `sandboxPolicy.resolve` is pure and returns the same `workspaceRoot` for the same session              | **VERIFIED** — read from `dsh-sandbox-policy`; the two call sites read from `dsh-tool-bash` and `dsh-tools`                                                                                                                                                                                        |
+| `SandboxExecutionPolicy` carries an absolute `workspaceRoot`                                           | **VERIFIED** — `dsh-sandbox/lib/types/index.d.ts:27-40`                                                                                                                                                                                                                                            |
+| Default preset tables and the `auto` / `custom` extras                                                 | **VERIFIED** — read from `dsh-permission-presets` and `dsh-base`                                                                                                                                                                                                                                   |
+| `approval.overrideOf(session) ?? 'ask'` misreads a deployment-default `never`                          | **VERIFIED by reading**; the end-to-end consequence (model sees "the user rejected tool bash") is **UNVERIFIED** — it is the same live-flow gap as [17](17-bypass-and-approval.md) §"Verification status", and the M0 spike in [24](24-implementation-plan.md) §4 should assert this specific case |
+| A later `tools/pre-execute` listener could move the sandbox fold between the guard's read and dispatch | **PLAUSIBLE** — no shipped listener does; stated as a residual in §3                                                                                                                                                                                                                               |
 
 ## 3. A per-project switch, and why it is a plugin convention
 
@@ -557,13 +564,13 @@ plugin on or off, and whether the harness already had a mechanism for that.
 **It does not, and neither does `jj` — in a usable place.** Both halves were
 checked against the sources rather than assumed:
 
-| Candidate | What it actually is | Why it does not serve |
-|---|---|---|
-| `packages/settings/settings` | The harness settings service | **No workspace scope.** Settings are profile-global; there is no per-project layer to hang a switch on. |
-| Bundles and patch layers | `cordis.patch.yml`, `install_bundle` | Profile-level. Enabling or disabling a bundle affects every session in the profile. |
-| `AGENTS.md` / `CLAUDE.md` | `packages/context/agent-instructions/src/config.ts:12` | The one per-project file convention the harness *does* have — but it carries prose instructions, not configuration. |
-| `packages/api/workspace-files` | A read/watch API for the web GUI | Previews files in the client. Exposes no mutation and no config. |
-| `jj config set --repo` | `jj`'s per-repo config | Real, but it writes to `~/.config/jj/repos/<hash>/config.toml` — **outside the workspace**, uncommittable, and readable only via a `jj` subprocess or a reimplementation of `jj`'s path hashing. Verified on 0.46.0. |
+| Candidate                      | What it actually is                                    | Why it does not serve                                                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/settings/settings`   | The harness settings service                           | **No workspace scope.** Settings are profile-global; there is no per-project layer to hang a switch on.                                                                                                              |
+| Bundles and patch layers       | `cordis.patch.yml`, `install_bundle`                   | Profile-level. Enabling or disabling a bundle affects every session in the profile.                                                                                                                                  |
+| `AGENTS.md` / `CLAUDE.md`      | `packages/context/agent-instructions/src/config.ts:12` | The one per-project file convention the harness _does_ have — but it carries prose instructions, not configuration.                                                                                                  |
+| `packages/api/workspace-files` | A read/watch API for the web GUI                       | Previews files in the client. Exposes no mutation and no config.                                                                                                                                                     |
+| `jj config set --repo`         | `jj`'s per-repo config                                 | Real, but it writes to `~/.config/jj/repos/<hash>/config.toml` — **outside the workspace**, uncommittable, and readable only via a `jj` subprocess or a reimplementation of `jj`'s path hashing. Verified on 0.46.0. |
 
 So the switch is this plugin's own convention: **`.dsh-jujutsu.json`**, at any
 directory level, holding `{"enabled": true|false}`.
@@ -580,7 +587,7 @@ directory level, holding `{"enabled": true|false}`.
   would be the neighbourly choice — but there is no TOML parser in this plugin's
   dependencies or in the harness packages read, and adding a dependency to parse
   one boolean is the worse trade.
-- **A malformed marker is treated as absent**, which leaves the plugin *on*.
+- **A malformed marker is treated as absent**, which leaves the plugin _on_.
   That direction is deliberate: a typo must not be a silent way to switch off
   the guard. Every parse failure, unreadable file and wrong-typed value falls
   back to "no marker".
@@ -651,18 +658,18 @@ rest of the settings surface and surviving a restyle.
 
 `ConfigField` is driven by `value: string` plus `choices`:
 
-| `choices` | Control |
-|---|---|
-| empty | a text input (a path) |
+| `choices`                  | Control                           |
+| -------------------------- | --------------------------------- |
+| empty                      | a text input (a path)             |
 | `["deny", "ask", "allow"]` | a finite choice control (an enum) |
-| `["true", "false"]` | the same control (a boolean) |
+| `["true", "false"]`        | the same control (a boolean)      |
 
-So the field *kind* selects the control and the panel never reaches for `Switch`
+So the field _kind_ selects the control and the panel never reaches for `Switch`
 or `SegmentedControl` directly.
 
 **Groups use `DisclosureRow`**, the harness's own disclosure header — one per
 group, all open on arrival, since a settings page whose fields are all hidden
-makes the user click to discover what is configurable. It is *controlled*
+makes the user click to discover what is configurable. It is _controlled_
 (`open` + `onToggle`, no internal state), so the open state lives in the panel.
 
 An earlier revision drew its own chrome: a `Switch`/`SegmentedControl` per field,
@@ -681,13 +688,13 @@ primitives.SettingsFormModel   the drafts
 
 ### Fields the panel groups
 
-| Group | Fields |
-|---|---|
-| Guard | `guard`, `readOnlyGit`, `bypass`, `rememberBypass` |
-| When there is no repository | `alertUninitialised`, `preferJj` |
-| Teaching | `injectContext`, `teachSkill` |
-| Binaries | `jjPath`, `jjHunkPath`, `hunkInstall` |
-| Master switch | `enabled` |
+| Group                       | Fields                                             |
+| --------------------------- | -------------------------------------------------- |
+| Guard                       | `guard`, `readOnlyGit`, `bypass`, `rememberBypass` |
+| When there is no repository | `alertUninitialised`, `preferJj`                   |
+| Teaching                    | `injectContext`, `teachSkill`                      |
+| Binaries                    | `jjPath`, `jjHunkPath`, `hunkInstall`              |
+| Master switch               | `enabled`                                          |
 
 The second group is new. A directory with neither `.jj` nor `.git` used to be
 indistinguishable from one the detector had merely failed on, so the plugin said
@@ -711,12 +718,12 @@ below apply whichever one a plugin picks; this plugin picks
 
 ```ts
 export interface PluginConfigViewProps {
-  readonly view: 'summary' | 'page'
-  readonly form?: ConfigPageForm | undefined
+  readonly view: "summary" | "page";
+  readonly form?: ConfigPageForm | undefined;
 }
 export interface ConfigPageForm {
-  readonly state: ConfigFormSnapshot<Record<string, unknown>>
-  readonly mutate: ConfigForm<Record<string, unknown>>['mutate']
+  readonly state: ConfigFormSnapshot<Record<string, unknown>>;
+  readonly mutate: ConfigForm<Record<string, unknown>>["mutate"];
 }
 ```
 
@@ -724,13 +731,13 @@ and the page builds it at `PluginManagerPage.tsx:1255`:
 
 ```ts
 const formFor = (id: string): ConfigPageForm | undefined => {
-  if (!configurations?.some(view => view.ns === id)) return undefined
-  const form = props.configForm<Record<string, unknown>>(id)
-  return { state: form.getSnapshot(), mutate: (ops, revision) => form.mutate(ops, revision) }
-}
+  if (!configurations?.some((view) => view.ns === id)) return undefined;
+  const form = props.configForm<Record<string, unknown>>(id);
+  return { state: form.getSnapshot(), mutate: (ops, revision) => form.mutate(ops, revision) };
+};
 ```
 
-`form` is a **narrowed projection** — a snapshot *value* and a mutate, with no
+`form` is a **narrowed projection** — a snapshot _value_ and a mutate, with no
 `getSnapshot`/`subscribe`. `SettingsFormModel` needs a full scope
 (`{ getSnapshot, subscribe, mutate }`), which is what `ctx.configForms.get(NS)`
 returns. So the panel keeps using `ctx.configForms.get(NS)`, and the `form` prop
@@ -778,10 +785,10 @@ worked**, and this document said "verified live" on that basis. It was wrong.
 
 The crash itself: the panel read its four handlers off the wrong objects.
 
-| Read from | Actually there? |
-|---|---|
+| Read from                                       | Actually there?                                                  |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
 | `field(name).onEdit` / `.onReset` / `.disabled` | **No** — `SettingsFieldState` is `{ text, overridden, invalid }` |
-| `shell().onSave` / `.onDiscard` | **No** — `SettingsFormShell` is state only |
+| `shell().onSave` / `.onDiscard`                 | **No** — `SettingsFormShell` is state only                       |
 
 Every verb lives in `model.actions()` — `edit(field, text)`, `resetField(field)`,
 `save()`, `discard()` — and `SettingsForm` takes `onSave`/`onDiscard` from there.
@@ -818,3 +825,38 @@ Getting here took three corrections, all of them mine:
 The **rendered output**. The registration is confirmed; the pixels are not. I
 have not seen the form draw, the controls lay out, or a save round-trip through
 `form.mutate`. That needs a person looking at the page.
+
+### The primitives export fewer components than the package contains
+
+`@deepseek-ai/dsh-client-ui-primitives` ships `ConfigField.tsx`, but its
+`index.ts` does **not** re-export it. What it exports is:
+
+```
+Button, Checkbox, DisclosureRow, SettingsForm, SettingsFormModel,
+SettingsSecretField, SettingsValueField, settingsNumberField, settingsTextField
+```
+
+So `require(primitives).ConfigField` is `undefined`, and
+`createElement(undefined, …)` throws _"Element type is invalid"_. `ConfigField`
+belongs to the **generated** forms, not to plugin UIs; the client-facing field is
+**`SettingsValueField`**. A file in a package is not an export of it.
+
+The failure mode is the reason this is written down. The slot retires a throwing
+entry (`reportEntryError`), so the page renders no form and reports nothing — the
+plugin looks like one that simply has no settings. That is how this panel spent
+four revisions looking correct while drawing nothing.
+
+`SettingsValueField`'s contract differs from `ConfigField`'s in ways that matter:
+
+| `ConfigField`                           | `SettingsValueField`                              |
+| --------------------------------------- | ------------------------------------------------- |
+| `value`                                 | `text`                                            |
+| `onChange` / `onReset`                  | `onEdit` / `onReset`                              |
+| `labels: { reset, inherited, invalid }` | `overriddenLabel` / `resetLabel` / `invalidLabel` |
+| `choices` → a `<select>`                | **none** — every kind is a text control           |
+| —                                       | `id` required, for the label's `htmlFor`          |
+
+The missing `choices` is the harness's design rather than a gap: a field's
+**spec** decides which drafts it accepts, and the control never rewrites what the
+user typed. So an enum is typed, and the accepted values belong in the field's
+`hint` — which is why every field needs one.

@@ -37,12 +37,13 @@ exactly these gestures. This is the most common real-world failure.
   ```
 
   **Corrected by measurement.** In a colocated workspace — which `jj git init`
-  produces by default — `jj git export` prints *"No export needed in colocated
-  workspaces."* and the bookmark is already a Git branch
+  produces by default — `jj git export` prints _"No export needed in colocated
+  workspaces."_ and the bookmark is already a Git branch
   ([13 §3](13-empirical-verification.md#3-jj-git-export-is-a-no-op-in-colocated-workspaces--important)).
   So this fix is **unnecessary in the default configuration** and only matters
   for `--no-colocate` repos. The Turborepo hazard is much smaller than the
   conversation implies.
+
 - **Secondary risk:** lockfile churn. Switching change pathways changes the
   working directory instantly, so `pnpm-lock.yaml` can look out of sync unless
   package changes are committed to a stable parent revision.
@@ -56,11 +57,11 @@ be current — collapses because `jj` keeps it current for you.
 
 Stacked PRs are `jj`'s strongest workflow advantage:
 
-| Step | Git | `jj` |
-|---|---|---|
-| Dependency updates | manual conflict resolution across branches | concurrent change IDs rebase automatically when `main` moves |
-| Creating a chain | `git checkout -b feature2` off `feature1`, track parents by hand | `jj new` over an existing change ID |
-| Submitting PRs | push separate branch names, link in the GitHub UI | `jj git push -c <rev>` pushes each commit as its own PR |
+| Step               | Git                                                              | `jj`                                                         |
+| ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| Dependency updates | manual conflict resolution across branches                       | concurrent change IDs rebase automatically when `main` moves |
+| Creating a chain   | `git checkout -b feature2` off `feature1`, track parents by hand | `jj new` over an existing change ID                          |
+| Submitting PRs     | push separate branch names, link in the GitHub UI                | `jj git push -c <rev>` pushes each commit as its own PR      |
 
 - **Automated churn:** when a bot merges a PR, `jj git fetch` rebases local
   stacked changes onto the new head without a manual conflict cycle.
@@ -83,13 +84,13 @@ has "pushed" when it has only created a change is a real hazard.
 
 ## The matrix, condensed
 
-| Layer | Reads `.git`? | Needs an export first? | Blocked by a blanket Git ban? |
-|---|---|---|---|
-| Editors / AI assistants | yes | no — `jj` keeps refs current when colocated | commit gestures only |
-| Turborepo / build caches | yes (hashes) | no, in the default colocated layout | only the `git`-shaped cache reads |
-| GitHub Actions | no (remote) | no | no |
-| `gh` CLI | yes (ref heads) | no, in the default colocated layout | `gh` itself is fine; only a literal `git` call is refused |
-| CODEOWNERS local checks | no | no | no |
+| Layer                    | Reads `.git`?   | Needs an export first?                      | Blocked by a blanket Git ban?                             |
+| ------------------------ | --------------- | ------------------------------------------- | --------------------------------------------------------- |
+| Editors / AI assistants  | yes             | no — `jj` keeps refs current when colocated | commit gestures only                                      |
+| Turborepo / build caches | yes (hashes)    | no, in the default colocated layout         | only the `git`-shaped cache reads                         |
+| GitHub Actions           | no (remote)     | no                                          | no                                                        |
+| `gh` CLI                 | yes (ref heads) | no, in the default colocated layout         | `gh` itself is fine; only a literal `git` call is refused |
+| CODEOWNERS local checks  | no              | no                                          | no                                                        |
 
 The earlier draft's claim that "three of five layers need `.git` to be
 current, which is why a blanket Git ban cannot be the whole design" does not

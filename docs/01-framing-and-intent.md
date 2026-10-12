@@ -25,7 +25,7 @@ later turns, is:
 deliberate branding, which was the wrong call; it has since been corrected
 everywhere. The transcript that used the misspelling was distilled into
 [`research/digest.md`](../research/digest.md) and the raw copy deleted; what
-remains here are the quotes that *document* the correction, kept because
+remains here are the quotes that _document_ the correction, kept because
 rewriting a quote would falsify the record.
 
 The distinction that actually matters is the one the thread got wrong for nine
@@ -48,8 +48,8 @@ None of this is real. It is a plausible-sounding domain invented to fill the
 gap left by the word "jiu jitsu". **CONTRADICTED** as a description of the
 project; it was never a description of the project.
 
-Turn 10 is where the thread corrects itself: the user asks *"how does jj hunk
-come into play what does it do"*, and from there the answers are about Jujutsu
+Turn 10 is where the thread corrects itself: the user asks _"how does jj hunk
+come into play what does it do"_, and from there the answers are about Jujutsu
 the VCS. Turns 10–14 are the ones with real substance.
 
 ## Why this matters for the plugin
@@ -63,8 +63,8 @@ the VCS. Turns 10–14 are the ones with real substance.
    - intercept at the tool-call boundary,
    - detect the project conditionally,
    - fail loudly with the exact replacement command.
-   Those three ideas are reused in [02](02-git-blocking-at-tool-call-level.md)
-   and [03](03-project-detection.md).
+     Those three ideas are reused in [02](02-git-blocking-at-tool-call-level.md)
+     and [03](03-project-detection.md).
 
 3. **The naming is load-bearing.** Because "jujutsu" is ambiguous to a reader
    (and was ambiguous to AI Mode), the plugin should pick one spelling and

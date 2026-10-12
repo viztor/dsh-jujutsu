@@ -24,30 +24,15 @@
  * @module dsh-jujutsu/paths
  */
 
-
-
 import { isOp, isWord, type WordToken, tokenize } from "./parse.ts";
 
 export type DestructiveTarget = "git" | "jj" | "unresolvable";
 
 /** Verbs that destroy their path arguments. */
-const DESTRUCTIVE_VERBS: ReadonlySet<string> = new Set([
-  "rm",
-  "rmdir",
-  "mv",
-  "truncate",
-  "shred",
-]);
+const DESTRUCTIVE_VERBS: ReadonlySet<string> = new Set(["rm", "rmdir", "mv", "truncate", "shred"]);
 
 /** Unquoted tokens that separate one command from the next. */
-const OPERATORS: ReadonlySet<string> = new Set([
-  ";",
-  "&&",
-  "||",
-  "|",
-  "&",
-  "\n",
-]);
+const OPERATORS: ReadonlySet<string> = new Set([";", "&&", "||", "|", "&", "\n"]);
 
 /** The exact components that matter. Never a prefix — see the module doc. */
 const TARGETS: Readonly<Record<string, DestructiveTarget>> = {
@@ -75,9 +60,7 @@ const TARGETS: Readonly<Record<string, DestructiveTarget>> = {
  * @param command - the raw `bash` command text.
  * @returns the targeted component, `'unresolvable'`, or `undefined` to allow.
  */
-export function destructiveTargetsVcs(
-  command: string,
-): DestructiveTarget | undefined {
+export function destructiveTargetsVcs(command: string): DestructiveTarget | undefined {
   let unresolvable = false;
 
   for (const segment of segmentsOf(command)) {

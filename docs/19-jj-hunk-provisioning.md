@@ -93,13 +93,13 @@ form.
 
 ## Failure modes
 
-| Situation | Behaviour |
-|---|---|
-| `cargo` missing | Refuse, name the Rust toolchain (`rustup`), do not attempt anything |
-| Install exits non-zero | Surface the tail of stderr in `hint`; do not retry |
+| Situation                                      | Behaviour                                                                                                                   |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `cargo` missing                                | Refuse, name the Rust toolchain (`rustup`), do not attempt anything                                                         |
+| Install exits non-zero                         | Surface the tail of stderr in `hint`; do not retry                                                                          |
 | Install succeeds, `~/.cargo/bin` not on `PATH` | Resolve the absolute path from `cargo install`'s output and use it for the session; tell the user how to add it permanently |
-| Install succeeds, `--help` probe fails | Treat as missing; report the probe failure, do not loop |
-| Version installed is < 0.5.1 | Warn: the ID contract changed at 0.5.1 and older specs have no legacy fallback |
+| Install succeeds, `--help` probe fails         | Treat as missing; report the probe failure, do not loop                                                                     |
+| Version installed is < 0.5.1                   | Warn: the ID contract changed at 0.5.1 and older specs have no legacy fallback                                              |
 
 ## Config
 

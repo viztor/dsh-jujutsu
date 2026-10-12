@@ -24,18 +24,19 @@ profile. Paths are package-relative.
 `dsh-tools/lib/index.js:3225`:
 
 ```js
-const gate = await this.ctx.waterfall(carrier, "tools/pre-execute", exec,
-  () => Promise.resolve({ kind: "allow" }));
+const gate = await this.ctx.waterfall(carrier, "tools/pre-execute", exec, () =>
+  Promise.resolve({ kind: "allow" }),
+);
 ```
 
 The decision union (`dsh-tools/lib/types/index.d.ts:445`):
 
 ```ts
 type PreToolDecision =
-  | { kind: 'allow' }
-  | { kind: 'deny'; reason: string; info?: ToolErrorInfo }
-  | { kind: 'cancel' }
-  | { kind: 'ask'; reason?: string; displayReason?: { en: string; [locale: string]: string } };
+  | { kind: "allow" }
+  | { kind: "deny"; reason: string; info?: ToolErrorInfo }
+  | { kind: "cancel" }
+  | { kind: "ask"; reason?: string; displayReason?: { en: string; [locale: string]: string } };
 ```
 
 A `deny` becomes the tool result `Error: <reason>` with `isError: true`
@@ -43,8 +44,8 @@ A `deny` becomes the tool result `Error: <reason>` with `isError: true`
 self-corrects from.
 
 **Input rewriting is excluded by design.** From the same file's own docs:
-*"Input rewriting is excluded because arguments are already logged and
-presented."* There is no supported way to rewrite a tool call's arguments or to
+_"Input rewriting is excluded because arguments are already logged and
+presented."_ There is no supported way to rewrite a tool call's arguments or to
 substitute the tool handler.
 
 ### `tools/post-execute`
@@ -61,11 +62,11 @@ substitute the tool handler.
 
 ```ts
 type PostToolDecision =
-  | { kind: 'accept'; content?: ContentBlock[]; additionalContexts?: UserMessage[] }
-  | { kind: 'block'; feedback: ContentBlock[]; additionalContexts?: UserMessage[] };
+  | { kind: "accept"; content?: ContentBlock[]; additionalContexts?: UserMessage[] }
+  | { kind: "block"; feedback: ContentBlock[]; additionalContexts?: UserMessage[] };
 ```
 
-`block` turns a *successful* call into an error carrying corrective feedback —
+`block` turns a _successful_ call into an error carrying corrective feedback —
 the "the command ran, and here is why that was wrong" channel.
 
 ### `tools/execute`
@@ -98,9 +99,9 @@ interface ToolExecution {
   readonly callId: ToolCallId;
   readonly rootCallId: ToolCallId;
   readonly token: ToolExecutionToken;
-  readonly name: string;          // e.g. "bash", "read", "write", "edit"
+  readonly name: string; // e.g. "bash", "read", "write", "edit"
   readonly schema?: ToolSchema;
-  readonly arguments: unknown;    // parsed, JSON-serializable
+  readonly arguments: unknown; // parsed, JSON-serializable
   readonly agent?: Agent;
   readonly parent?: ToolExecutionToken;
   readonly signal: AbortSignal;
@@ -118,7 +119,8 @@ Copied in shape from the shipping Claude Code hooks bridge,
 ```js
 ctx.on("tools/pre-execute", async (exec, next) => {
   if (merged.decision === "deny") return { kind: "deny", reason: merged.reason ?? "blocked" };
-  if (merged.decision === "ask")  return { kind: "ask", ...(merged.reason !== undefined ? { reason: merged.reason } : {}) };
+  if (merged.decision === "ask")
+    return { kind: "ask", ...(merged.reason !== undefined ? { reason: merged.reason } : {}) };
   return next();
 });
 ```
@@ -202,27 +204,27 @@ would be the first.
 
 ## 9. Claim-by-claim verdicts
 
-| Conversation claim | Verdict | Basis |
-|---|---|---|
-| `tools/pre-execute` lifecycle pipeline exists | **VERIFIED** | `dsh-tools/lib/types/index.d.ts:47` |
-| `tools/pre-execute` blocks *before* the tool runs | **VERIFIED** | `dsh-tools/lib/index.js:3225` gates dispatch |
-| A thrown error is the way to block | **CONTRADICTED** | Return `{kind:'deny', reason}` |
-| `ctx.tools.on('tools/pre-execute', …)` | **CONTRADICTED** | `ctx.on('tools/pre-execute', (exec, next) => …)` |
-| `callContext.name === 'execute_bash'` | **CONTRADICTED** | Tool is `bash` |
-| `callContext.args.command` | **CONTRADICTED** | `exec.arguments` |
-| `callContext.bypass(fn)` returns fake stdout | **CONTRADICTED** | Does not exist; input rewriting excluded |
-| Disable `@deepseek-ai/dsh-tool-git` in a preset | **CONTRADICTED** | Package does not exist |
-| `dsh-hook-protocol` standardises hooks | **VERIFIED** as a package | `@deepseek-ai/dsh-hook-protocol` is installed; its exact contract was not read |
-| Plugins should use `ctx.fs`, not `node:fs` | **VERIFIED** | `dsh-fs` service; backends swap |
-| `ctx.fs` is a Cordis service | **VERIFIED** | `dsh-fs/lib/index.js:58` |
-| `ctx.fs.exists(...)` | **CONTRADICTED** | Use `stat()` |
-| `ctx.fs.readText(...)` | **VERIFIED** | `dsh-fs/lib/types/index.d.ts:162` |
-| `defineTool` from `@deepseek-ai/dsh-tools` | **VERIFIED** | `dsh-tool-bash/lib/index.js:3` |
-| `dsh-bash-local` / `dsh-bash-sandbox` split | **VERIFIED** | both packages installed |
-| `dsh-terminal-bash` | **CONTRADICTED** | `dsh-tool-bash-persistent` |
-| `fs-observation-policy`, `fs/write-intent` exist | **VERIFIED** | package + strings present |
-| `vfs_read` / `vfs_write` tools | **CONTRADICTED** | No such tools |
-| "State Snapshot Isolation" branching | **UNVERIFIED** | Not found anywhere |
+| Conversation claim                                | Verdict                   | Basis                                                                          |
+| ------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------ |
+| `tools/pre-execute` lifecycle pipeline exists     | **VERIFIED**              | `dsh-tools/lib/types/index.d.ts:47`                                            |
+| `tools/pre-execute` blocks _before_ the tool runs | **VERIFIED**              | `dsh-tools/lib/index.js:3225` gates dispatch                                   |
+| A thrown error is the way to block                | **CONTRADICTED**          | Return `{kind:'deny', reason}`                                                 |
+| `ctx.tools.on('tools/pre-execute', …)`            | **CONTRADICTED**          | `ctx.on('tools/pre-execute', (exec, next) => …)`                               |
+| `callContext.name === 'execute_bash'`             | **CONTRADICTED**          | Tool is `bash`                                                                 |
+| `callContext.args.command`                        | **CONTRADICTED**          | `exec.arguments`                                                               |
+| `callContext.bypass(fn)` returns fake stdout      | **CONTRADICTED**          | Does not exist; input rewriting excluded                                       |
+| Disable `@deepseek-ai/dsh-tool-git` in a preset   | **CONTRADICTED**          | Package does not exist                                                         |
+| `dsh-hook-protocol` standardises hooks            | **VERIFIED** as a package | `@deepseek-ai/dsh-hook-protocol` is installed; its exact contract was not read |
+| Plugins should use `ctx.fs`, not `node:fs`        | **VERIFIED**              | `dsh-fs` service; backends swap                                                |
+| `ctx.fs` is a Cordis service                      | **VERIFIED**              | `dsh-fs/lib/index.js:58`                                                       |
+| `ctx.fs.exists(...)`                              | **CONTRADICTED**          | Use `stat()`                                                                   |
+| `ctx.fs.readText(...)`                            | **VERIFIED**              | `dsh-fs/lib/types/index.d.ts:162`                                              |
+| `defineTool` from `@deepseek-ai/dsh-tools`        | **VERIFIED**              | `dsh-tool-bash/lib/index.js:3`                                                 |
+| `dsh-bash-local` / `dsh-bash-sandbox` split       | **VERIFIED**              | both packages installed                                                        |
+| `dsh-terminal-bash`                               | **CONTRADICTED**          | `dsh-tool-bash-persistent`                                                     |
+| `fs-observation-policy`, `fs/write-intent` exist  | **VERIFIED**              | package + strings present                                                      |
+| `vfs_read` / `vfs_write` tools                    | **CONTRADICTED**          | No such tools                                                                  |
+| "State Snapshot Isolation" branching              | **UNVERIFIED**            | Not found anywhere                                                             |
 
 ### Resolved later, by source trace
 
@@ -230,17 +232,17 @@ Added after the initial pass; each was UNVERIFIED here and is now settled. Full
 traces in [31](31-probe-results-pipeline.md) and
 [33](33-probe-results-jj.md).
 
-| Claim | Verdict | Basis |
-|---|---|---|
-| A `deny` can carry `additionalContexts` in-band | **VERIFIED — but only via `tools/post-execute`** | `finalizeScheduledExecution` calls `postExecute` unconditionally (`dsh-tools/lib/index.js:3368`); `postExecute` merges the listener's contexts (`:3516, :3527-3531`). The `deny` decision itself has no context field (`lib/types/index.d.ts:445-450`) |
-| `exec.deferContext()` from a pre-execute listener reaches the model | **CONTRADICTED on the deny path** — read only on dispatch (`:3333-3340`), silently dropped on a denial | same |
-| Throwing from a pre-execute listener is equivalent to denying | **CONTRADICTED** — produces a `final-result` that skips `postExecute` (`:3267-3271`, `:3126`) | same |
-| `agent.inject` at `agent/turn-stopping` reaches the model | **VERIFIED** — one step later in the **same turn**; the loop re-reads the inbox and cancels the break (`dsh-agent-loop/lib/index.js:998-1006`) | [31](31-probe-results-pipeline.md) Q2 |
-| A throw in an `agent/created` listener fails session creation | **VERIFIED** — the rejection propagates to the session controller; the agent is disposed, not half-constructed (`dsh-agent/lib/index.js:572-585`, `dsh-agent-loop/lib/index.js:1900-1912`) | [31](31-probe-results-pipeline.md) Q3 |
-| The guard can read the same `policyWorkspaceRoot` the bash tool computes | **VERIFIED** | [29](29-state-config-and-sandbox-surfaces.md) §3 |
-| `jj git init` is colocated by default | **VERIFIED** — measured, `jj` 0.46.0 | [13](13-empirical-verification.md) §1 |
-| `jj new` escapes a conflict | **CONTRADICTED** — the conflict propagates into the new commit | [33](33-probe-results-jj.md) §2 |
-| `jj describe` / `jj squash` mint an empty author when unconfigured | **CONTRADICTED** — both preserve; only `jj new` / `jj commit` mint | [33](33-probe-results-jj.md) §3 |
+| Claim                                                                    | Verdict                                                                                                                                                                                    | Basis                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A `deny` can carry `additionalContexts` in-band                          | **VERIFIED — but only via `tools/post-execute`**                                                                                                                                           | `finalizeScheduledExecution` calls `postExecute` unconditionally (`dsh-tools/lib/index.js:3368`); `postExecute` merges the listener's contexts (`:3516, :3527-3531`). The `deny` decision itself has no context field (`lib/types/index.d.ts:445-450`) |
+| `exec.deferContext()` from a pre-execute listener reaches the model      | **CONTRADICTED on the deny path** — read only on dispatch (`:3333-3340`), silently dropped on a denial                                                                                     | same                                                                                                                                                                                                                                                   |
+| Throwing from a pre-execute listener is equivalent to denying            | **CONTRADICTED** — produces a `final-result` that skips `postExecute` (`:3267-3271`, `:3126`)                                                                                              | same                                                                                                                                                                                                                                                   |
+| `agent.inject` at `agent/turn-stopping` reaches the model                | **VERIFIED** — one step later in the **same turn**; the loop re-reads the inbox and cancels the break (`dsh-agent-loop/lib/index.js:998-1006`)                                             | [31](31-probe-results-pipeline.md) Q2                                                                                                                                                                                                                  |
+| A throw in an `agent/created` listener fails session creation            | **VERIFIED** — the rejection propagates to the session controller; the agent is disposed, not half-constructed (`dsh-agent/lib/index.js:572-585`, `dsh-agent-loop/lib/index.js:1900-1912`) | [31](31-probe-results-pipeline.md) Q3                                                                                                                                                                                                                  |
+| The guard can read the same `policyWorkspaceRoot` the bash tool computes | **VERIFIED**                                                                                                                                                                               | [29](29-state-config-and-sandbox-surfaces.md) §3                                                                                                                                                                                                       |
+| `jj git init` is colocated by default                                    | **VERIFIED** — measured, `jj` 0.46.0                                                                                                                                                       | [13](13-empirical-verification.md) §1                                                                                                                                                                                                                  |
+| `jj new` escapes a conflict                                              | **CONTRADICTED** — the conflict propagates into the new commit                                                                                                                             | [33](33-probe-results-jj.md) §2                                                                                                                                                                                                                        |
+| `jj describe` / `jj squash` mint an empty author when unconfigured       | **CONTRADICTED** — both preserve; only `jj new` / `jj commit` mint                                                                                                                         | [33](33-probe-results-jj.md) §3                                                                                                                                                                                                                        |
 
 ## Re-verified against the source checkout
 
@@ -253,23 +255,23 @@ read straight from the object store with `git show HEAD:<path>` and
 
 Every contract this plugin depends on survived the check. The exact citations:
 
-| Contract | Source | Result |
-|---|---|---|
-| `tools/pre-execute` signature | `packages/core/tools/src/index.ts:153` | `(exec, next) => Promise<PreToolDecision>` — as used |
-| `PreToolDecision` union | `packages/core/tools/src/index.ts:607` | `allow` \| `deny{reason, info?}` \| `cancel` \| `ask{reason?, displayReason?}` |
-| `ask.reason` is the audited reason, `displayReason` the prompt text | doc comment above the union | matches the guard's split exactly |
-| Input rewriting is impossible | same comment: *"Input rewriting is excluded because arguments are already logged and presented"* | confirms the silent-translation finding |
-| `PostToolDecision` union | `packages/core/tools/src/index.ts:619` | `accept{content?, value?}` \| `accept{value}` \| `block{feedback}` — all may carry `additionalContexts` |
-| `ask` outcome mapping | `serviceAsk`, `:1728-1775` | `allowed-once` → allow; `rejected`/`cancelled`/`unavailable` → deny **with the harness's own reason**, discarding ours |
-| Approval policy expression | `packages/interaction/user-approval/src/index.ts:244` | `this.overrideOf(session) ?? this.config.policy ?? 'ask'` — the guard's three-term read, character for character |
-| `never` auto-rejects | same file, `:275` | `if (this.effectivePolicy(session) === 'never') return 'rejected'` — why the guard denies instead of asking under `never` |
-| `agent/created` is awaited | `packages/core/agent/src/index.ts:550` | `await this.ctx.serial(carrier, 'agent/created', …)` |
-| `agent/created` mode | `packages/core/agent/src/runtime-types.ts:261` | `@mode serial`, returns `undefined \| Promise<undefined>` |
-| `session/created` is not awaited | `packages/core/session/src/index.ts:55` | returns `void`; callbacks are invoked synchronously |
-| `SessionHeader.cwd` is optional | `packages/core/session/src/types.ts:105` | `readonly cwd?: string` — hence the `typeof cwd !== 'string'` guard in preflight |
-| `ToolExecution.arguments` is `unknown` | `packages/core/tools/src/index.ts:337` | hence the structural reads rather than a cast |
-| `ToolExecution.agent` is optional | same file, `:339` | hence `exec.agent?.session.id` everywhere |
-| `CONTEXT_ORDERS` reserves 110 / 115 / 120 | `packages/core/system-prompt/src/index.ts:164` | **130 is free**, as the injection assumes |
+| Contract                                                            | Source                                                                                           | Result                                                                                                                    |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `tools/pre-execute` signature                                       | `packages/core/tools/src/index.ts:153`                                                           | `(exec, next) => Promise<PreToolDecision>` — as used                                                                      |
+| `PreToolDecision` union                                             | `packages/core/tools/src/index.ts:607`                                                           | `allow` \| `deny{reason, info?}` \| `cancel` \| `ask{reason?, displayReason?}`                                            |
+| `ask.reason` is the audited reason, `displayReason` the prompt text | doc comment above the union                                                                      | matches the guard's split exactly                                                                                         |
+| Input rewriting is impossible                                       | same comment: _"Input rewriting is excluded because arguments are already logged and presented"_ | confirms the silent-translation finding                                                                                   |
+| `PostToolDecision` union                                            | `packages/core/tools/src/index.ts:619`                                                           | `accept{content?, value?}` \| `accept{value}` \| `block{feedback}` — all may carry `additionalContexts`                   |
+| `ask` outcome mapping                                               | `serviceAsk`, `:1728-1775`                                                                       | `allowed-once` → allow; `rejected`/`cancelled`/`unavailable` → deny **with the harness's own reason**, discarding ours    |
+| Approval policy expression                                          | `packages/interaction/user-approval/src/index.ts:244`                                            | `this.overrideOf(session) ?? this.config.policy ?? 'ask'` — the guard's three-term read, character for character          |
+| `never` auto-rejects                                                | same file, `:275`                                                                                | `if (this.effectivePolicy(session) === 'never') return 'rejected'` — why the guard denies instead of asking under `never` |
+| `agent/created` is awaited                                          | `packages/core/agent/src/index.ts:550`                                                           | `await this.ctx.serial(carrier, 'agent/created', …)`                                                                      |
+| `agent/created` mode                                                | `packages/core/agent/src/runtime-types.ts:261`                                                   | `@mode serial`, returns `undefined \| Promise<undefined>`                                                                 |
+| `session/created` is not awaited                                    | `packages/core/session/src/index.ts:55`                                                          | returns `void`; callbacks are invoked synchronously                                                                       |
+| `SessionHeader.cwd` is optional                                     | `packages/core/session/src/types.ts:105`                                                         | `readonly cwd?: string` — hence the `typeof cwd !== 'string'` guard in preflight                                          |
+| `ToolExecution.arguments` is `unknown`                              | `packages/core/tools/src/index.ts:337`                                                           | hence the structural reads rather than a cast                                                                             |
+| `ToolExecution.agent` is optional                                   | same file, `:339`                                                                                | hence `exec.agent?.session.id` everywhere                                                                                 |
+| `CONTEXT_ORDERS` reserves 110 / 115 / 120                           | `packages/core/system-prompt/src/index.ts:164`                                                   | **130 is free**, as the injection assumes                                                                                 |
 
 Two consequences worth stating plainly:
 
@@ -284,7 +286,7 @@ Two consequences worth stating plainly:
 
 ## Sweep of every name referenced in `SPEC.md` and `docs/`
 
-The individual contracts above were checked by hand. Everything *named* across the
+The individual contracts above were checked by hand. Everything _named_ across the
 documentation was then swept mechanically against the source, because a doc that
 cites a renamed event or service is wrong in a way no single reading catches.
 
@@ -308,13 +310,13 @@ permission/preset      llm/stream
 **Services — every one the plugin uses is declared.** Read from the `Context`
 interface each package augments:
 
-| Service | Declaration | Source |
-|---|---|---|
-| `ctx.fs` | `fs: FileSystem` | `packages/fs/fs/src/index.ts:47` |
-| `ctx.shell` | `shell: ShellExecutor` | `packages/shell/shell/src/index.ts:32` |
-| `ctx.tools` | `tools: ToolRuntime` | `packages/core/tools/src/index.ts:139` |
-| `ctx.systemPrompt` | `systemPrompt: SystemPrompt` | `packages/core/system-prompt/src/index.ts:15` |
-| `ctx.approval` | `approval: ApprovalService` | `packages/interaction/user-approval/src/index.ts:26` |
+| Service             | Declaration                          | Source                                                |
+| ------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `ctx.fs`            | `fs: FileSystem`                     | `packages/fs/fs/src/index.ts:47`                      |
+| `ctx.shell`         | `shell: ShellExecutor`               | `packages/shell/shell/src/index.ts:32`                |
+| `ctx.tools`         | `tools: ToolRuntime`                 | `packages/core/tools/src/index.ts:139`                |
+| `ctx.systemPrompt`  | `systemPrompt: SystemPrompt`         | `packages/core/system-prompt/src/index.ts:15`         |
+| `ctx.approval`      | `approval: ApprovalService`          | `packages/interaction/user-approval/src/index.ts:26`  |
 | `ctx.userQuestions` | `userQuestions: UserQuestionService` | `packages/interaction/user-questions/src/index.ts:24` |
 
 The documentation also references `ctx.sandboxPolicy`, `ctx.skills`,
@@ -324,7 +326,7 @@ The documentation also references `ctx.sandboxPolicy`, `ctx.skills`,
 All resolve in the source; none is load-bearing for this plugin, so they are
 recorded as existing rather than as verified contracts.
 
-### What the sweep did *not* find
+### What the sweep did _not_ find
 
 No event or service name in the documentation was stale. The errors this pass
 turned up were all in **`jj` command spellings**, not in the harness surface —

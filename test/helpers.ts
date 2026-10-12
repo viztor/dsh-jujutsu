@@ -44,7 +44,6 @@ export interface CapturedPrompt {
   }[];
 }
 
-
 /**
  * A `ctx.shell` double that runs commands **for real**.
  *
@@ -68,8 +67,7 @@ export function realShell(ctx: Context): void {
             spec.command,
             { cwd: spec.workdir, maxBuffer: 32 * 1024 * 1024 },
             (error, stdout, stderr) => {
-              const code =
-                error === null ? 0 : typeof error.code === "number" ? error.code : 1;
+              const code = error === null ? 0 : typeof error.code === "number" ? error.code : 1;
               done({
                 exitCode: code,
                 signal: null,
@@ -120,10 +118,12 @@ export type Policy = "ask" | "never" | undefined;
  *   `undefined` means "no session override", so the deployment default applies.
  * @param options.defaultPolicy - what `approval.config.policy` reports.
  */
-export function fakeHarness(options: {
-  policy?: Policy;
-  defaultPolicy?: "ask" | "never";
-} = {}): FakeHarness {
+export function fakeHarness(
+  options: {
+    policy?: Policy;
+    defaultPolicy?: "ask" | "never";
+  } = {},
+): FakeHarness {
   const listeners: Listener[] = [];
   const prompt: CapturedPrompt = { sections: [], contexts: [] };
   const tools: Record<string, unknown>[] = [];

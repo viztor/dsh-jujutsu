@@ -122,8 +122,12 @@ describe("the tools run real jj", () => {
     const h = harnessAt(ROOT);
     await h.call("jj_describe", { message: "described by the tool" });
     const out = jj(ROOT, [
-      "log", "--no-graph", "-r", "@",
-      "-T", 'description.first_line() ++ "|" ++ author.name()',
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      'description.first_line() ++ "|" ++ author.name()',
     ]);
     expect(out).toContain("described by the tool");
     expect(out).toContain("E2E");
@@ -217,7 +221,12 @@ describe("the hunk bridge runs real jj-hunk", () => {
     expect(after).toBeGreaterThan(before);
 
     const described = jj(ROOT, [
-      "log", "--no-graph", "-r", "::@", "-T", 'description.first_line() ++ "\\n"',
+      "log",
+      "--no-graph",
+      "-r",
+      "::@",
+      "-T",
+      'description.first_line() ++ "\\n"',
     ]);
     expect(described).toContain("e2e: the four line");
   });

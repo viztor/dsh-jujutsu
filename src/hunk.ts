@@ -62,10 +62,12 @@ export interface HunkOptions {
 }
 
 /** Either a result or a typed error, never a throw. */
-export type HunkOutcome<T> = { readonly ok: true; readonly value: T } | {
-  readonly ok: false;
-  readonly error: ToolError;
-};
+export type HunkOutcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | {
+      readonly ok: false;
+      readonly error: ToolError;
+    };
 
 /** List the hunks a query selects. Always called before a mutation. */
 export async function listHunks(

@@ -38,11 +38,7 @@ const READ_ONLY = ["deny", "ask", "allow"] as const;
 const INSTALL = ["ask", "never", "auto"] as const;
 
 /** Narrow one enum field, falling back to `fallback`. */
-function oneOf<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  fallback: T,
-): T {
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value)
     ? (value as T)
     : fallback;

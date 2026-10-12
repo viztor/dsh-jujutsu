@@ -27,42 +27,42 @@ work the same way.
 
 ## Shared conventions
 
-| Convention | Rule |
-|---|---|
-| Workspace guard | Every tool refuses outside a `jj` workspace with `{error:{code:'NOT_JJ_WORKSPACE'}}`. It never falls back to Git. |
-| Identity | Tools **return** both `changeId` and `commitId`; tools **accept** `changeId` (or a revset). Change IDs are stable across rewrites, commit IDs are not ([07](07-jujutsu-core-model.md)). |
-| Echo state | Every mutating tool returns the resulting working-copy state, so the model never has to re-read to chain a step. |
-| Errors | `{ error: { code, message, hint? } }`, never a raw stderr dump. `hint` carries the next command, mirroring the guard's philosophy. |
-| Output size | Reads are bounded by an explicit `limit` with a documented default. Never return an unbounded `jj log`. |
-| Descriptions | Each tool's description states the `jj` model in one sentence — `@` is always dirty, history is mutable — because that is the part the model gets wrong. |
+| Convention      | Rule                                                                                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace guard | Every tool refuses outside a `jj` workspace with `{error:{code:'NOT_JJ_WORKSPACE'}}`. It never falls back to Git.                                                                       |
+| Identity        | Tools **return** both `changeId` and `commitId`; tools **accept** `changeId` (or a revset). Change IDs are stable across rewrites, commit IDs are not ([07](07-jujutsu-core-model.md)). |
+| Echo state      | Every mutating tool returns the resulting working-copy state, so the model never has to re-read to chain a step.                                                                        |
+| Errors          | `{ error: { code, message, hint? } }`, never a raw stderr dump. `hint` carries the next command, mirroring the guard's philosophy.                                                      |
+| Output size     | Reads are bounded by an explicit `limit` with a documented default. Never return an unbounded `jj log`.                                                                                 |
+| Descriptions    | Each tool's description states the `jj` model in one sentence — `@` is always dirty, history is mutable — because that is the part the model gets wrong.                                |
 
 ## The tools
 
 ### Reads
 
-| Tool | Args | Returns | Backing command |
-|---|---|---|---|
-| `jj_status` | — | `{conflict: bool \| null, revisions: [<jj commit object>]}` | `jj log --no-graph -T 'json(self)' -r '@\|@-'` **plus** `jj log --no-graph -T 'conflict' -r @` |
-| `jj_log` | `revset?`, `limit?` | `[<jj commit object>]` | `jj log --no-graph -T 'json(self)' -r <revset> [--limit n]` |
-| `jj_diff` | `revset?` | `{files: [{status, path}]}` | `jj diff --summary -r <revset>` |
-| `jj_op_log` | `limit?` | `[<jj operation object>]` | `jj op log --no-graph -T 'json(self)' [--limit n]` |
+| Tool        | Args                | Returns                                                     | Backing command                                                                                |
+| ----------- | ------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `jj_status` | —                   | `{conflict: bool \| null, revisions: [<jj commit object>]}` | `jj log --no-graph -T 'json(self)' -r '@\|@-'` **plus** `jj log --no-graph -T 'conflict' -r @` |
+| `jj_log`    | `revset?`, `limit?` | `[<jj commit object>]`                                      | `jj log --no-graph -T 'json(self)' -r <revset> [--limit n]`                                    |
+| `jj_diff`   | `revset?`           | `{files: [{status, path}]}`                                 | `jj diff --summary -r <revset>`                                                                |
+| `jj_op_log` | `limit?`            | `[<jj operation object>]`                                   | `jj op log --no-graph -T 'json(self)' [--limit n]`                                             |
 
 ### Mutations
 
-| Tool | Args | Backing command |
-|---|---|---|
-| `jj_new` | `revset?`, `message?` | `jj new <revset> -m <message>` |
-| `jj_describe` | `message`, `revset?` | `jj describe -m <message> -r <revset>` |
-| `jj_squash` | `from?`, `into?` | `jj squash --from … --into …` |
-| `jj_bookmark` | `action: list\|create\|set\|move\|delete\|forget\|rename\|track\|untrack`, `name?`, `newName?`, `revset?` | `jj bookmark <action> …` |
-| `jj_op_restore` | `opId` | `jj op restore <opId>` |
+| Tool            | Args                                                                                                      | Backing command                        |
+| --------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `jj_new`        | `revset?`, `message?`                                                                                     | `jj new <revset> -m <message>`         |
+| `jj_describe`   | `message`, `revset?`                                                                                      | `jj describe -m <message> -r <revset>` |
+| `jj_squash`     | `from?`, `into?`                                                                                          | `jj squash --from … --into …`          |
+| `jj_bookmark`   | `action: list\|create\|set\|move\|delete\|forget\|rename\|track\|untrack`, `name?`, `newName?`, `revset?` | `jj bookmark <action> …`               |
+| `jj_op_restore` | `opId`                                                                                                    | `jj op restore <opId>`                 |
 
 ### Hunk-level (the `jj-hunk` bridge)
 
-| Tool | Args | Backing command |
-|---|---|---|
-| `jj_hunk_list` | `query?`, `revset?` | `jj-hunk list --format json [-r <revset>] [--query …]` |
-| `jj_hunk_apply` | `mode: split\|commit\|squash`, `query`, `message?`, `revset?` | `jj-hunk <mode> --query … [-r <revset>] [<message>]` |
+| Tool            | Args                                                          | Backing command                                        |
+| --------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `jj_hunk_list`  | `query?`, `revset?`                                           | `jj-hunk list --format json [-r <revset>] [--query …]` |
+| `jj_hunk_apply` | `mode: split\|commit\|squash`, `query`, `message?`, `revset?` | `jj-hunk <mode> --query … [-r <revset>] [<message>]`   |
 
 ## Where the built surface differs from the first draft
 
@@ -70,14 +70,14 @@ The tables above are the **implemented** surface, checked against
 `buildToolDefinitions` in `src/tools.ts`. Six fields the first draft specified
 are not there, and each omission is deliberate:
 
-| Draft | Now | Why |
-|---|---|---|
-| `jj_log(includeDiff?)` | absent | A diff per revision multiplies the payload by the log depth. `jj_diff` exists; compose them. |
-| `jj_diff(paths?, stat?)` | `revset?` only | `--summary` is what the tool returns; `--stat` and pathsets are unbuilt, and an arg that is accepted but ignored is worse than one that is absent. |
-| `jj_squash(keepEmptied?)` | absent | `--keep-emptied` exists in `jj` and is a candidate; it is not wired. |
-| `jj_bookmark(remote?)` | absent | `--remote` applies to `list`/`track`/`untrack` only, and the per-subcommand flag divergence is already the sharp edge here. |
-| `jj_hunk_list(group?)` | absent | `--group` changes presentation, not content. |
-| `jj_hunk_apply(spec?)` | absent | A spec file must live **outside** the working copy or it invalidates its own hunk IDs. `--query` is the supported form; see the two rules below. |
+| Draft                     | Now            | Why                                                                                                                                                |
+| ------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jj_log(includeDiff?)`    | absent         | A diff per revision multiplies the payload by the log depth. `jj_diff` exists; compose them.                                                       |
+| `jj_diff(paths?, stat?)`  | `revset?` only | `--summary` is what the tool returns; `--stat` and pathsets are unbuilt, and an arg that is accepted but ignored is worse than one that is absent. |
+| `jj_squash(keepEmptied?)` | absent         | `--keep-emptied` exists in `jj` and is a candidate; it is not wired.                                                                               |
+| `jj_bookmark(remote?)`    | absent         | `--remote` applies to `list`/`track`/`untrack` only, and the per-subcommand flag divergence is already the sharp edge here.                        |
+| `jj_hunk_list(group?)`    | absent         | `--group` changes presentation, not content.                                                                                                       |
+| `jj_hunk_apply(spec?)`    | absent         | A spec file must live **outside** the working copy or it invalidates its own hunk IDs. `--query` is the supported form; see the two rules below.   |
 
 Two shapes also changed to match what `jj` actually emits:
 
@@ -117,13 +117,13 @@ a real, recurring cost, and it is the main argument against this design.
 
 **Measured, now that the copy exists** ([25](25-prompt-copy.md) §3):
 
-| Component | Tokens (chars ÷ 4) |
-|---|---|
-| 11 tool descriptions | ≈ 357 |
-| argument names + descriptions | ≈ 384 |
-| **copy subtotal** | **≈ 740** |
-| schema overhead (types, enums, required arrays, tool names) | the remainder |
-| **total** | **≈ 1,000–1,500** |
+| Component                                                   | Tokens (chars ÷ 4) |
+| ----------------------------------------------------------- | ------------------ |
+| 11 tool descriptions                                        | ≈ 357              |
+| argument names + descriptions                               | ≈ 384              |
+| **copy subtotal**                                           | **≈ 740**          |
+| schema overhead (types, enums, required arrays, tool names) | the remainder      |
+| **total**                                                   | **≈ 1,000–1,500**  |
 
 So roughly half the cost is copy and half is structure. That matters for the
 staging argument below: dropping five tools removes both halves of their cost,
@@ -134,7 +134,7 @@ Three ways to spend it better, in order of preference:
 1. **Tier the tools.** Ship `jj_status`, `jj_log`, `jj_new`, `jj_hunk_list`,
    `jj_hunk_apply` first — the five that cover orientation and the reason the
    plugin exists. Add the rest when a real workflow demands them. This is
-   compatible with D4: the *design* is the full set; the *rollout* can be
+   compatible with D4: the _design_ is the full set; the _rollout_ can be
    staged.
 2. **Collapse by verb family.** `jj_bookmark` and `jj_op` are already collapsed
    behind an `action` enum. `jj_hunk_apply` collapses three commands behind

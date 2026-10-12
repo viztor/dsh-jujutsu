@@ -59,11 +59,7 @@ export interface ToolError {
  * `hint` is not optional decoration: every failure the plugin reports should
  * name the next command, the same way every guard denial does.
  */
-export function toolError(
-  code: ErrorCode,
-  message: string,
-  hint?: string,
-): ToolError {
+export function toolError(code: ErrorCode, message: string, hint?: string): ToolError {
   return { error: { code, message, ...(hint === undefined ? {} : { hint }) } };
 }
 

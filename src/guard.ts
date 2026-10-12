@@ -26,12 +26,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import type { PreToolDecision, ToolExecution } from "@deepseek-ai/dsh-tools";
 
 import { isRemembered } from "./bypass.ts";
-import {
-  detect,
-  effectiveCwd,
-  invalidateDetection,
-  mayChangeLayout,
-} from "./detect.ts";
+import { detect, effectiveCwd, invalidateDetection, mayChangeLayout } from "./detect.ts";
 import { markAsked, markDenied } from "./explain.ts";
 import { invalidateMarkers, markerFor } from "./marker.ts";
 import { classifyInvocation } from "./parse.ts";
@@ -147,9 +142,7 @@ async function decide(
   if (invocation.gitInvocations.length === 0) return next();
 
   const decision = classifyGitInvocation(invocation);
-  return decision.kind === "allow"
-    ? next()
-    : gate(ctx, exec, decision, settings);
+  return decision.kind === "allow" ? next() : gate(ctx, exec, decision, settings);
 }
 
 /**

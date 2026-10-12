@@ -59,8 +59,8 @@ tool to disable, and nothing in DSH knows what `jj` is.
 ## 3. Package shape
 
 Modelled on the conventions proven by `dsh-tinyfish`
-(see [16](docs/16-package-conventions.md)) for the *manifest*, and on
-`dsh-fs-observation-policy` for the *plugin kind*.
+(see [16](docs/16-package-conventions.md)) for the _manifest_, and on
+`dsh-fs-observation-policy` for the _plugin kind_.
 
 **The plugin kind matters more.** The harness ships a family of **policy
 plugins** — `dsh-fs-observation-policy`, `dsh-sandbox-policy`,
@@ -106,7 +106,7 @@ dsh-jujutsu/
   "main": "lib/index.mjs",
   "types": "lib/index.d.mts",
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
-  "peerDependencies": { "@deepseek-ai/cordis": "~4.0.4" }
+  "peerDependencies": { "@deepseek-ai/cordis": "~4.0.4" },
 }
 ```
 
@@ -116,7 +116,7 @@ the **installed package name**, not the exported one (the
 
 `dsh.client` declares the admin panel, and `exports["./client"]` points at
 `client/panel.js` — a plain-JavaScript bundle, so the browser half needs no build.
-The host half *is* built: `main` is `lib/index.js`, because Node refuses to strip
+The host half _is_ built: `main` is `lib/index.js`, because Node refuses to strip
 types for files under `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`),
 so shipping `src/index.ts` as the entry yields a package that cannot load once installed.
 
@@ -164,19 +164,19 @@ detect(exec) -> { kind: 'jj' | 'jj-colocated' | 'none', root: string }
 
 Signals, in order ([13 §1](docs/13-empirical-verification.md)):
 
-| Check | Meaning |
-|---|---|
-| `.jj/` is a directory | a Jujutsu workspace — **the** signal |
-| `.git/` is a directory, also present | colocated (the `jj git init` default) |
-| `.git` is a file | secondary `jj workspace add` workspace, or a Git worktree |
-| neither | not ours → `next()` |
+| Check                                | Meaning                                                   |
+| ------------------------------------ | --------------------------------------------------------- |
+| `.jj/` is a directory                | a Jujutsu workspace — **the** signal                      |
+| `.git/` is a directory, also present | colocated (the `jj git init` default)                     |
+| `.git` is a file                     | secondary `jj workspace add` workspace, or a Git worktree |
+| neither                              | not ours → `next()`                                       |
 
 The workspace root comes from the **execution's session**, not `process.cwd()`.
 The canonical accessor, taken from how the filesystem tools themselves resolve
 paths (`dsh-tool-fs/lib/index.js`, `lib/types/session-cwd`):
 
 ```ts
-const root = exec.agent?.session.header.cwd;   // undefined for a non-agent caller
+const root = exec.agent?.session.header.cwd; // undefined for a non-agent caller
 ```
 
 Its own doc comment states the rule and the trap:
@@ -190,7 +190,7 @@ has no workspace to reason about.
 
 **But the session cwd is not necessarily the command's cwd.** The `bash` tool
 exposes a `workdir` parameter, and its own description tells the model to
-*"pass `workdir` instead of using `cd`"*. The tool resolves it with
+_"pass `workdir` instead of using `cd`"_. The tool resolves it with
 (`dsh-tool-bash/lib/index.js:293`, quoted verbatim):
 
 ```js
@@ -198,7 +198,8 @@ function resolveWorkdir(modelWorkdir, exec, policyWorkspaceRoot) {
   const headerCwd = exec.agent?.session.header.cwd;
   const sessionCwd = policyWorkspaceRoot ?? headerCwd;
   if (modelWorkdir === void 0) return sessionCwd;
-  if (sessionCwd !== void 0 && !isAbsolute(modelWorkdir)) return `${sessionCwd}${sep}${modelWorkdir}`;
+  if (sessionCwd !== void 0 && !isAbsolute(modelWorkdir))
+    return `${sessionCwd}${sep}${modelWorkdir}`;
   return modelWorkdir;
 }
 ```
@@ -206,24 +207,25 @@ function resolveWorkdir(modelWorkdir, exec, policyWorkspaceRoot) {
 Three things follow:
 
 1. **A resolved sandbox-policy root wins over the session cwd.** The comment says
-   why: *"so workdir and confinement use the exact same per-call identity."*
+   why: _"so workdir and confinement use the exact same per-call identity."_
 2. A relative `workdir` is joined by **string concatenation**, not
    `path.resolve` — no `..` normalisation. For directory identity the two agree,
    but the guard should normalise.
 3. The guard must mirror this, not use the raw session cwd:
 
 ```ts
-const sessionCwd = exec.agent?.session.header.cwd;      // + policy root when available
-const cwd = exec.arguments.workdir === undefined
-  ? sessionCwd
-  : isAbsolute(exec.arguments.workdir)
-    ? exec.arguments.workdir
-    : resolve(sessionCwd ?? '', exec.arguments.workdir);
+const sessionCwd = exec.agent?.session.header.cwd; // + policy root when available
+const cwd =
+  exec.arguments.workdir === undefined
+    ? sessionCwd
+    : isAbsolute(exec.arguments.workdir)
+      ? exec.arguments.workdir
+      : resolve(sessionCwd ?? "", exec.arguments.workdir);
 ```
 
 Skipping this is wrong in both directions: a `git` command run with
 `workdir: '../other'` inside another `jj` repo would slip through, and a Git
-command in a non-`jj` sibling would be refused because the *session* root is a
+command in a non-`jj` sibling would be refused because the _session_ root is a
 `jj` repo.
 
 **OPEN:** whether the guard can obtain the same `policyWorkspaceRoot` the tool
@@ -236,12 +238,12 @@ observed in a `bash` call, and on session start.
 ### 5.2 Guard (`guard.ts`)
 
 ```ts
-ctx.on('tools/pre-execute', async (exec, next) => {
-  if (exec.name !== 'bash') return next();
+ctx.on("tools/pre-execute", async (exec, next) => {
+  if (exec.name !== "bash") return next();
   const detection = await detect(exec);
-  if (detection.kind === 'none') return next();
+  if (detection.kind === "none") return next();
   const verdict = classify(commandOf(exec), detection);
-  if (verdict.kind === 'deny') return { kind: 'deny', reason: verdict.reason };
+  if (verdict.kind === "deny") return { kind: "deny", reason: verdict.reason };
   return next();
 });
 ```
@@ -286,32 +288,32 @@ The trace:
    returns the original result with the listener's contexts merged in:
 
    ```js
-   const additionalContexts = [...result.additionalContexts ?? [], ...decisionContexts];
+   const additionalContexts = [...(result.additionalContexts ?? []), ...decisionContexts];
    return this.markCanonical(exec, {
      ...result,
-     ...decision.content !== void 0 ? { content: decision.content } : {},
-     ...additionalContexts.length > 0 ? { additionalContexts } : {}
+     ...(decision.content !== void 0 ? { content: decision.content } : {}),
+     ...(additionalContexts.length > 0 ? { additionalContexts } : {}),
    });
    ```
 
 So the guard splits its message:
 
-| Channel | Carries | Bound |
-|---|---|---|
-| `reason` on the `deny` | the actionable command — what the model needs *now* | ≤ 240 chars ([25](docs/25-prompt-copy.md)) |
-| `additionalContexts` on a `post-execute` `accept` | the explanation — why Git is wrong here, what `jj` does instead | no practical bound |
+| Channel                                           | Carries                                                         | Bound                                      |
+| ------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------ |
+| `reason` on the `deny`                            | the actionable command — what the model needs _now_             | ≤ 240 chars ([25](docs/25-prompt-copy.md)) |
+| `additionalContexts` on a `post-execute` `accept` | the explanation — why Git is wrong here, what `jj` does instead | no practical bound                         |
 
 **Four implementation constraints**, all from the same code. The first two
 would silently defeat the feature; the second two would silently change the
 message:
 
 - **Never `exec.deferContext()` from the pre-execute listener.** Context deferred
-  there is read only on the *dispatch* path
+  there is read only on the _dispatch_ path
   (`dsh-tools/lib/index.js:3333-3340`), so on a denial it is **silently
   dropped** — no error, no warning, no context.
 - **Never throw to deny.** A throwing listener produces a `final-result`
   (`:3267-3271`), which skips `postExecute` entirely (`:3126`). Throwing
-  therefore loses the second channel *and* is the same mistake that makes a
+  therefore loses the second channel _and_ is the same mistake that makes a
   detector bug break every `bash` call.
 - Return `{kind:'accept', additionalContexts:[…]}` with **no `value`**. The
   `value` branch throws `tools/post-execute cannot replace the value of a failed
@@ -335,9 +337,7 @@ version is [15](docs/15-verb-mapping.md).
 Shape:
 
 ```ts
-type Verdict =
-  | { kind: 'deny'; reason: string; verb: string }
-  | { kind: 'allow' };
+type Verdict = { kind: "deny"; reason: string; verb: string } | { kind: "allow" };
 ```
 
 Properties it must have:
@@ -351,7 +351,7 @@ Properties it must have:
 Wraps the binary. Two supported input forms, in priority order:
 
 1. **`--query '<hunkset expression>'`** — preferred. The expression is stable
-   in *intent* across working-copy changes.
+   in _intent_ across working-copy changes.
 2. **`--spec-file <json|yaml>`** — for a confirmed, one-shot selection.
 
 **Never accept hunk IDs across turns.** IDs are SHA-256 over the materialized
@@ -471,11 +471,11 @@ The current design pays ~200 words of `jj` prose on **every** prompt assembly.
 [28](docs/28-teaching-and-interaction-surfaces.md) §1 shows the harness has a
 better structure:
 
-| Content | Home | Cost |
-|---|---|---|
-| the **rule** ("Git is intercepted; use `jj`") | `ctx.systemPrompt.section` | every assembly — it must be there before the first Git command |
-| the **state** (root, `@`, conflicts, `jj-hunk`) | `ctx.systemPrompt.context` | every assembly — it changes |
-| the **manual** (how to drive `jj`) | a `jujutsu` **skill** via `ctx.skills.register()` | one catalog line, republished after compaction; the body loads only when the model asks |
+| Content                                         | Home                                              | Cost                                                                                    |
+| ----------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| the **rule** ("Git is intercepted; use `jj`")   | `ctx.systemPrompt.section`                        | every assembly — it must be there before the first Git command                          |
+| the **state** (root, `@`, conflicts, `jj-hunk`) | `ctx.systemPrompt.context`                        | every assembly — it changes                                                             |
+| the **manual** (how to drive `jj`)              | a `jujutsu` **skill** via `ctx.skills.register()` | one catalog line, republished after compaction; the body loads only when the model asks |
 
 The skill catalog is published as a durable user message at `agent/pre-step`,
 digest-gated so it is published once and then only on change, one line per skill — **and republished after compaction**
@@ -483,7 +483,7 @@ digest-gated so it is published once and then only on change, one line per skill
 until loaded. `dsh-web-app`'s own composition documents "repository plugins" as
 the intended global-layer registrants for exactly this.
 
-**A skill cannot replace the rule.** The model loads a skill only *after*
+**A skill cannot replace the rule.** The model loads a skill only _after_
 deciding it needs one, and it decides from the catalog line — too late to stop
 the first `git commit`. So the rule and the state stay in `ctx.systemPrompt`;
 only the manual moves.
@@ -491,12 +491,12 @@ only the manual moves.
 **And the split is not a token saving — an earlier draft of this section claimed
 "roughly 5×", which is wrong.** Measured ([32](docs/32-probe-results-teaching.md) §Q3):
 
-| | Tokens |
-|---|---|
-| the real injection (89 words) | ≈ 138 |
-| the manual that can move (38 words) | ≈ 57 saved |
-| the catalog line that replaces it | 30–77 |
-| **net** | **−26 with a short description, +20 with a 40-word one** |
+|                                     | Tokens                                                   |
+| ----------------------------------- | -------------------------------------------------------- |
+| the real injection (89 words)       | ≈ 138                                                    |
+| the manual that can move (38 words) | ≈ 57 saved                                               |
+| the catalog line that replaces it   | 30–77                                                    |
+| **net**                             | **−26 with a short description, +20 with a 40-word one** |
 
 Break-even is a description of ~35 words. So the split is **token-neutral**, and
 the honest reason to ship it is different: a skill lets the manual be
@@ -508,7 +508,7 @@ Two consequences:
 
 - **Write the skill description as a routing rule, under ~35 words.** Not a
   summary. Above that the split costs more than it saves.
-- **"Published once per session" is wrong.** The catalog is *not* protected from
+- **"Published once per session" is wrong.** The catalog is _not_ protected from
   compaction, but `catalogHistory` reads the append-only log rather than the
   surface, so a compacted catalog is **republished as an update at the next
   `agent/pre-step`**. Only a context-overflow retry leaves one request without
@@ -544,16 +544,16 @@ structured answer. It fails closed with `CALLER_NOT_LIVE`, `DELEGATED_CALLER`
 (the agent is owned by another) or `NO_PROVIDER`.
 
 It is a better fit than `approval` for the `jj-hunk` install offer, which needs
-*three* answers, not a yes/no — see [19](docs/19-jj-hunk-provisioning.md).
+_three_ answers, not a yes/no — see [19](docs/19-jj-hunk-provisioning.md).
 
 It is **not** a replacement for `approval` in the guard. The two differ
 structurally:
 
-| | `approval.request` | `userQuestions.ask` |
-|---|---|---|
-| Answer | `allowed-once \| rejected \| cancelled \| unavailable` — no channel | structured, arbitrary options |
-| From a subagent | works (no live-root check) | throws `DELEGATED_CALLER` |
-| Under `policy: 'never'` | auto-rejects | unaffected |
+|                         | `approval.request`                                                  | `userQuestions.ask`           |
+| ----------------------- | ------------------------------------------------------------------- | ----------------------------- |
+| Answer                  | `allowed-once \| rejected \| cancelled \| unavailable` — no channel | structured, arbitrary options |
+| From a subagent         | works (no live-root check)                                          | throws `DELEGATED_CALLER`     |
+| Under `policy: 'never'` | auto-rejects                                                        | unaffected                    |
 
 So: **install offer → `userQuestions`; the guard's bypass → stays `approval`**,
 because a subagent's `git commit` must not throw.
@@ -591,15 +591,27 @@ as a designed settings page.
 ```ts
 export const Config = z.object({
   enabled: z.boolean().default(true).volatile(),
-  guard: z.union([z.const('deny'), z.const('off')]).default('deny').volatile(),
+  guard: z
+    .union([z.const("deny"), z.const("off")])
+    .default("deny")
+    .volatile(),
   // D2 — read-only Git is denied by default, with an explicit bypass
-  readOnlyGit: z.union([z.const('deny'), z.const('ask'), z.const('allow')]).default('ask').volatile(),
-  bypass: z.union([z.const('ask'), z.const('deny'), z.const('allow')]).default('ask').volatile(),
+  readOnlyGit: z
+    .union([z.const("deny"), z.const("ask"), z.const("allow")])
+    .default("ask")
+    .volatile(),
+  bypass: z
+    .union([z.const("ask"), z.const("deny"), z.const("allow")])
+    .default("ask")
+    .volatile(),
   rememberBypass: z.boolean().default(true).volatile(),
   // D3 — jj-hunk provisioning
-  jjPath: z.string().default('jj').volatile(),
-  jjHunkPath: z.string().default('jj-hunk').volatile(),
-  hunkInstall: z.union([z.const('ask'), z.const('never'), z.const('auto')]).default('ask').volatile(),
+  jjPath: z.string().default("jj").volatile(),
+  jjHunkPath: z.string().default("jj-hunk").volatile(),
+  hunkInstall: z
+    .union([z.const("ask"), z.const("never"), z.const("auto")])
+    .default("ask")
+    .volatile(),
   // §5.9 — teach the manual via a skill rather than the system prompt
   teachSkill: z.boolean().default(true).volatile(),
   injectContext: z.boolean().default(true).volatile(),
@@ -617,31 +629,31 @@ code change. No secrets, so no `.role('secret')` and no credential fields.
 
 ## 7. Behaviour matrix
 
-| Workspace | `bash` command | Result |
-|---|---|---|
-| none | anything | `next()` — invisible |
-| `jj` (colocated) | `jj new` | allow |
-| `jj` (colocated) | `jj git push` | allow — carve-out |
-| `jj` (colocated) | `git commit` | **deny** with `jj commit` / `jj new` |
-| `jj` (colocated) | `git status` | **deny** with `jj status` (D2) |
-| `jj` (colocated) | `pnpm build` | allow |
-| `jj` (`--no-colocate`) | `git status` | **deny** — no `.git` exists |
-| `jj` | `jj-hunk split …` | allow (bridge, or via bash) |
-| `jj` (colocated) | `write` → `.jj/working_copy/…` | **deny** — points at `jj op restore` |
-| `jj` (colocated) | `write` → `.git/HEAD` | **deny** |
-| `jj` (colocated) | `read` → `.jj/repo/…` | allow |
+| Workspace              | `bash` command                 | Result                               |
+| ---------------------- | ------------------------------ | ------------------------------------ |
+| none                   | anything                       | `next()` — invisible                 |
+| `jj` (colocated)       | `jj new`                       | allow                                |
+| `jj` (colocated)       | `jj git push`                  | allow — carve-out                    |
+| `jj` (colocated)       | `git commit`                   | **deny** with `jj commit` / `jj new` |
+| `jj` (colocated)       | `git status`                   | **deny** with `jj status` (D2)       |
+| `jj` (colocated)       | `pnpm build`                   | allow                                |
+| `jj` (`--no-colocate`) | `git status`                   | **deny** — no `.git` exists          |
+| `jj`                   | `jj-hunk split …`              | allow (bridge, or via bash)          |
+| `jj` (colocated)       | `write` → `.jj/working_copy/…` | **deny** — points at `jj op restore` |
+| `jj` (colocated)       | `write` → `.git/HEAD`          | **deny**                             |
+| `jj` (colocated)       | `read` → `.jj/repo/…`          | allow                                |
 
 ## 8. Failure modes
 
-| Failure | Required behaviour |
-|---|---|
-| `jj` not on `PATH` | Detection still works (`.jj` is a directory). Guard still works. Only the hunk bridge degrades, with an install instruction. |
-| `jj-hunk` not installed | Refuse hunk operations with the exact `cargo install` line. Never silently fall back to `jj split -i` — that needs a TTY. |
-| `jj` identity unconfigured | **Fail closed on commands that *create* a commit** (`jj_new`, `jj_hunk_apply` split/commit/squash), warn once per session elsewhere. Measured: such commits exit 0, get an empty author, and are **refused by `jj git push` locally** — and configuring the identity afterwards does not repair them. `jj metaedit --update-author` does. Note the boundary: `jj_describe` and `jj_squash` **preserve** an existing author and need not be refused. Full evidence: [26](docs/26-preflight-and-error-taxonomy.md) §A.5, [33](docs/33-probe-results-jj.md) §3. |
-| Detection throws (permissions, race) | **Fail open**: `next()`. A broken detector must not block the user's shell. |
-| Workspace root unresolvable | Fail open, and log once per session. |
-| Command text unparseable | Fail open, and log. Never deny on a parse error. |
-| Denial is wrong | The message must be actionable so the model recovers in one step. This is the highest-severity class of bug: a bad denial blocks real work. |
+| Failure                              | Required behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `jj` not on `PATH`                   | Detection still works (`.jj` is a directory). Guard still works. Only the hunk bridge degrades, with an install instruction.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `jj-hunk` not installed              | Refuse hunk operations with the exact `cargo install` line. Never silently fall back to `jj split -i` — that needs a TTY.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `jj` identity unconfigured           | **Fail closed on commands that _create_ a commit** (`jj_new`, `jj_hunk_apply` split/commit/squash), warn once per session elsewhere. Measured: such commits exit 0, get an empty author, and are **refused by `jj git push` locally** — and configuring the identity afterwards does not repair them. `jj metaedit --update-author` does. Note the boundary: `jj_describe` and `jj_squash` **preserve** an existing author and need not be refused. Full evidence: [26](docs/26-preflight-and-error-taxonomy.md) §A.5, [33](docs/33-probe-results-jj.md) §3. |
+| Detection throws (permissions, race) | **Fail open**: `next()`. A broken detector must not block the user's shell.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Workspace root unresolvable          | Fail open, and log once per session.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Command text unparseable             | Fail open, and log. Never deny on a parse error.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Denial is wrong                      | The message must be actionable so the model recovers in one step. This is the highest-severity class of bug: a bad denial blocks real work.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 **Principle: fail open, deny narrowly.** The guard's job is to catch the
 habitual Git command, not to be a security boundary.
@@ -657,21 +669,22 @@ mistake**:
 Three rules follow:
 
 1. **Never block the shell.** Any failure inside the guard listener resolves to
-   `next()`. The guard denies on *classification* only, never on *environment* —
+   `next()`. The guard denies on _classification_ only, never on _environment_ —
    it needs no `jj`, no `jj-hunk`, no identity, no version check.
 
    **This is not a preference, it is a requirement.** Verified in the source: a
    throwing `tools/pre-execute` listener is caught by the registry and converted
    into a **tool error** (`dsh-tools/lib/index.js:3221-3225` → `:3198`). A
-   detector bug that throws would therefore break *every* `bash` call, not just
+   detector bug that throws would therefore break _every_ `bash` call, not just
    the one being classified. The listener body is `try { … } catch { return
    next(); }` with no exceptions to that rule.
 
    Related: `info.code` on a `deny` is **not model-visible** — only `reason` is.
    Every guard reason must be self-contained.
+
 2. **Never silently degrade to something worse.** A missing `jj-hunk` must not
    become `jj split -i` — that needs a TTY and a headless agent driving it will
-   *hang*, not fail.
+   _hang_, not fail.
 3. **Never let an avoidable permanent artifact be created silently.**
    Commit-creating operations with an unconfigured `jj` identity are **refused,
    not warned about**: the damage is done by the very call that emits the
@@ -726,15 +739,15 @@ Acceptance criteria are enumerated in
 
 ## 12. Decisions
 
-| # | Decision | Status |
-|---|---|---|
-| D1 | Is Git blocked outright, or only inside `jj`? | **Settled** — block inside a `jj` workspace; invisible outside. |
-| D2 | Are read-only Git commands denied too? | **Settled** — denied by default, with an **explicit per-call bypass** through the harness approval channel. [17](docs/17-bypass-and-approval.md) |
-| D3 | `jj-hunk` provisioning | **Settled** — offer to install via `cargo`, on an explicit yes. [19](docs/19-jj-hunk-provisioning.md) |
-| D4 | Policy-only or first-class `jj` tools? | **Settled** — both; the full first-class set. [18](docs/18-tool-surface.md) |
-| D5 | Detection scope | Per call, cached per workspace root, invalidated on `jj git init` / `jj workspace add`. |
-| D6 | Guard `read`/`write`/`edit` on `.jj/` internals? | **Settled** — deny writes to `.jj/**` and `.git/**`; allow reads. §5.7 |
-| D7 | `jj` version floor | 0.46.0. |
-| D8 | Spelling | `dsh-jujutsu` in the package, "Jujutsu (`jj`)" in prose. |
+| #   | Decision                                         | Status                                                                                                                                           |
+| --- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | Is Git blocked outright, or only inside `jj`?    | **Settled** — block inside a `jj` workspace; invisible outside.                                                                                  |
+| D2  | Are read-only Git commands denied too?           | **Settled** — denied by default, with an **explicit per-call bypass** through the harness approval channel. [17](docs/17-bypass-and-approval.md) |
+| D3  | `jj-hunk` provisioning                           | **Settled** — offer to install via `cargo`, on an explicit yes. [19](docs/19-jj-hunk-provisioning.md)                                            |
+| D4  | Policy-only or first-class `jj` tools?           | **Settled** — both; the full first-class set. [18](docs/18-tool-surface.md)                                                                      |
+| D5  | Detection scope                                  | Per call, cached per workspace root, invalidated on `jj git init` / `jj workspace add`.                                                          |
+| D6  | Guard `read`/`write`/`edit` on `.jj/` internals? | **Settled** — deny writes to `.jj/**` and `.git/**`; allow reads. §5.7                                                                           |
+| D7  | `jj` version floor                               | 0.46.0.                                                                                                                                          |
+| D8  | Spelling                                         | `dsh-jujutsu` in the package, "Jujutsu (`jj`)" in prose.                                                                                         |
 
 Remaining open questions, with the reasoning behind each: [12](docs/12-risks-and-open-questions.md).

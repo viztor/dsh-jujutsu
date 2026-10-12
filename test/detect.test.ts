@@ -107,23 +107,23 @@ describe("effectiveCwd", () => {
   it("resolves a relative workdir against the session cwd", () => {
     // The bash tool tells the model to use `workdir` instead of `cd`, so a
     // relative one is the common case and the command runs elsewhere.
-    expect(
-      effectiveCwd(s.exec("bash", { command: "git status", workdir: "sub" })),
-    ).toBe("/repo/sub");
+    expect(effectiveCwd(s.exec("bash", { command: "git status", workdir: "sub" }))).toBe(
+      "/repo/sub",
+    );
   });
 
   it("honours an absolute workdir", () => {
-    expect(
-      effectiveCwd(s.exec("bash", { command: "git status", workdir: "/other" })),
-    ).toBe("/other");
+    expect(effectiveCwd(s.exec("bash", { command: "git status", workdir: "/other" }))).toBe(
+      "/other",
+    );
   });
 
   it("prefers a resolved sandbox-policy root over the session cwd", () => {
     // `resolveWorkdir` gives the policy root precedence so that workdir and
     // confinement use the same per-call identity (docs/24 §1).
-    expect(
-      effectiveCwd(s.exec("bash", { command: "git status" }), "/policy-root"),
-    ).toBe("/policy-root");
+    expect(effectiveCwd(s.exec("bash", { command: "git status" }), "/policy-root")).toBe(
+      "/policy-root",
+    );
   });
 
   it("returns undefined for a non-agent caller", () => {

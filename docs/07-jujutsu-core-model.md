@@ -20,9 +20,9 @@ open-ended working-copy revision, `@`. You do not `git add`; you do not
 
 **Two identifiers per revision:**
 
-| Identifier | Behaviour |
-|---|---|
-| **Change ID** | stable across rewrites — the conceptual change |
+| Identifier    | Behaviour                                          |
+| ------------- | -------------------------------------------------- |
+| **Change ID** | stable across rewrites — the conceptual change     |
 | **Commit ID** | a cryptographic hash that changes on every rewrite |
 
 This split is the reason `jj` can rewrite history aggressively without losing
@@ -39,12 +39,12 @@ anonymous commits, `jj` translates names at the boundary using **bookmarks**
 
 The conversation's comparison table is accurate in shape:
 
-| Operation | Git | `jj` |
-|---|---|---|
-| Save modifications | `git add` + `git commit` | automatic; `@` updates on every file save |
-| Start a new task | `git checkout -b feature` | `jj new` (naming optional) |
-| Rewrite previous work | `git commit --amend`, interactive rebase | `jj squash`, `jj edit <change_id>` |
-| Prepare for remote push | push a branch name | `jj bookmark create <name>` then `jj git push` |
+| Operation               | Git                                      | `jj`                                           |
+| ----------------------- | ---------------------------------------- | ---------------------------------------------- |
+| Save modifications      | `git add` + `git commit`                 | automatic; `@` updates on every file save      |
+| Start a new task        | `git checkout -b feature`                | `jj new` (naming optional)                     |
+| Rewrite previous work   | `git commit --amend`, interactive rebase | `jj squash`, `jj edit <change_id>`             |
+| Prepare for remote push | push a branch name                       | `jj bookmark create <name>` then `jj git push` |
 
 ## Colocated init
 
@@ -59,8 +59,8 @@ Consequences that matter for the plugin:
   which is exactly what [10](10-workflow-compatibility.md) relies on.
 - Because `.git/` is present, **detection cannot be "no `.git` means `jj`"** —
   see [03](03-project-detection.md).
-- Because both exist, blocking Git for the *agent* while leaving it available
-  to *other tools* is a coherent position. The conversation never states it
+- Because both exist, blocking Git for the _agent_ while leaving it available
+  to _other tools_ is a coherent position. The conversation never states it
   that clearly, but it is the only reading that satisfies both turns 9 and 13.
 
 ## What the harness must model
@@ -73,7 +73,7 @@ To be `jj`-native rather than Git-with-a-rename, the plugin needs to know:
    exist. Change IDs are the stable handle; tools should return and accept
    change IDs.
 3. **Operation log.** `jj op log` records every operation and `jj op restore`
-   can undo. This is a *better* safety net than Git's reflog and the plugin
+   can undo. This is a _better_ safety net than Git's reflog and the plugin
    should surface it rather than reimplementing undo.
 4. **Bookmarks are the only thing GitHub sees.** Anything intended to leave the
    machine needs a bookmark. See [09](09-github-upstream-and-remotes.md).

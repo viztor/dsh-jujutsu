@@ -24,7 +24,6 @@
  * @module dsh-jujutsu/verbs
  */
 
-
 import {
   type Classification,
   GENERIC_FALLBACK,
@@ -104,10 +103,7 @@ export function classifyGitInvocation(invocation: Invocation): Decision {
  * `messages.ts` uses for `git branch <name>`, which would otherwise be
  * indistinguishable from the bare listing form.
  */
-export function matchesPrefix(
-  prefix: readonly string[],
-  args: readonly string[],
-): boolean {
+export function matchesPrefix(prefix: readonly string[], args: readonly string[]): boolean {
   if (prefix.length > args.length) return false;
   for (let i = 0; i < prefix.length; i += 1) {
     const expected = prefix[i];

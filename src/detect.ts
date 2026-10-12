@@ -81,14 +81,11 @@ export function effectiveCwd(
   exec: ToolExecution,
   policyWorkspaceRoot?: string,
 ): string | undefined {
-  const sessionCwd =
-    policyWorkspaceRoot ?? exec.agent?.session.header.cwd ?? undefined;
+  const sessionCwd = policyWorkspaceRoot ?? exec.agent?.session.header.cwd ?? undefined;
   const modelWorkdir = readString(exec.arguments, "workdir");
   if (modelWorkdir === undefined) return sessionCwd;
   if (sessionCwd === undefined) return modelWorkdir;
-  return modelWorkdir.startsWith("/")
-    ? modelWorkdir
-    : `${sessionCwd}/${modelWorkdir}`;
+  return modelWorkdir.startsWith("/") ? modelWorkdir : `${sessionCwd}/${modelWorkdir}`;
 }
 
 /**
@@ -121,9 +118,7 @@ export function invalidateDetection(): void {
  * the invalidation rule that acceptance criterion 7 in `docs/12` §H depends on.
  */
 export function mayChangeLayout(command: string): boolean {
-  return /\bjj\s+(git\s+init|workspace\s+add|git\s+clone|git\s+colocation)\b/.test(
-    command,
-  );
+  return /\bjj\s+(git\s+init|workspace\s+add|git\s+clone|git\s+colocation)\b/.test(command);
 }
 
 /**
@@ -140,8 +135,7 @@ export async function detect(ctx: Context, start: string): Promise<Detection> {
 
   const entry = CACHE.get(key);
   if (entry !== undefined) {
-    const fresh =
-      entry.value.vcs !== "none" || Date.now() - entry.at < NEGATIVE_TTL_MS;
+    const fresh = entry.value.vcs !== "none" || Date.now() - entry.at < NEGATIVE_TTL_MS;
     if (fresh) return entry.value;
     CACHE.delete(key);
   }
@@ -168,10 +162,7 @@ export async function detect(ctx: Context, start: string): Promise<Detection> {
  *
  * @returns the absolute root, or `undefined` when no ancestor is a workspace.
  */
-export async function findWorkspaceRoot(
-  ctx: Context,
-  start: string,
-): Promise<string | undefined> {
+export async function findWorkspaceRoot(ctx: Context, start: string): Promise<string | undefined> {
   const found = await findVcs(ctx, start);
   return found.kind === "jj" ? found.root : undefined;
 }

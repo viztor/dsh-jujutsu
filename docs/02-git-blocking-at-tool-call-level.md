@@ -18,7 +18,7 @@ interesting half.
 ```yaml
 plugins:
   - id: tool-git
-    name: '@deepseek-ai/dsh-tool-git'
+    name: "@deepseek-ai/dsh-tool-git"
     disabled: true
 ```
 
@@ -30,8 +30,8 @@ removes the agent's whole shell — not a guard, an amputation.
 **Option B — a runtime guard on `tools/pre-execute`:**
 
 ```ts
-ctx.tools.on('tools/pre-execute', (callContext) => {
-  if (callContext.name === 'execute_bash' && callContext.args.command.includes('git')) {
+ctx.tools.on("tools/pre-execute", (callContext) => {
+  if (callContext.name === "execute_bash" && callContext.args.command.includes("git")) {
     throw new Error("Git usage is strictly disabled for this training session.");
   }
 });
@@ -39,22 +39,22 @@ ctx.tools.on('tools/pre-execute', (callContext) => {
 
 **Partially right, wrong in every detail that matters:**
 
-| The sample | Reality (DSH `0.2.0-rc.2`) |
-|---|---|
-| `ctx.tools.on(...)` | `ctx.on('tools/pre-execute', …)` — a plain context listener |
-| `(callContext)` | `(exec, next)` — it is a **waterfall**, and you must call `next()` to allow |
-| `throw new Error(...)` | Return `{ kind: 'deny', reason }`; throwing is not the contract |
-| `callContext.name === 'execute_bash'` | The bash tool is named **`bash`**; there is no `execute_bash` |
-| `callContext.args.command` | `exec.arguments` (parsed, `unknown`); the bash schema's field is `command` |
-| `callContext.name.startsWith('git_')` | No `git_*` tools exist |
+| The sample                            | Reality (DSH `0.2.0-rc.2`)                                                  |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| `ctx.tools.on(...)`                   | `ctx.on('tools/pre-execute', …)` — a plain context listener                 |
+| `(callContext)`                       | `(exec, next)` — it is a **waterfall**, and you must call `next()` to allow |
+| `throw new Error(...)`                | Return `{ kind: 'deny', reason }`; throwing is not the contract             |
+| `callContext.name === 'execute_bash'` | The bash tool is named **`bash`**; there is no `execute_bash`               |
+| `callContext.args.command`            | `exec.arguments` (parsed, `unknown`); the bash schema's field is `command`  |
+| `callContext.name.startsWith('git_')` | No `git_*` tools exist                                                      |
 
 The correct shape, taken from the shipping Claude Code hooks bridge
 (`dsh-hooks-claude-code`):
 
 ```ts
-ctx.on('tools/pre-execute', async (exec, next) => {
+ctx.on("tools/pre-execute", async (exec, next) => {
   if (!blocked(exec)) return next();
-  return { kind: 'deny', reason: 'use `jj new` instead of `git commit`' };
+  return { kind: "deny", reason: "use `jj new` instead of `git commit`" };
 });
 ```
 
@@ -81,11 +81,11 @@ is exactly the self-correction loop the conversation was reaching for.
 
 ## Two channels for the correction
 
-| Channel | Where | Shape | Effect |
-|---|---|---|---|
-| Deny before dispatch | `tools/pre-execute` | `{ kind: 'deny', reason }` | The tool never runs; the model sees `Error: <reason>` |
-| Block after dispatch | `tools/post-execute` | `{ kind: 'block', feedback: ContentBlock[] }` | The tool ran; its result is replaced by an error carrying corrective feedback |
-| Monotonic policy | `tools.guard(fn)` | return a `string` to deny | Runs after the pre-execute waterfall; cannot be overridden by a later listener |
+| Channel              | Where                | Shape                                         | Effect                                                                         |
+| -------------------- | -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| Deny before dispatch | `tools/pre-execute`  | `{ kind: 'deny', reason }`                    | The tool never runs; the model sees `Error: <reason>`                          |
+| Block after dispatch | `tools/post-execute` | `{ kind: 'block', feedback: ContentBlock[] }` | The tool ran; its result is replaced by an error carrying corrective feedback  |
+| Monotonic policy     | `tools.guard(fn)`    | return a `string` to deny                     | Runs after the pre-execute waterfall; cannot be overridden by a later listener |
 
 For "Git is forbidden here", `tools/pre-execute` deny is the right channel —
 there is no reason to let the command run and then rewrite the outcome. Use
@@ -112,7 +112,7 @@ addresses it. See [12](12-risks-and-open-questions.md).
 1. Detect a `jj` workspace (see [03](03-project-detection.md)). If not a `jj`
    workspace, return `next()` immediately — zero behaviour change elsewhere.
 2. On `bash`, parse the command into segments and look for a Git invocation
-   that is *not* `jj git <subcommand>`.
+   that is _not_ `jj git <subcommand>`.
 3. Deny with a `reason` naming the `jj` equivalent for that specific verb
    (`commit` → `jj commit` / `jj new`, `checkout -b` → `jj new`,
    `add -p` → `jj-hunk split`, `branch` → `jj bookmark`, …).
