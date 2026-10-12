@@ -663,42 +663,48 @@ nothing at build time connects them. Tests are that connection:
   merely present. `parse` returning `undefined` is what blocks a save on a value
   the field does not accept, and that is asserted directly.
 
-### Controls are built-ins, and one of them does all the work
+### Controls are built-ins, chosen by the field's kind
 
-Every control is a harness primitive, and the field renderer is **`ConfigField`**
-— it owns the label, the input, the reset affordance and the validation message,
-so the panel draws none of that itself. That is what keeps it looking like the
-rest of the settings surface and surviving a restyle.
+Every control is a harness primitive, and the field's **kind** picks it:
 
-`ConfigField` is driven by `value: string` plus `choices`:
+| Kind    | Control              | Why                                                                                                          |
+| ------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| boolean | `Switch`             | a two-state thing deserves a two-state control                                                               |
+| enum    | `SegmentedControl`   | its option type carries _localized segment text_, so a segment reads `Allow`, or `允许`, rather than `allow` |
+| text    | `SettingsValueField` | the primitives' own labelled text control                                                                    |
 
-| `choices`                  | Control                           |
-| -------------------------- | --------------------------------- |
-| empty                      | a text input (a path)             |
-| `["deny", "ask", "allow"]` | a finite choice control (an enum) |
-| `["true", "false"]`        | the same control (a boolean)      |
+This is not a preference. `SettingsValueField` is **only** the text control: a card
+owns its boolean and enum fields, because only the card knows what its values
+mean. The sibling package documents exactly that and wraps the primitives' `Tag`
+and `Button` in its own `SettingsFieldShell`; this panel does the same, in
+`fieldShell()`.
 
-So the field _kind_ selects the control and the panel never reaches for `Switch`
-or `SegmentedControl` directly.
+An earlier revision rendered every setting as a text box — a boolean showing
+`true` with a hint underneath explaining that `true` is what you type. That is a
+config file with labels on it, and it is what happens when the only control the
+primitives ship is treated as the only control there is.
 
 **Groups use `DisclosureRow`**, the harness's own disclosure header — one per
 group, all open on arrival, since a settings page whose fields are all hidden
 makes the user click to discover what is configurable. It is _controlled_
 (`open` + `onToggle`, no internal state), so the open state lives in the panel.
 
-An earlier revision drew its own chrome: a `Switch`/`SegmentedControl` per field,
-a hand-written row for label, reset and hint, and inline styles throughout. It
-worked — it was screenshotted working — but it was this plugin's styling rather
-than the harness's, and it would not have followed a restyle. The rewrite
-removed every inline style and every hand-rolled element; the panel now
-references four primitives and nothing else:
+Nine primitives, and nothing hand-rolled:
 
 ```
-primitives.ConfigField         one field
-primitives.DisclosureRow       one group
-primitives.SettingsForm        the frame
-primitives.SettingsFormModel   the drafts
+primitives.SettingsValueField   a text field
+primitives.Switch               a boolean field
+primitives.SegmentedControl     an enum field
+primitives.Tag / Button         the override badge and its reset
+primitives.DisclosureRow        one group
+primitives.SettingsForm         the frame
+primitives.SettingsFormModel    the drafts
 ```
+
+The shell styles itself with inline `var(--dsw-*)` theme tokens rather than a
+stylesheet, because a client bundle has no stylesheet of its own — the primitives
+ship CSS modules and a plugin cannot. A test asserts every colour it names is a
+theme token, so the shell follows light/dark and any restyle.
 
 ### Fields the panel groups
 
