@@ -25,13 +25,12 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./client": {
-      "default": "./client/panel.js"
+      "default": "./lib/client.js"
     },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib",
-    "client",
     "locale/*.json",
     "icon.svg",
     "cordis.patch.yml",
@@ -39,10 +38,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
+    "build": "tsc -p tsconfig.build.json && vp pack && node scripts/name-client-bundle.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "ci": "pnpm run typecheck && pnpm run test",
+    "ci": "tsc --noEmit && pnpm run build && vitest run",
     "prepublishOnly": "pnpm run build && pnpm run ci",
     "prepare": "pnpm run build"
   },
@@ -52,13 +51,17 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
     "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
     "@deepseek-ai/dsh-fs": "0.2.0-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-shell": "0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@types/node": "^24.0.0",
+    "@types/react": "^18.3.31",
+    "react": "^18.3.1",
     "typescript": "^5.6.0",
+    "vite-plus": "1.1.0",
     "vitest": "^2.1.0"
   },
   "peerDependencies": {

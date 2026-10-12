@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-const PANEL = readFileSync("client/panel.js", "utf8");
+const PANEL = readFileSync("lib/client.js", "utf8");
 const CONFIG = readFileSync("src/config.ts", "utf8");
 const PKG = JSON.parse(readFileSync("package.json", "utf8")) as Record<string, unknown>;
 
@@ -270,7 +270,9 @@ describe("the display metadata the host reads", () => {
 
   it("ships the metadata files", () => {
     const files = PKG.files as string[];
-    for (const entry of ["locale/*.json", "icon.svg", "lib", "client"]) {
+    // `lib` carries both halves now: the host bundle and the client bundle the
+    // harness's route serves as `${package}/client.js`.
+    for (const entry of ["locale/*.json", "icon.svg", "lib"]) {
       expect(files, entry).toContain(entry);
     }
   });
@@ -337,8 +339,10 @@ describe("the client half is built, not hand-written", () => {
     // panel had was a type error tsc would have refused. The bundle is now
     // tsc output wrapped by scripts/build-client.mjs, so the source of truth is
     // src/client/panel.ts.
-    expect(PANEL).toContain("GENERATED FILE — do not edit");
-    expect(PANEL).toContain("src/client/panel.ts");
+    // Built by `vp pack`, not hand-written. The loader wrapper is the bundler's
+    // banner/footer now, so the proof is that the artifact exists and carries
+    // exactly one registration.
+    expect(PANEL).toContain("window.__ModuleLoader__.load");
     const source = readFileSync("src/client/panel.ts", "utf8");
     expect(source).toContain("interface SettingsFieldState");
     expect(source).toContain("interface SettingsFormShell");
@@ -347,9 +351,15 @@ describe("the client half is built, not hand-written", () => {
   it("has a build that produces it", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts: Record<string, string>;
+      exports: Record<string, { default: string }>;
     };
-    expect(pkg.scripts.build).toContain("tsconfig.client.json");
-    expect(pkg.scripts.build).toContain("build-client.mjs");
+    expect(pkg.scripts.build).toContain("vp pack");
+    expect(pkg.scripts.build).toContain("name-client-bundle");
+    // The route serves `${package}/client.js` and accepts only
+    // `/^client\..*\.js$/`, so the artifact must end in `.js` even though the
+    // bundler emits `.cjs` for a `type: module` package.
+    expect(pkg.exports["./client"]?.default)
+      .toBe("./lib/client.js");
   });
 
   it("does not carry its own loader call in the module body", () => {
@@ -357,5 +367,31 @@ describe("the client half is built, not hand-written", () => {
     // the bundle would register twice.
     const count = (PANEL.match(/__ModuleLoader__/g) ?? []).length;
     expect(count).toBe(1);
+  });
+});
+
+describe("the client entry declares its services", () => {
+  it("exports `inject`, without which the entry cannot activate", async () => {
+    // Cordis reads `inject` off the client entry. Without it the entry is
+    // injected nothing, `apply` throws on the first service it reaches, and the
+    // failure is NOT local: the entry does not activate, the web boot reports
+    // "1 entry did not activate", and the whole page fails to load.
+    //
+    // A TypeScript rewrite dropped this export. Nothing typechecked it, because
+    // the export IS the declaration. The app broke on the next reload.
+    const { inject } = loadPanel();
+    expect(Array.isArray(inject)).toBe(true);
+    expect(inject).toEqual(["slots", "locale", "configForms"]);
+  });
+
+  it("names only services `apply` actually reaches for", () => {
+    // An injected service that is never used is a dependency the entry waits on
+    // for nothing; a service used but not injected is a crash at activation.
+    const source = readFileSync("src/client/panel.ts", "utf8");
+    const declared = [...source.matchAll(/ctx\.(\w+)/g)].map((m) => m[1]);
+    const used = [...new Set(declared)].filter((name) =>
+      ["slots", "locale", "configForms"].includes(name as string),
+    );
+    expect(new Set(used)).toEqual(new Set(["slots", "locale", "configForms"]));
   });
 });

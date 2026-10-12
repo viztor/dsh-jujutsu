@@ -196,6 +196,16 @@ const h = react.createElement;
 /** The settings namespace. Must equal the host half's exported `name`. */
 const NS = "dsh-jujutsu";
 
+/**
+ * The client services this entry needs.
+ *
+ * Exported for Cordis, and **load-bearing**: without it the entry is injected
+ * nothing, `apply` throws on the first service it reaches, and the failure is
+ * not local — the entry does not activate, so the web boot reports
+ * "1 entry did not activate" and the whole page fails to load.
+ */
+const inject = ["slots", "locale", "configForms"];
+
 /** The English dictionary key. */
 const EN = "en";
 
@@ -675,4 +685,4 @@ function apply(ctx: ClientContext): void {
   }, "dsh-jujutsu: panel");
 }
 
-export { apply, Panel, FIELDS, GROUPS, STRINGS, buildSpecs, choicesOf, booleanField, enumField };
+export { inject, apply, Panel, FIELDS, GROUPS, STRINGS, buildSpecs, choicesOf, booleanField, enumField };
