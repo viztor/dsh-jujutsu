@@ -729,3 +729,36 @@ describe("a two-state setting is a boolean, not a two-option enum", () => {
     }
   });
 });
+
+describe("a hint talks about settings the way the user sees them", () => {
+  it("names no raw schema key", () => {
+    // Caught by reading the page: `preferJj`'s hint ended "Only used when
+    // alertUninitialised is on" — the field's name in the config file, offered to
+    // someone looking at a form whose label for it is "Mention missing version
+    // control". The Chinese hint already used the label; only the English one had
+    // the key.
+    //
+    // The tell is camelCase. A key with an uppercase letter in it is never an
+    // ordinary English word, so its appearance in user-facing copy is always the
+    // leak — which is why `guard` and `bypass` are excluded rather than listed.
+    const schema = readFileSync("src/config.ts", "utf8");
+    const keys = [...schema.matchAll(/^ {2}([a-zA-Z]+): z\b/gm)]
+      .map((m) => m[1])
+      .filter((key): key is string => key !== undefined && /[A-Z]/.test(key));
+    expect(keys.length).toBeGreaterThan(0);
+
+    const { STRINGS } = loadPanel();
+    const offenders: string[] = [];
+    for (const [locale, table] of Object.entries(
+      STRINGS as Record<string, Record<string, string>>,
+    )) {
+      for (const [key, text] of Object.entries(table)) {
+        if (!key.endsWith("Hint") || typeof text !== "string") continue;
+        for (const schemaKey of keys) {
+          if (text.includes(schemaKey)) offenders.push(`${locale}.${key} names ${schemaKey}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

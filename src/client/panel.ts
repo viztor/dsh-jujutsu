@@ -293,7 +293,7 @@ const STRINGS: Record<string, Record<string, string>> = {
       "When a directory has no version control at all, tell the model so it can offer to initialise one. Off means the plugin stays silent outside a repository.",
     preferJjLabel: "Prefer Jujutsu",
     preferJjHint:
-      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when alertUninitialised is on.",
+      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when “Mention missing version control” is on.",
     injectContextLabel: "Explain Jujutsu in the prompt",
     injectContextHint:
       "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",

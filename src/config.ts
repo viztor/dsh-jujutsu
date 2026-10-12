@@ -158,7 +158,7 @@ export const Config = z.object({
     .boolean()
     .default(true)
     .description(
-      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when alertUninitialised is on.",
+      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when “Mention missing version control” is on.",
     )
     .volatile(),
 });
