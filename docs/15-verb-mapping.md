@@ -336,14 +336,34 @@ Write it outside the repo, edit `ids`, then
 `jj-hunk list --spec-file /tmp/spec.yaml --format text` previewed exactly the
 selected hunk, and the commit left the other file in the working copy).
 
-### Not verified
+### Settled since
 
-- **UNVERIFIED:** whether `--query` and `--spec-file` can be combined. Not
-  tested; the help text presents them as alternatives.
-- **UNVERIFIED:** `jj-hunk select`, which `jj-hunk --help` describes as
-  "called by `jj --tool`". It is the `jj split -i` integration path, not an
-  agent-facing command, and was not exercised.
-- **UNVERIFIED:** behavior of `renamed()`, `mode_changed()`, `binary_changed()`
-  on repos that actually contain those change kinds — they parsed and returned
-  0 hunks on the text-only fixtures used here, which is not the same as a
-  positive test.
+Each of these was UNVERIFIED here and has now been exercised against
+`jj-hunk 0.5.1`, built from `github.com/laulauland/jj-hunk` at tag `v0.5.1`.
+
+- **`--query` and `--spec-file` are mutually exclusive — VERIFIED.** Not merely
+  "the help text presents them as alternatives": combining them is an error, and
+  the error names both. `error: the argument '--query <QUERY>' cannot be used with
+  '--spec-file <SPEC_FILE>'`. A bridge that builds both will fail.
+- **`jj-hunk select` is not agent-facing — VERIFIED.** Its usage is
+  `select [OPTIONS] <LEFT> <RIGHT>`, and its own description is "called by
+  `jj --tool`". It is the `jj split -i` integration path, and the bridge does not
+  use it.
+- **`renamed()`, `mode_changed()` and `binary_changed()` select a file and yield
+  no hunks — VERIFIED, with a caveat worth keeping.** On a repository that really
+  contains all three — a rename, `chmod +x`, and 64 bytes of random data — each
+  query returns **1 file and 0 hunks**:
+
+  ```
+  renamed()        -> 1 file(s), 0 hunk(s)
+  mode_changed()   -> 1 file(s), 0 hunk(s)
+  binary_changed() -> 1 file(s), 0 hunk(s)
+  ```
+
+  So the earlier note was right to distrust "0 hunks on a text-only fixture", and
+  the answer is not what a positive test would have suggested either. The
+  functions work — the _file_ is selected — but a rename, a mode change and a
+  binary change have no text hunks to report. A caller that treats "0 hunks" as
+  "nothing to do" is correct; a caller that treats it as "the query failed" is
+  not, and `jj_hunk_apply` with one of these selections would have nothing to
+  apply.

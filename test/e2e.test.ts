@@ -72,6 +72,10 @@ beforeAll(() => {
   // cannot see it.
   writeFileSync(`${ROOT}/f.txt`, "one\nTWO-CHANGED\nthree\nfour\n");
   writeFileSync(`${ROOT}/g.txt`, "new file\n");
+  // A binary change, so a query can select a *file* that has no hunks. Measured
+  // against jj-hunk 0.5.1: `binary_changed()` returns 1 file and 0 hunks. That is
+  // a different case from "matches nothing", and the plugin has to refuse it too.
+  writeFileSync(`${ROOT}/blob.bin`, Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe, 0x00]));
 });
 
 describe.skipIf(!HAS_JJ)("the tools run real jj", () => {
@@ -196,6 +200,30 @@ describe.skipIf(!HAS_JJ || !HAS_JJ_HUNK)("the hunk bridge runs real jj-hunk", ()
     const result = (await h.call("jj_hunk_apply", {
       mode: "split",
       query: 'added(content:"ZZZ-NO-SUCH-TEXT-ZZZ")',
+      message: "nope",
+    })) as { error?: { code: string } };
+    expect(result.error?.code).toBe("HUNK_QUERY_EMPTY");
+  });
+
+  it("jj_hunk_apply refuses a query that selects a file but no hunks", async () => {
+    // A third case, distinct from the two above. `binary_changed()` matches the
+    // binary file — so the query is not empty and does not match nothing — but a
+    // binary change has no text hunks to report. The pre-check filters on
+    // `file.hunks.length > 0`, so this lands in the same refusal.
+    //
+    // Measured against jj-hunk 0.5.1 rather than assumed: `renamed()`,
+    // `mode_changed()` and `binary_changed()` each return 1 file and 0 hunks on a
+    // repository that really contains those changes (`docs/15` §"Settled since").
+    const h = harnessAt(ROOT);
+    const listed = (await h.call("jj_hunk_list", { query: "binary_changed()" })) as {
+      files?: { hunks: unknown[] }[];
+    };
+    expect(listed.files?.length, "the query must select a file").toBe(1);
+    expect(listed.files?.[0]?.hunks.length, "and no hunks").toBe(0);
+
+    const result = (await h.call("jj_hunk_apply", {
+      mode: "split",
+      query: "binary_changed()",
       message: "nope",
     })) as { error?: { code: string } };
     expect(result.error?.code).toBe("HUNK_QUERY_EMPTY");
