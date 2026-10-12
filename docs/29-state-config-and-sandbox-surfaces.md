@@ -713,8 +713,34 @@ theme token, so the shell follows light/dark and any restyle.
 | Guard                       | `guard`, `readOnlyGit`, `bypass`, `rememberBypass` |
 | When there is no repository | `alertUninitialised`, `preferJj`                   |
 | Teaching                    | `injectContext`, `teachSkill`                      |
-| Binaries                    | `jjPath`, `jjHunkPath`, `hunkInstall`              |
 | Master switch               | `enabled`                                          |
+
+**The panel is a subset of `Config`, deliberately.** Three fields are not drawn:
+
+| Field         | Why it is config-file only                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------------- |
+| `jjPath`      | advanced — whoever needs it is editing a config file, and drawing it asks every other reader to decide about it |
+| `jjHunkPath`  | same                                                                                                            |
+| `hunkInstall` | same; what it controls is a one-off install decision                                                            |
+
+Not drawn is not the same as not supported: all three remain in `Config` and stay
+settable, and a test asserts they are still declared — so a later tidy-up cannot
+quietly delete a setting a custom install depends on.
+
+A consequence worth naming: with the two path fields gone, **the panel draws no
+text field at all.** Every field it shows is a boolean or an enum, so the
+`SettingsValueField` branch was unreachable and has been removed rather than kept
+for a hypothetical field. The kind union is down to the two members the panel can
+actually reach.
+
+### The blurbs earn their space or they go
+
+Three groups had a one-line description and no longer do. "Guard" followed by
+"What happens when the model reaches for Git inside a Jujutsu workspace" is a
+fragment that says nothing the heading did not — and a line that exists to fill
+space makes the two that _do_ inform ("Where jj and jj-hunk are found", "Turns the
+whole plugin off, guard included") read as boilerplate too. `blurbKey` is
+optional; the two that earn their place stay.
 
 The second group is new. A directory with neither `.jj` nor `.git` used to be
 indistinguishable from one the detector had merely failed on, so the plugin said
