@@ -23,9 +23,9 @@
  *
  * ## Built-in components only
  *
- * `SettingsForm` for the frame, `SettingsFormModel` for the drafts, `ConfigField`
- * for each field, `DisclosureRow` for each group. Nothing here draws its own
- * label, input, reset or validation message.
+ * `SettingsForm` for the frame, `SettingsFormModel` for the drafts,
+ * `SettingsValueField` for each field, `DisclosureRow` for each group. Nothing
+ * here draws its own label, input, reset or validation message.
  *
  * ## Where it is mounted
  *
@@ -92,18 +92,33 @@ interface SettingsFieldSpec {
   parse(text: string): { kind: "set"; value: unknown } | undefined;
 }
 
-/** Controlled field state and actions, as `ConfigField` takes them. */
-interface ConfigFieldProps {
+/**
+ * What every settings field control needs, as `SettingsValueField` takes it.
+ *
+ * Note what is absent: **no `choices`**. The harness's client-facing field is a
+ * text control whose accepted values are decided by the field's *spec*, not by
+ * a list the control renders — so an enum is typed, and the spec rejects what it
+ * does not accept. There is no select to pass options to.
+ */
+interface SettingsValueFieldProps {
+  /** Stable id associating the label with its control. */
+  id: string;
   label: string;
-  value: string;
-  secret: boolean;
-  /** Finite choices; an empty list uses a text control. */
-  choices: readonly string[];
-  disabled: boolean;
+  /** One-line explanation rendered under the control. */
+  hint?: string;
+  /** Draft text this control renders. */
+  text: string;
   overridden: boolean;
   invalid: boolean;
-  labels: { reset: string; inherited: string; invalid: string };
-  onChange(value: string): void;
+  /** Copy for the overridden badge. */
+  overriddenLabel: string;
+  /** Copy for the reset control. */
+  resetLabel: string;
+  /** Copy shown in place of the hint while the draft is invalid. */
+  invalidLabel: string;
+  /** Disables the control: read-only document, or an unavailable namespace. */
+  disabled: boolean;
+  onEdit(text: string): void;
   onReset(): void;
 }
 
@@ -148,7 +163,16 @@ interface ClientPrimitives {
 }
 
 interface ClientPrimitivesModule {
-  ConfigField: (props: ConfigFieldProps) => unknown;
+  /**
+   * The client-facing field control.
+   *
+   * NOT `ConfigField`: that component exists in the package but is not exported
+   * from its index, because it belongs to the *generated* forms rather than to
+   * plugin UIs. Requiring it yields `undefined`, and `createElement(undefined)`
+   * throws "Element type is invalid" — which the slot answers by retiring the
+   * entry, leaving a page with no form and no explanation.
+   */
+  SettingsValueField: (props: SettingsValueFieldProps) => unknown;
   DisclosureRow: (props: DisclosureRowProps) => unknown;
   SettingsForm: (props: SettingsFormProps) => unknown;
   SettingsFormModel: new (
@@ -223,6 +247,7 @@ const STRINGS: Record<string, Record<string, string>> = {
     unavailable: "This plugin is not currently mounted, so its settings cannot be edited.",
     readOnly: "This deployment stores settings read-only.",
     reset: "Reset to default",
+    overridden: "Overridden",
     inherited: "Inherited",
     invalid: "Not a value this field accepts",
 
@@ -281,6 +306,7 @@ const STRINGS: Record<string, Record<string, string>> = {
     unavailable: "该插件当前未挂载，因此无法编辑其设置。",
     readOnly: "该部署以只读方式存储设置。",
     reset: "恢复默认值",
+    overridden: "已覆盖",
     inherited: "继承值",
     invalid: "不是该字段接受的值",
 
@@ -332,7 +358,7 @@ const STRINGS: Record<string, Record<string, string>> = {
   },
 };
 
-/** Field metadata: kind, string keys, and the choices `ConfigField` renders. */
+/** Field metadata: the string keys, and the values the spec accepts. */
 interface FieldMeta {
   readonly kind: "boolean" | "enum" | "text";
   readonly labelKey: string;
@@ -409,7 +435,7 @@ const GROUPS: readonly GroupMeta[] = [
   { id: "master", titleKey: "groupMaster", blurbKey: "groupMasterBlurb", fields: ["enabled"] },
 ];
 
-/** The choices `ConfigField` renders for a boolean. */
+/** The two drafts a boolean field accepts, as the spec sees them. */
 const BOOLEAN_CHOICES: readonly string[] = ["true", "false"];
 
 /** The choices for one field: an empty list means a text input. */
@@ -481,7 +507,15 @@ function translator(props: PanelProps): (key: string) => string {
   };
 }
 
-/** One field, rendered by `ConfigField`. */
+/**
+ * One field, rendered by `SettingsValueField`.
+ *
+ * The control is a text box for every kind, enums included. That is the
+ * harness's design rather than a limitation here: the field's *spec* decides
+ * which drafts it accepts, and the control never rewrites what the user typed.
+ * The accepted values are listed in the hint instead, which is why every field
+ * carries one.
+ */
 function control(
   name: string,
   state: SettingsFieldState,
@@ -490,19 +524,22 @@ function control(
   t: (key: string) => string,
 ): unknown {
   const meta = FIELDS[name] as FieldMeta;
-  return h(primitives.ConfigField, {
+  return h(primitives.SettingsValueField, {
     key: name,
+    // Stable and unique per field, so the label's `htmlFor` finds its control.
+    id: `dsh-jujutsu-${name}`,
     label: t(meta.labelKey),
-    value: state.text,
-    secret: false,
-    choices: choicesOf(meta),
-    disabled: shell.writable !== true,
+    hint: t(meta.hintKey),
+    text: state.text,
     overridden: state.overridden,
     invalid: state.invalid,
-    labels: { reset: t("reset"), inherited: t("inherited"), invalid: t("invalid") },
-    onChange: (value: string) => props.edit(name, value),
+    overriddenLabel: t("overridden"),
+    resetLabel: t("reset"),
+    invalidLabel: t("invalid"),
+    disabled: shell.writable !== true,
+    onEdit: (text: string) => props.edit(name, text),
     onReset: () => props.resetField(name),
-  } satisfies ConfigFieldProps & { key: string });
+  } satisfies SettingsValueFieldProps & { key: string });
 }
 
 interface GroupProps {
@@ -574,7 +611,13 @@ function renderGroup(props: GroupProps): unknown {
  * `field()`/`shell()` reactive; alone they are one-shot reads.
  */
 function render(props: PanelProps): unknown {
-  const REQUIRED = ["ConfigField", "DisclosureRow", "SettingsForm", "SettingsFormModel", "settingsTextField"] as const;
+  const REQUIRED = [
+    "SettingsValueField",
+    "DisclosureRow",
+    "SettingsForm",
+    "SettingsFormModel",
+    "settingsTextField",
+  ] as const;
   const absent = REQUIRED.filter((name) => primitives[name] === undefined);
   if (absent.length > 0) {
     return h(

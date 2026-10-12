@@ -37,7 +37,6 @@ function loadPanel(): Record<string, any> {
     "@deepseek-ai/dsh-client-ui-primitives": {
       SettingsForm: "SettingsForm",
       SettingsValueField: "SettingsValueField",
-      ConfigField: "ConfigField",
       DisclosureRow: "DisclosureRow",
       // Mirrors the real classes exactly, because the bug this guards against
       // was reading handlers off the wrong one. `SettingsFormShell` is state
@@ -168,12 +167,12 @@ describe("the panel covers the schema", () => {
 });
 
 describe("built-in components only", () => {
-  it("renders every field through ConfigField", () => {
+  it("renders every field through SettingsValueField", () => {
     const { Panel, panel } = panelComponent();
     const types = typesOf(Panel({ view: "page" }));
-    const controls = types.filter((x) => x === "ConfigField");
+    const controls = types.filter((x) => x === "SettingsValueField");
     expect(controls).toHaveLength(Object.keys(panel.FIELDS).length);
-    for (const handRolled of ["Switch", "SegmentedControl", "SettingsValueField", "section", "h3", "input"]) {
+    for (const handRolled of ["Switch", "SegmentedControl", "ConfigField", "section", "h3", "input"]) {
       expect(types, handRolled).not.toContain(handRolled);
     }
   });
@@ -301,7 +300,7 @@ describe("the bundle loads as written", () => {
 });
 
 describe("the handlers come from the right object", () => {
-  it("passes callable handlers to every ConfigField", () => {
+  it("passes callable handlers to every SettingsValueField", () => {
     // The bug this exists for: the panel read `onChange`/`onReset` off the
     // field STATE and `onSave`/`onDiscard` off the form SHELL. None of those
     // four exist, so all four were `undefined`, `ConfigField` threw on render,
@@ -310,13 +309,14 @@ describe("the handlers come from the right object", () => {
     // evidence the panel worked.
     const { Panel } = panelComponent();
     const elements = elementsOf(Panel({ view: "page" }));
-    const fields = elements.filter(([type]) => type === "ConfigField");
+    const fields = elements.filter(([type]) => type === "SettingsValueField");
     expect(fields.length).toBeGreaterThan(0);
     for (const [, props] of fields) {
-      expect(typeof props.onChange, "onChange").toBe("function");
+      expect(typeof props.onEdit, "onEdit").toBe("function");
       expect(typeof props.onReset, "onReset").toBe("function");
       expect(typeof props.disabled, "disabled").toBe("boolean");
-      expect(typeof props.value, "value").toBe("string");
+      expect(typeof props.text, "text").toBe("string");
+      expect(typeof props.id, "id").toBe("string");
     }
     const forms = elements.filter(([type]) => type === "SettingsForm");
     expect(forms).toHaveLength(1);
@@ -393,5 +393,45 @@ describe("the client entry declares its services", () => {
       ["slots", "locale", "configForms"].includes(name as string),
     );
     expect(new Set(used)).toEqual(new Set(["slots", "locale", "configForms"]));
+  });
+});
+
+describe("the panel uses only what the primitives export", () => {
+  /**
+   * The names `@deepseek-ai/dsh-client-ui-primitives` exports from its index,
+   * transcribed from the harness's `src/index.ts`.
+   *
+   * `ConfigField` is NOT among them. It exists as a file — it belongs to the
+   * *generated* forms — so `require(primitives).ConfigField` is `undefined`, and
+   * `createElement(undefined)` throws "Element type is invalid". The slot
+   * answers that by retiring the entry, so the page shows no form and says
+   * nothing. That is what this panel did for four revisions.
+   */
+  const PRIMITIVE_EXPORTS = new Set([
+    "Button",
+    "Checkbox",
+    "DisclosureRow",
+    "SettingsForm",
+    "SettingsFormModel",
+    "SettingsSecretField",
+    "SettingsValueField",
+    "settingsNumberField",
+    "settingsTextField",
+  ]);
+
+  it("requires only names the primitives actually export", () => {
+    const source = readFileSync("src/client/panel.ts", "utf8");
+    const block = source.slice(source.indexOf("const REQUIRED = ["));
+    const required = [...block.slice(0, block.indexOf("]")).matchAll(/"([A-Za-z]+)"/g)]
+      .map((m) => m[1] as string);
+    expect(required.length).toBeGreaterThan(0);
+    const missing = required.filter((name) => !PRIMITIVE_EXPORTS.has(name));
+    expect(missing).toEqual([]);
+  });
+
+  it("does not reach for ConfigField, which is not exported", () => {
+    // Named explicitly, because it is the one that looks right and is not.
+    const source = readFileSync("src/client/panel.ts", "utf8");
+    expect(source).not.toContain("primitives.ConfigField");
   });
 });
