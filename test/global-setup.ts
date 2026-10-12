@@ -41,10 +41,25 @@ export default function setup(): void {
   });
 
   if (missing.length > 0) {
-    console.warn(
-      `\n  fixtures: skipped — ${missing.join(" and ")} not on PATH.\n` +
-        `  The tests that need a real repository will skip; the rest still run.\n`,
-    );
+    // On a machine without the tools, skipping is right: the suite still runs and
+    // says what it could not check. In CI it is not right, because a skip is not
+    // a failure — `release.yml` ran `pnpm run ci` without installing either
+    // binary, so every real-tool test skipped and `verify` passed. A release
+    // would have shipped having tested nothing.
+    //
+    // So the two environments differ, and say so explicitly rather than by
+    // accident.
+    const message =
+      `fixtures: ${missing.join(" and ")} not on PATH. ` +
+      `The tests that need a real repository will skip; the rest still run.`;
+    if (process.env.DSH_JUJUTSU_REQUIRE_TOOLS === "1") {
+      throw new Error(
+        `${message}\n\nDSH_JUJUTSU_REQUIRE_TOOLS=1 is set, so this is a failure ` +
+          `rather than a skip: the workflow that set it is supposed to install ` +
+          `both binaries, and a green run must mean they were exercised.`,
+      );
+    }
+    console.warn(`\n  ${message}\n`);
     return;
   }
 

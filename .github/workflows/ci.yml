@@ -25,72 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # No `version:` input: pnpm/action-setup refuses to run when it is given
-      # both that and a `packageManager` field, and package.json pins pnpm
-      # exactly. One source of truth, and the action reads it — so the version
-      # itself is deliberately not repeated here, where it would only rot.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-
-      # A lockfile that no longer matches the manifest is a gate in its own
-      # right, and `--frozen-lockfile` is the only way to see it in CI.
-      - run: pnpm install --frozen-lockfile
-
-      # The suite drives the real `jj` binary: `e2e.test.ts` builds repositories
-      # with it, and `test/global-setup.ts` builds the fixture repositories with
-      # it. Without this step the fixtures are never built, detection finds no
-      # repository, the guard allows what it should refuse, and nine tests fail
-      # with a message that blames the guard.
-      #
-      # That is what happened: the suite was green on the machine where the
-      # fixture script had been run by hand and red on every push for a week.
-      #
-      # Pinned rather than `latest`, because a policy plugin's behaviour depends
-      # on the VCS it governs and a silent upstream change should be a decision
-      # rather than a surprise. The pin is the version this was developed
-      # against; bump it deliberately.
-      - name: Install jj
-        env:
-          JJ_VERSION: 0.46.0
-        run: |
-          # A subdirectory, not `/tmp` itself: extracting into a directory the
-          # runner owns makes `tar` try to set that directory's timestamps, and
-          # it fails with "Cannot utime: Operation not permitted".
-          mkdir -p /tmp/jj-install
-          curl -fsSL -o /tmp/jj-install/jj.tar.gz \
-            "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          tar -xzf /tmp/jj-install/jj.tar.gz -C /tmp/jj-install
-          sudo install -m 0755 /tmp/jj-install/jj /usr/local/bin/jj
-          jj --version
-
-      # `jj-hunk` ships only on crates.io — no prebuilt binary — so it has to be
-      # compiled. It is the plugin's other headline feature and `e2e.test.ts`
-      # drives it for real, so the compile is worth paying rather than skipping
-      # the bridge in the only environment that is not the author's.
-      #
-      # **From git, not from crates.io.** The published crate is 0.3.0 and its CLI
-      # is different — `jj-hunk list --format <FORMAT>` against this plugin's
-      # `--query` — so `cargo install jj-hunk` installs a binary that rejects every
-      # call the bridge makes. `docs/19` records the git source for exactly this
-      # reason; the crate has not caught up.
-      #
-      # Pinned to a tag, because a branch-tracking install builds whatever `main`
-      # is at that moment.
-      - name: Cache jj-hunk
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/jj-hunk
-          key: jj-hunk-git-v0.5.1-${{ runner.os }}
-
-      - name: Install jj-hunk
-        run: |
-          command -v jj-hunk >/dev/null 2>&1 ||
-            cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
-          jj-hunk --help >/dev/null && echo "jj-hunk ready"
+      # Node, pnpm, `jj` and `jj-hunk`, shared with `release.yml` so the two
+      # cannot drift into running different suites.
+      - uses: ./.github/actions/setup
 
       # `ci` is the whole gate in one command — typecheck, `vp check` for format
       # and lint, the build, then the suite — and it is deliberately not spelled
@@ -102,6 +39,10 @@ jobs:
       # are two different things and it is the bundle the browser loads. Running
       # the suite without building first would test whatever was built last.
       - name: Gate (typecheck, format, lint, build, test)
+        env:
+          # A skip is not a failure. Here the binaries are installed, so a skip
+          # would mean the install silently did not happen.
+          DSH_JUJUTSU_REQUIRE_TOOLS: "1"
         run: pnpm run ci
 
       # Everything above runs against the working tree. This is the only check

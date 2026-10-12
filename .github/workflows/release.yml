@@ -12,20 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # No `version:` input: pnpm/action-setup refuses to run when it is given
-      # both that and a `packageManager` field, and package.json pins pnpm
-      # exactly. One source of truth, and the action reads it.
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+
+      # The same setup the commit gate uses. Without it the suite skips every
+      # test that drives a real binary, and `verify` passes on a release that
+      # tested nothing.
+      - uses: ./.github/actions/setup
+
       # `ci` is the whole gate in one command: typecheck, then `vp check` for
       # format and lint, then the build, then the suite. It is deliberately not
       # spelled out step by step here — a tag should run exactly what a commit
       # runs, and two lists would drift.
-      - run: pnpm run ci
+      - name: Gate
+        env:
+          DSH_JUJUTSU_REQUIRE_TOOLS: "1"
+        run: pnpm run ci
 
   publish:
     needs: verify

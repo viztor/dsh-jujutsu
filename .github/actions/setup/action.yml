@@ -1,0 +1,74 @@
+name: Setup
+description: Node, pnpm, and the two binaries the test suite drives.
+
+# Shared by `ci.yml` and `release.yml`.
+#
+# The two workflows must run the same suite under the same conditions, and they
+# did not: `release.yml` ran `pnpm run ci` without installing `jj` or `jj-hunk`,
+# so every test that drives a real binary skipped — and a skip is not a failure,
+# so `verify` would have passed and a release would have shipped having tested
+# nothing. Extracting the setup is what stops the two lists drifting again.
+
+runs:
+  using: composite
+  steps:
+    # No `version:` input: pnpm/action-setup refuses to run when it is given both
+    # that and a `packageManager` field, and package.json pins pnpm exactly. One
+    # source of truth, and the action reads it.
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 26
+        cache: pnpm
+
+    # A lockfile that no longer matches the manifest is a gate in its own right,
+    # and `--frozen-lockfile` is the only way to see it in CI.
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+
+    # The suite drives the real `jj` binary: `e2e.test.ts` builds repositories
+    # with it, and `test/global-setup.ts` builds the fixture repositories with it.
+    # Without it detection finds no repository, the guard allows what it should
+    # refuse, and nine tests fail with a message that blames the guard.
+    #
+    # That is exactly what happened, for a week, because nothing installed it.
+    #
+    # Pinned rather than `latest`, because a policy plugin's behaviour depends on
+    # the VCS it governs and an upstream change should be a decision rather than a
+    # surprise.
+    - name: Install jj
+      shell: bash
+      env:
+        JJ_VERSION: 0.46.0
+      run: |
+        # A subdirectory, not `/tmp` itself: extracting into a directory the
+        # runner owns makes `tar` try to set that directory's own timestamps, and
+        # it fails with "Cannot utime: Operation not permitted".
+        mkdir -p /tmp/jj-install
+        curl -fsSL -o /tmp/jj-install/jj.tar.gz \
+          "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        tar -xzf /tmp/jj-install/jj.tar.gz -C /tmp/jj-install
+        sudo install -m 0755 /tmp/jj-install/jj /usr/local/bin/jj
+        jj --version
+
+    # **From git, not from crates.io.** The published crate is 0.3.0 and its CLI is
+    # different — `jj-hunk list --format <FORMAT>` against this plugin's `--query`
+    # — so `cargo install jj-hunk` installs a binary that rejects every call the
+    # bridge makes. `docs/19` records the git source for exactly this reason; the
+    # crate has not caught up.
+    #
+    # Pinned to a tag, because a branch-tracking install builds whatever `main` is
+    # at that moment.
+    - name: Cache jj-hunk
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/jj-hunk
+        key: jj-hunk-git-v0.5.1-${{ runner.os }}
+
+    - name: Install jj-hunk
+      shell: bash
+      run: |
+        command -v jj-hunk >/dev/null 2>&1 ||
+          cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
+        jj-hunk --help >/dev/null && echo "jj-hunk ready"
