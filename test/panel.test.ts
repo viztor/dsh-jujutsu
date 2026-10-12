@@ -364,11 +364,15 @@ describe("the display metadata the host reads", () => {
 
   it("ships the metadata files", () => {
     const files = PKG.files as string[];
-    // `lib` carries both halves now: the host bundle and the client bundle the
-    // harness's route serves as `${package}/client.js`.
-    for (const entry of ["locale/*.json", "icon.svg", "lib"]) {
+    // `lib` carries both halves: the host bundle and the client bundle the
+    // harness's route serves as `${package}/client.js`. The entries are globs
+    // rather than the bare directory, so the sourcemaps that `tsc` writes beside
+    // the code stay on disk and out of the package — they resolve to `../src/*.ts`,
+    // which does not ship.
+    for (const entry of ["locale/*.json", "icon.svg", "lib/**/*.js", "lib/**/*.d.ts"]) {
       expect(files, entry).toContain(entry);
     }
+    expect(files, "no bare directory").not.toContain("lib");
   });
 });
 

@@ -108,11 +108,25 @@ function run(command: string, args: string[], cwd: string): string {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     main: string;
     types: string;
+    files: string[];
     exports: Record<string, { default?: string } | string>;
   };
   const host = join(ROOT, pkg.main);
   check("the host entry exists", existsSync(host), pkg.main);
   check("the declarations exist", existsSync(join(ROOT, pkg.types)), pkg.types);
+
+  // `files: ["lib"]` shipped everything in the directory, which was 93 files and
+  // 377 kB for a plugin whose entry points are four of them. The sourcemaps were
+  // most of the weight, and they resolve to `../src/*.ts` — source that is not in
+  // the tarball, so they are useful in a `link:` install and dead in a published
+  // one. The globs keep them on disk and out of the package.
+  // The test is "names a file or a pattern", not "has an extension": `LICENSE`
+  // is a file with no dot, and an extension check called it a bare directory.
+  const bare = pkg.files.filter((entry) => {
+    const full = join(ROOT, entry);
+    return existsSync(full) && statSync(full).isDirectory();
+  });
+  check("the manifest lists no bare directory", bare.length === 0, bare.join(", "));
 
   const clientExport = pkg.exports["./client"];
   const clientPath = typeof clientExport === "string" ? clientExport : clientExport?.default;
@@ -231,6 +245,30 @@ function run(command: string, args: string[], cwd: string): string {
     check("npm pack produced a tarball", packed !== undefined && existsSync(tarball), packed ?? "");
 
     if (existsSync(tarball)) {
+      // What is actually inside, rather than what `files` says should be. The
+      // distinction matters: `files: ["lib"]` shipped everything in the
+      // directory — 93 files and 377 kB — and the sourcemaps were most of it.
+      // They resolve to `../src/*.ts`, source that is not in the tarball, so they
+      // help in a `link:` install and are dead weight in a published one.
+      const contents = run("tar", ["-tzf", tarball], ROOT)
+        .split("\n")
+        .map((line) => line.replace(/^package\//, ""))
+        .filter((line) => line !== "");
+      const maps = contents.filter((name) => name.endsWith(".map"));
+      check(
+        "no sourcemaps in the published package",
+        maps.length === 0,
+        maps.slice(0, 3).join(", "),
+      );
+      check(
+        "the package carries its entry points",
+        contents.includes("lib/index.js") &&
+          contents.includes("lib/index.d.ts") &&
+          contents.includes("lib/client.js") &&
+          contents.includes("cordis.patch.yml"),
+        `${contents.length} files`,
+      );
+
       run("npm", ["init", "-y"], scratch);
       run("npm", ["install", "--no-audit", "--no-fund", tarball], scratch);
 

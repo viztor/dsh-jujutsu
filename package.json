@@ -22,7 +22,8 @@
     "url": "git+https://github.com/viztor/dsh-jujutsu.git"
   },
   "files": [
-    "lib",
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
     "locale/*.json",
     "icon.svg",
     "cordis.patch.yml",
