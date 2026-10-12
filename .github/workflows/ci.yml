@@ -67,6 +67,24 @@ jobs:
           sudo install -m 0755 /tmp/jj-install/jj /usr/local/bin/jj
           jj --version
 
+      # `jj-hunk` ships only on crates.io — no prebuilt binary — so it has to be
+      # compiled. It is the plugin's other headline feature and `e2e.test.ts`
+      # drives it for real, so the three minutes are worth paying rather than
+      # skipping the bridge in the only environment that is not the author's.
+      #
+      # Cached on the crate version: a cache miss costs the compile, a hit costs
+      # seconds, and the key changes only when the pin does.
+      - name: Cache jj-hunk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/jj-hunk
+          key: jj-hunk-0.5.1-${{ runner.os }}
+
+      - name: Install jj-hunk
+        run: |
+          command -v jj-hunk >/dev/null 2>&1 || cargo install jj-hunk --locked
+          jj-hunk --help >/dev/null && echo "jj-hunk ready"
+
       # `ci` is the whole gate in one command — typecheck, `vp check` for format
       # and lint, the build, then the suite — and it is deliberately not spelled
       # out step by step here. A tag runs exactly what a commit runs, and two

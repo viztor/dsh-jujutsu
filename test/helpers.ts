@@ -41,6 +41,23 @@ export const HAS_FIXTURES = existsSync(`${FIXTURES}/jj-colocated/.jj`);
  * it drives the real binary — so without `jj` it fails on the first `execFileSync`
  * with an error that names neither the tool nor the reason.
  */
+/**
+ * Whether `jj-hunk` is on PATH.
+ *
+ * The hunk bridge is one of the plugin's two headline features, and `jj-hunk`
+ * ships only on crates.io — no prebuilt binary — so it is genuinely absent on a
+ * clean runner. Tests that drive it say so rather than failing with
+ * `exited 127: jj-hunk: not found`, which names the symptom and not the cause.
+ */
+export const HAS_JJ_HUNK = ((): boolean => {
+  try {
+    execFileSync("jj-hunk", ["--help"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 export const HAS_JJ = ((): boolean => {
   try {
     execFileSync("jj", ["--version"], { stdio: "ignore" });
