@@ -35,6 +35,25 @@ import type { Settings } from "./settings.ts";
 import { DESTRUCTIVE, WRITE_PROTECTION } from "./messages.ts";
 import { type Refusal, classifyGitInvocation } from "./verbs.ts";
 
+/**
+ * The guard's own error codes, carried on a `deny` as `info.code`.
+ *
+ * `docs/26` documented these as `info.code` values before the guard set any —
+ * the harness has always allowed it (`PreToolDecision`'s deny arm declares
+ * `info?: ToolErrorInfo`, whose own comment says durable projections keep it and
+ * model-facing content does not), and nothing was using it. The doc was right and
+ * the code was incomplete.
+ *
+ * They are not the model's business: `reason` is what the model sees, and these
+ * exist so a log or a durable projection can say *which* rule fired without
+ * parsing prose.
+ */
+export const GUARD_CODES = {
+  gitDenied: "GUARD_GIT_DENIED",
+  internalsWrite: "GUARD_JJ_INTERNALS_WRITE",
+  repoStoreDelete: "GUARD_REPO_STORE_DELETE",
+} as const;
+
 /** Tools whose `file_path` argument is checked against `.jj` and `.git`. */
 const PATH_TOOLS: ReadonlySet<string> = new Set(["read", "write", "edit"]);
 
@@ -113,7 +132,9 @@ async function decide(
   // 1. Writes into the version-control internals, on any tool that takes a path.
   if (PATH_TOOLS.has(exec.name)) {
     const refusal = classifyPathWrite(exec);
-    return refusal === undefined ? next() : gate(ctx, exec, refusal, settings);
+    return refusal === undefined
+      ? next()
+      : gate(ctx, exec, refusal, settings, GUARD_CODES.internalsWrite);
   }
 
   // 2. Shell commands. Git is only reachable through `bash` — there is no git
@@ -127,7 +148,7 @@ async function decide(
   //     verb rule below is blind to it by design — and it is unrecoverable.
   const destructive = destructiveTargetsVcs(command);
   if (destructive !== undefined) {
-    return gate(ctx, exec, destructiveRefusal(destructive), settings);
+    return gate(ctx, exec, destructiveRefusal(destructive), settings, GUARD_CODES.repoStoreDelete);
   }
 
   // 2b. Decide whether we are even in a `jj` workspace. Outside one, the plugin
@@ -142,7 +163,9 @@ async function decide(
   if (invocation.gitInvocations.length === 0) return next();
 
   const decision = classifyGitInvocation(invocation);
-  return decision.kind === "allow" ? next() : gate(ctx, exec, decision, settings);
+  return decision.kind === "allow"
+    ? next()
+    : gate(ctx, exec, decision, settings, GUARD_CODES.gitDenied);
 }
 
 /**
@@ -165,6 +188,7 @@ function gate(
   exec: ToolExecution,
   refusal: Refusal,
   settings: Settings,
+  code: string,
 ): PreToolDecision {
   const posture = refusal.readOnly ? settings.readOnlyGit : settings.bypass;
   if (posture === "allow") return { kind: "allow" };
@@ -182,7 +206,14 @@ function gate(
 
   if (posture === "deny" || !isPromptable(ctx, exec)) {
     markDenied(exec, refusal);
-    return { kind: "deny", reason: refusal.message.reason };
+    // `info` is for durable diagnostics; the model sees only `reason`. The
+    // harness's own type comment says the same thing, which is why the code is
+    // safe to put here and useless in the message.
+    return {
+      kind: "deny",
+      reason: refusal.message.reason,
+      info: { name: "dsh-jujutsu", code },
+    };
   }
 
   markAsked(exec, refusal);

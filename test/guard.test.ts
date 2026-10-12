@@ -326,3 +326,55 @@ describe.skipIf(!HAS_FIXTURES)("fail-open is loud", () => {
     }
   });
 });
+
+describe("a denial carries a durable code", () => {
+  // `docs/26` documented these as `info.code` values before the guard set any.
+  // The harness has always allowed it — `PreToolDecision`'s deny arm declares
+  // `info?: ToolErrorInfo` — so the doc was right and the code was incomplete.
+  //
+  // The code is not for the model: `reason` is. It exists so a log or a durable
+  // projection can say *which* rule fired without parsing prose, and so a test
+  // can tell the three refusals apart from outside.
+
+  /** A harness with the guard denying outright, and a `bash` execution. */
+  function armed() {
+    const harness = fakeHarness();
+    apply(harness.ctx, { guard: true, bypass: "deny", readOnlyGit: "deny" });
+    return {
+      harness,
+      bashAt(command: string, cwd = `${FIXTURES}/jj-colocated`) {
+        return harness.session("s1", cwd).exec("bash", { command, description: "test" });
+      },
+    };
+  }
+
+  it("names the Git rule", async () => {
+    const { harness, bashAt } = armed();
+    const decision = await harness.preExecute(bashAt("git commit -m x"));
+    expect(decision).toMatchObject({ kind: "deny", info: { code: "GUARD_GIT_DENIED" } });
+  });
+
+  it("names the internals-write rule", async () => {
+    const { harness } = armed();
+    const exec = harness.session("s1", `${FIXTURES}/jj-colocated`).exec("write", {
+      file_path: `${FIXTURES}/jj-colocated/.jj/working_copy/tree_state`,
+    });
+    const decision = await harness.preExecute(exec);
+    expect(decision).toMatchObject({ kind: "deny", info: { code: "GUARD_JJ_INTERNALS_WRITE" } });
+  });
+
+  it("names the destructive-path rule", async () => {
+    const { harness, bashAt } = armed();
+    const decision = await harness.preExecute(bashAt("rm -rf .jj"));
+    expect(decision).toMatchObject({ kind: "deny", info: { code: "GUARD_REPO_STORE_DELETE" } });
+  });
+
+  it("keeps the code out of what the model sees", async () => {
+    // The whole point of `info` is that it is durable and not model-facing. A
+    // code leaking into `reason` would have the model reading a diagnostic.
+    const { harness, bashAt } = armed();
+    const decision = await harness.preExecute(bashAt("git status"));
+    expect(decision).toMatchObject({ kind: "deny" });
+    expect((decision as { reason: string }).reason).not.toContain("GUARD_");
+  });
+});
