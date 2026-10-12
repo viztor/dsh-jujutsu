@@ -32,7 +32,9 @@ function schemaFields(): Set<string> {
  */
 const hookLog: string[] = [];
 
-function loadPanel(): Record<string, any> {
+function loadPanel(
+  fieldState: { text?: string; overridden?: boolean; invalid?: boolean } = {},
+): Record<string, any> {
   let factory: ((require: (id: string) => unknown) => Record<string, any>) | undefined;
   const win = {
     __ModuleLoader__: {
@@ -70,7 +72,11 @@ function loadPanel(): Record<string, any> {
           };
         }
         field() {
-          return { text: "x", overridden: false, invalid: false };
+          return {
+            text: fieldState.text ?? "x",
+            overridden: fieldState.overridden ?? false,
+            invalid: fieldState.invalid ?? false,
+          };
         }
         actions() {
           return { edit() {}, resetField() {}, save() {}, discard() {} };
@@ -106,8 +112,10 @@ function loadPanel(): Record<string, any> {
 }
 
 /** Reach the Panel component through `apply`'s own registration. */
-function panelComponent() {
-  const panel = loadPanel();
+function panelComponent(
+  fieldState: { text?: string; overridden?: boolean; invalid?: boolean } = {},
+) {
+  const panel = loadPanel(fieldState);
   let registered: ((p: unknown) => unknown) | undefined;
   let injected: Record<string, unknown> = {};
   panel.apply({
@@ -156,6 +164,26 @@ function elementsOf(node: unknown, out: [string, any][] = []): [string, any][] {
   if (typeof n.type === "string") out.push([n.type, n.props ?? {}]);
   for (const kid of n.kids ?? []) elementsOf(kid, out);
   return out;
+}
+
+/** Every string a rendered tree contains, joined. */
+function textOf(node: unknown, out: string[] = []): string {
+  if (typeof node === "string") {
+    out.push(node);
+    return out.join(" ");
+  }
+  if (node === null || typeof node !== "object") return out.join(" ");
+  if (Array.isArray(node)) {
+    for (const item of node) textOf(item, out);
+    return out.join(" ");
+  }
+  const n = node as { type?: unknown; props?: unknown; kids?: unknown[] };
+  if (typeof n.type === "function") {
+    textOf(n.type(n.props ?? {}), out);
+    return out.join(" ");
+  }
+  for (const kid of n.kids ?? []) textOf(kid, out);
+  return out.join(" ");
 }
 
 /** Collect every element type in a rendered tree, running function components. */
@@ -571,5 +599,44 @@ describe("hooks are called unconditionally, in a stable order", () => {
     elementsOf(Panel({ view: "page" }));
     expect(hookLog).toContain("useSyncExternalStore");
     expect(hookLog).toContain("useState");
+  });
+});
+
+describe("a draft the field rejects, and one the user overrode", () => {
+  it("says a rejected draft is rejected, in the only place it can", () => {
+    // Reachable without touching the panel: a config file edited by hand can
+    // hold a value the field's spec refuses.
+    //
+    // Neither control can carry the state itself -- `Switch` and
+    // `SegmentedControl` have no `invalid` prop; only `SettingsValueField` does,
+    // and the panel no longer draws one. So the message line is the whole of the
+    // signal, which is why the shell owns it rather than the control.
+    const { Panel } = panelComponent({ invalid: true });
+    const text = textOf(Panel({ view: "page" }));
+    expect(text).toContain("invalid");
+    expect(text).not.toContain("Hint");
+  });
+
+  it("shows the hint, not the invalid copy, for a good draft", () => {
+    const { Panel } = panelComponent();
+    const text = textOf(Panel({ view: "page" }));
+    expect(text).not.toContain("invalid");
+  });
+
+  it("offers a reset once a value is overridden", () => {
+    // The shell shows an override badge and a reset only when there is something
+    // to reset; showing them always would put a control on every field that does
+    // nothing for most of them.
+    const { Panel } = panelComponent({ overridden: true });
+    const types = typesOf(Panel({ view: "page" }));
+    expect(types).toContain("Tag");
+    expect(types).toContain("Button");
+  });
+
+  it("shows neither when the value is neither", () => {
+    const { Panel } = panelComponent();
+    const types = typesOf(Panel({ view: "page" }));
+    expect(types).not.toContain("Tag");
+    expect(types).not.toContain("Button");
   });
 });
