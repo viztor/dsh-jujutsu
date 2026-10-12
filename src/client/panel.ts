@@ -281,19 +281,19 @@ const STRINGS: Record<string, Record<string, string>> = {
       "What to do with every other Git command: commit, push, checkout, rebase, and anything the read-only setting does not list -- including the writing form of a verb it does. ask requests a one-call approval; deny never asks; allow disables the guard for these.",
     rememberBypassLabel: "Remember approvals",
     rememberBypassHint:
-      "After you approve one Git command, stop asking about that same verb for the rest of the session. In memory only — it does not survive a restart.",
+      "After you approve one Git command, stop asking about that same verb for the rest of the session. Off means each command is asked about separately. In memory only — it does not survive a restart.",
     alertUninitialisedLabel: "Mention missing version control",
     alertUninitialisedHint:
       "When a directory has no version control at all, tell the model so it can offer to initialise one. Off means the plugin stays silent outside a repository.",
     preferJjLabel: "Prefer Jujutsu",
     preferJjHint:
-      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when “Mention missing version control” is on.",
+      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Off suggests plain git init. Only used when “Mention missing version control” is on.",
     injectContextLabel: "Explain Jujutsu in the prompt",
     injectContextHint:
       "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",
     teachSkillLabel: "Offer the jj manual",
     teachSkillHint:
-      "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
+      "Offer the jj manual as an on-demand skill. It costs nothing either way; off only means the model has less to read when it needs depth.",
   },
   zh: {
     save: "保存",

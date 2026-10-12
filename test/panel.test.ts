@@ -803,3 +803,41 @@ describe("every locale string is reachable", () => {
     expect(zh).toEqual(en);
   });
 });
+
+describe("every toggle says what Off does", () => {
+  it("names the off state in its hint", () => {
+    // A switch asks one question: what happens if I turn this off? Four of the
+    // five answered it and `rememberBypass` did not — its hint described only the
+    // on behaviour, leaving the reader to infer that the opposite of "stop
+    // asking" is "keep asking", which is true but is the reader's work, not the
+    // copy's.
+    //
+    // The panel shows the label and the hint and nothing else, so the hint is the
+    // whole of the explanation a user gets.
+    const { FIELDS, STRINGS } = loadPanel();
+    const english = STRINGS.en as Record<string, string>;
+    const missing: string[] = [];
+    for (const [name, meta] of Object.entries(
+      FIELDS as Record<string, { kind: string; hintKey: string }>,
+    )) {
+      if (meta.kind !== "boolean") continue;
+      const hint = english[meta.hintKey] ?? "";
+      if (!/\boff\b/i.test(hint)) missing.push(`${name} (${meta.hintKey})`);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("names the off state in the config description too", () => {
+    // The same sentence ships in the schema, which is what a host that skips the
+    // panel renders. Drift between the two is caught by another test; this one
+    // checks the schema has the sentence at all.
+    const schema = readFileSync("src/config.ts", "utf8");
+    const missing: string[] = [];
+    for (const match of schema.matchAll(
+      /^ {2}([a-zA-Z]+): z\n?\s*\.boolean\(\)[\s\S]*?\.description\(\s*\n?\s*"((?:[^"\\]|\\.)*)"/gm,
+    )) {
+      if (!/\boff\b/i.test(match[2] ?? "")) missing.push(match[1] ?? "");
+    }
+    expect(missing).toEqual([]);
+  });
+});

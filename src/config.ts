@@ -52,7 +52,7 @@ export const Config = z.object({
     .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .description(
-      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
+      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for when you want the model to inspect Git directly.",
     )
     .volatile(),
 
@@ -74,7 +74,7 @@ export const Config = z.object({
     .boolean()
     .default(true)
     .description(
-      "After you approve one Git command, stop asking about that same verb for the rest of the session. In memory only — it does not survive a restart.",
+      "After you approve one Git command, stop asking about that same verb for the rest of the session. Off means each command is asked about separately. In memory only — it does not survive a restart.",
     )
     .volatile(),
 
@@ -119,7 +119,7 @@ export const Config = z.object({
     .boolean()
     .default(true)
     .description(
-      "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
+      "Offer the jj manual as an on-demand skill. It costs nothing either way; off only means the model has less to read when it needs depth.",
     )
     .volatile(),
 
@@ -158,7 +158,7 @@ export const Config = z.object({
     .boolean()
     .default(true)
     .description(
-      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Only used when “Mention missing version control” is on.",
+      "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Off suggests plain git init. Only used when “Mention missing version control” is on.",
     )
     .volatile(),
 });
