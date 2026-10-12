@@ -468,3 +468,56 @@ describe("the panel uses only what the primitives export", () => {
     expect(source).not.toContain("primitives.ConfigField");
   });
 });
+
+describe("each control gets the props it requires", () => {
+  it("gives SegmentedControl at least two labelled options", () => {
+    // Its contract says "at least two": a one-segment tablist is not a control,
+    // and a segment with no label renders an empty tab. The labels are the
+    // localized value strings, not the config tokens.
+    const { Panel } = panelComponent();
+    const segmented = elementsOf(Panel({ view: "page" })).filter(
+      ([type]) => type === "SegmentedControl",
+    );
+    expect(segmented.length).toBeGreaterThan(0);
+    for (const [, props] of segmented) {
+      expect(typeof props.id, "id").toBe("string");
+      expect(typeof props.label, "label").toBe("string");
+      expect(props.label.length).toBeGreaterThan(0);
+      expect(Array.isArray(props.options)).toBe(true);
+      expect(props.options.length).toBeGreaterThanOrEqual(2);
+      for (const option of props.options) {
+        expect(typeof option.value, "value").toBe("string");
+        expect(typeof option.label, "label").toBe("string");
+        // A raw config token would mean the i18n lookup missed.
+        expect(option.label).not.toBe(option.value);
+      }
+      expect(typeof props.onChange, "onChange").toBe("function");
+    }
+  });
+
+  it("gives Switch a boolean and an accessible name", () => {
+    const { Panel } = panelComponent();
+    const switches = elementsOf(Panel({ view: "page" })).filter(([type]) => type === "Switch");
+    expect(switches.length).toBeGreaterThan(0);
+    for (const [, props] of switches) {
+      expect(typeof props.checked, "checked").toBe("boolean");
+      expect(typeof props.onChange, "onChange").toBe("function");
+      expect(typeof props.label, "label").toBe("string");
+      expect(props.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives every field an id its label can point at", () => {
+    // `SettingsValueField` and `SegmentedControl` both take an `id`, and both
+    // wire it to a `<label htmlFor>`. A missing or duplicated id leaves the
+    // label pointing at nothing, which is invisible until someone uses a screen
+    // reader or clicks the text.
+    const { Panel } = panelComponent();
+    const withIds = elementsOf(Panel({ view: "page" })).filter(
+      ([type]) => type === "SettingsValueField" || type === "SegmentedControl",
+    );
+    const ids = withIds.map(([, props]) => props.id as string);
+    expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

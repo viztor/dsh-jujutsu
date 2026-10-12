@@ -30,7 +30,7 @@ is `docs/24-implementation-plan.md` §4.
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 156 tests, `pnpm run ci` green:
+Implemented and tested — 159 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                   |
 | --------------- | ---------------------------------------------------------------------------- |
