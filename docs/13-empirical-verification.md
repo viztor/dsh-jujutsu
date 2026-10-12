@@ -5,10 +5,10 @@ command that produced it.
 
 Toolchain installed for this project:
 
-| Tool      | Version | Path                                                                                         |
-| --------- | ------- | -------------------------------------------------------------------------------------------- |
-| `jj`      | 0.46.0  | `/opt/homebrew/bin/jj` (Homebrew bottle)                                                     |
-| `jj-hunk` | 0.5.1   | `~/.cargo/bin/jj-hunk` (`cargo install --git https://github.com/laulauland/jj-hunk jj-hunk`) |
+| Tool      | Version | Path                                                                                                      |
+| --------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `jj`      | 0.46.0  | `/opt/homebrew/bin/jj` (Homebrew bottle)                                                                  |
+| `jj-hunk` | 0.5.1   | `~/.cargo/bin/jj-hunk` (`cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`) |
 
 All `jj` runs used `JJ_CONFIG=/dev/null` so no user configuration was touched.
 Fixtures lived in `/tmp/jjverify*` and `/tmp/jjnocol`.

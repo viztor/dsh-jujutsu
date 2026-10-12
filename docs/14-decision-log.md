@@ -57,11 +57,11 @@ legitimately wants to peek with Git. If denied, it should be a config switch
 > channel as D2's bypass — it is a system mutation, not a config toggle — and
 > the source must be pinned to a reviewed revision rather than a branch.
 
-| Option                        | Consequence                                                                                                                                     |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Detect only** (recommended) | If `jj-hunk` is missing, refuse hunk operations and print the exact install line. Safe, no surprises, no toolchain dependency.                  |
-| Offer to install              | `cargo install --git https://github.com/laulauland/jj-hunk jj-hunk`. Requires a Rust toolchain; takes ~40 s; mutates the user's `~/.cargo/bin`. |
-| Bundle a binary               | Per-platform binaries, pinned, shipped in the package. Highest maintenance; most reliable.                                                      |
+| Option                        | Consequence                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Detect only** (recommended) | If `jj-hunk` is missing, refuse hunk operations and print the exact install line. Safe, no surprises, no toolchain dependency.                               |
+| Offer to install              | `cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`. Requires a Rust toolchain; takes ~40 s; mutates the user's `~/.cargo/bin`. |
+| Bundle a binary               | Per-platform binaries, pinned, shipped in the package. Highest maintenance; most reliable.                                                                   |
 
 **Recommendation: detect-only for v0.1.** Installing a Rust binary from inside
 an agent is a decision the user should make deliberately, not one the plugin

@@ -149,3 +149,42 @@ describe("no document denies a surface the manifest declares", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("no document recommends the wrong jj-hunk install", () => {
+  it("gives every cargo install of jj-hunk the git source and a tag", () => {
+    // The published crate is the same project two minor versions behind, with a
+    // different CLI — so `cargo install jj-hunk` installs a binary that rejects
+    // every call the hunk bridge makes. It is also the first thing anyone types,
+    // because the crate has the right name and the right repository URL.
+    //
+    // The README said "install it" and nothing more, which led straight there.
+    // A command that installs something broken is worse than no command.
+    const offenders: string[] = [];
+    const files = [
+      "README.md",
+      "CONTRIBUTING.md",
+      ...readdirSync("docs")
+        .filter((f) => f.endsWith(".md"))
+        .map((f) => join("docs", f)),
+    ];
+    for (const file of files) {
+      const text = readFileSync(file, "utf8");
+      for (const line of text.split("\n")) {
+        const match = /cargo install [^`]*jj-hunk[^`]*/.exec(line);
+        if (match === null) continue;
+        const command = match[0];
+        // An install, not a listing.
+        if (/--list|--version <exact>|--version <ver>/.test(command)) continue;
+        // A line that says not to run it is the opposite of a recommendation.
+        if (/do not run|do not use|not run|rejects|cannot be used|wrong|behind/i.test(line))
+          continue;
+        // The pinned form, which is the only one that works.
+        if (command.includes("--git") && (command.includes("--tag") || command.includes("--rev"))) {
+          continue;
+        }
+        offenders.push(`${file}: ${command.slice(0, 70)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

@@ -67,9 +67,11 @@ than breaking the user's environment.
 position on:
 
 - **Detect only** — refuse hunk operations with install instructions. Safest.
-- **Offer to install** — `cargo install jj-hunk` or
-  `cargo binstall --git …`. Installing a toolchain-dependent binary from inside
-  an agent is a real decision.
+- **Offer to install** — the pinned git build, `cargo install --git
+  https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`. Not
+  `cargo install jj-hunk`: the crates.io release is behind and its CLI differs.
+  Installing a toolchain-dependent binary from inside an agent is a real
+  decision.
 - **Bundle** — ship a pinned binary per platform. Highest maintenance.
 
 Also: which version is the floor? The hunkset language and the ID contract

@@ -29,11 +29,11 @@ defaults are chosen to be safe.
 
 ### Requirements
 
-|           |                                                                                                                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `jj`      | **Required.** 0.46.0 or newer. `brew install jj`                                                                                                                                   |
-| `jj-hunk` | Optional. Adds hunk-level `split`/`squash`. Without it those two tools report unavailable rather than failing. `cargo install --git https://github.com/laulauland/jj-hunk jj-hunk` |
-| Node      | 24 or newer                                                                                                                                                                        |
+|           |                                                                                                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jj`      | **Required.** 0.46.0 or newer. `brew install jj`                                                                                                                                                |
+| `jj-hunk` | Optional. Adds hunk-level `split`/`squash`. Without it those two tools report unavailable rather than failing. `cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk` |
+| Node      | 24 or newer                                                                                                                                                                                     |
 
 ## What it does
 
@@ -129,7 +129,18 @@ a directory with a `.jj` directory, in it or any parent. Check with
 inactive. `jj git init` creates one (colocated by default).
 
 **The hunk tools say unavailable.** `jj-hunk` is not installed or not on `PATH`.
-Set _jj-hunk executable_ to an absolute path, or install it.
+Set _jj-hunk executable_ to an absolute path, or install it:
+
+```bash
+cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
+```
+
+**Do not run `cargo install jj-hunk`.** The published crate is the same project
+but two minor versions behind, and its CLI is different — it rejects the query
+interface these tools use. Installing from crates.io gives you a `jj-hunk` that
+fails on every call with `unexpected argument '--query' found`, which is a
+confusing way to learn this. The pinned git install above is what the plugin is
+tested against.
 
 **`jj new` or `jj commit` is refused.** The plugin refuses commit-creating
 commands when `jj` has no identity configured, because `jj` would create a commit
@@ -196,7 +207,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **195 tests**, `pnpm run ci` green.
+observed working in a live session. **196 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

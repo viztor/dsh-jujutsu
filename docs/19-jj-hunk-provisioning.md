@@ -68,15 +68,16 @@ Upstream's README is explicit that the crates.io release is behind, so the git
 form is the supported one:
 
 ```bash
-cargo install --git https://github.com/laulauland/jj-hunk jj-hunk
+cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
 ```
 
 **Measured on this machine:** 37.25 s, installing `jj-hunk v0.5.1` to
 `~/.cargo/bin/jj-hunk`.
 
-**Do not ship that command verbatim.** A branch-tracking `cargo install --git`
-builds whatever `main` is at that moment, and a `cargo install` runs the
-repository's build scripts. Pin it:
+**Pin it to a tag.** A branch-tracking `cargo install --git` builds whatever
+`main` is at that moment, and a `cargo install` runs the repository's build
+scripts. The command above is pinned; the reason to keep it that way is that two
+users following an unpinned instruction a week apart get different binaries.
 
 ```bash
 cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
