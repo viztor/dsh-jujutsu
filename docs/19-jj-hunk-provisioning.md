@@ -79,17 +79,45 @@ builds whatever `main` is at that moment, and a `cargo install` runs the
 repository's build scripts. Pin it:
 
 ```bash
-cargo install --git https://github.com/laulauland/jj-hunk --rev <sha> jj-hunk
+cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk
 ```
 
-with `<sha>` a reviewed commit, recorded in the plugin source and surfaced in
-the log when the offer is made. If a released version later catches up on
-crates.io, prefer `cargo install jj-hunk --version <exact>` and drop the git
-form.
+A tag rather than a raw `<sha>`: it names the same commit and says what it is.
+`v0.5.1` is what this plugin is written and tested against, and it is what CI
+installs.
 
-`cargo binstall --git …` is faster (prebuilt binary, no compile) but
-`cargo-binstall` is not present here and adds a second missing-tool problem.
-**UNVERIFIED** on this machine; treat as a future optimization.
+### Do not use `cargo install jj-hunk`
+
+The published crate is the **same project** — same repository URL, same
+description — and it is **two minor versions behind**:
+
+| Source    | Newest                          | CLI                               |
+| --------- | ------------------------------- | --------------------------------- |
+| crates.io | `0.3.0` (plus `0.1.1`, `0.1.0`) | `jj-hunk list --format <FORMAT>`  |
+| git tags  | `v0.5.1`                        | `jj-hunk list --query <QUERYSET>` |
+
+That is not a cosmetic difference. Installing from crates.io produces a binary
+that **rejects every call this plugin makes**:
+
+```
+jj-hunk exited 2: error: unexpected argument '--query' found
+Usage: jj-hunk list --format <FORMAT>
+```
+
+It is also the command a reader reaches for first, because the crate has the right
+name and the right repository URL. This was learned by watching CI fail on it
+after installing from crates.io — the bridge had never been exercised in CI
+before that, so nothing had caught it.
+
+If a released version catches up **and** carries the `--query` interface, prefer
+`cargo install jj-hunk --version <exact>` and drop the git form. Catching up on
+the version number alone is not enough; the interface is the thing that matters.
+
+`cargo binstall --git …` would be faster (prebuilt binary, no compile), but
+`cargo-binstall` is not present on the development machine and adds a second
+missing-tool problem to a plugin whose whole job is reporting missing tools
+clearly. **Still UNVERIFIED** — deliberately, as a future optimization rather than
+an untested step in the install path.
 
 ## Failure modes
 

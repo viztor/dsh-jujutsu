@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * The tool surface.
@@ -14,7 +16,7 @@ import { describe, expect, it } from "vitest";
 
 import { applyTools, TOOL_NAMES } from "../src/tools.ts";
 import { resolveSettings } from "../src/settings.ts";
-import { fakeHarness } from "./helpers.ts";
+import { fakeHarness, realShell } from "./helpers.ts";
 
 function registered() {
   const harness = fakeHarness();
@@ -280,6 +282,56 @@ describe("every multi-revision template delimits its own output", () => {
     const expected = `++ "${bs}${bs}n"`;
     for (const template of templates) {
       expect(template, template).toContain(expected);
+    }
+  });
+});
+
+describe("the wrong jj-hunk is named as such", () => {
+  it("explains a version mismatch instead of saying to run it by hand", async () => {
+    // The published crate is 0.3.0 and its CLI is different, so a user who
+    // followed `cargo install jj-hunk` gets:
+    //
+    //   error: unexpected argument '--query' found
+    //   Usage: jj-hunk list --format <FORMAT>
+    //
+    // An error about an argument they never typed, from a command they cannot
+    // see. The old hint — "run the same command by hand" — reproduces exactly
+    // that message and nothing more, which is the least useful advice possible
+    // for this failure.
+    const dir = mkdtempSync(join(tmpdir(), "dsh-jujutsu-bad-hunk-"));
+    try {
+      const fake = join(dir, "jj-hunk");
+      writeFileSync(
+        fake,
+        "#!/bin/sh\necho \"error: unexpected argument '--query' found\" >&2\n" +
+          "echo 'Usage: jj-hunk list --format <FORMAT>' >&2\nexit 2\n",
+        { mode: 0o755 },
+      );
+      chmodSync(fake, 0o755);
+
+      const h = fakeHarness();
+      // `fakeHarness` answers `get('shell')` with undefined; `realShell` is what
+      // mounts a shell that actually runs the command string.
+      realShell(h.ctx);
+      const { buildToolDefinitions } = await import("../src/tools.ts");
+      const defs = buildToolDefinitions(h.ctx, resolveSettings({ jjHunkPath: fake }));
+      const tool = defs.find((d) => d.name === "jj_hunk_list") as
+        | { execute: (a: unknown, e: unknown) => Promise<unknown> }
+        | undefined;
+      expect(tool).toBeDefined();
+      const outcome = (await tool?.execute(
+        { query: "added()" },
+        h.session("s", dir).exec("bash", {}),
+      )) as { error?: { message: string; hint?: string } } | undefined;
+
+      expect(outcome?.error?.message).toContain("rejected the query interface");
+      expect(outcome?.error?.hint, "the hint must name the real problem").toContain(
+        "wrong jj-hunk",
+      );
+      expect(outcome?.error?.hint).toContain("--tag v0.5.1");
+      expect(outcome?.error?.hint).not.toContain("by hand");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

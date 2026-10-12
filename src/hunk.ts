@@ -173,9 +173,26 @@ async function invoke(
       return fail(ErrorCode.SHELL_TIMEOUT, "jj-hunk timed out");
     }
     if (result.exitCode !== 0) {
+      const stderr = result.stderr.trim();
+      // The wrong `jj-hunk` is the likeliest cause of a failure here, and the
+      // least diagnosable. The published crate is two minor versions behind and
+      // its CLI is different, so a user who followed `cargo install jj-hunk`
+      // gets `unexpected argument '--query' found` — an error about an argument
+      // they never typed, from a command they cannot see.
+      //
+      // "Run the same command by hand" is the right advice for a genuine runtime
+      // failure and useless for this one: running it by hand reproduces the same
+      // message and no more. So this case says what is actually wrong.
+      if (/unexpected argument '--query'|unrecognized subcommand|--format/.test(stderr)) {
+        return fail(
+          ErrorCode.JJ_EXEC_FAILED,
+          `jj-hunk rejected the query interface: ${stderr.slice(0, 160)}`,
+          `This is the wrong jj-hunk. The crates.io release (0.3.0) has a different CLI; install the pinned build: cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`,
+        );
+      }
       return fail(
         ErrorCode.JJ_EXEC_FAILED,
-        `jj-hunk exited ${String(result.exitCode)}: ${result.stderr.trim().slice(0, 200)}`,
+        `jj-hunk exited ${String(result.exitCode)}: ${stderr.slice(0, 200)}`,
         "Run the same command by hand to see the full output.",
       );
     }
