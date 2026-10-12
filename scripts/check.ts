@@ -146,7 +146,40 @@ function run(command: string, args: string[], cwd: string): string {
   );
 }
 
-// --- 3. No machine paths in anything that ships ---------------------------
+// --- 3. A doc comment may not name an artifact that does not exist ---------
+//
+// Two files kept pointing at `client/panel.js` for several commits after the
+// panel moved to TypeScript and became `lib/client.js` -- and one of them was
+// `src/config.ts`, whose comment `tsc` copies verbatim into the shipped
+// `lib/config.d.ts`. A reader of the published package was being sent to a file
+// that had not existed for a week.
+//
+// Prose about paths is the cheapest thing to get wrong and the hardest to notice,
+// so the two names that have actually changed are checked rather than trusted.
+{
+  const dead = ["client/panel.js", "lib/client.cjs"];
+  const scanned: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.(ts|js|d\.ts|json|md|yml)$/.test(name)) continue;
+      const text = readFileSync(full, "utf8");
+      for (const name2 of dead) {
+        if (text.includes(name2)) scanned.push(`${full.replace(ROOT, "")} names ${name2}`);
+      }
+    }
+  };
+  // `src` and `lib` only: the two files that legitimately name these are the
+  // rename script and this check, and neither ships.
+  for (const target of ["src", "lib"]) walk(join(ROOT, target));
+  check("no shipped file names a renamed artifact", scanned.length === 0, scanned.join("; "));
+}
+
+// --- 4. No machine paths in anything that ships ---------------------------
 //
 // A home directory leaks a username, an OS and a layout, and it is worthless to
 // the reader. Scanned over the shipped files rather than the tree, because those
@@ -173,7 +206,7 @@ function run(command: string, args: string[], cwd: string): string {
   check("no machine paths in shipped files", offenders.length === 0, offenders.join(", "));
 }
 
-// --- 4. The tarball installs and loads with plain npm ---------------------
+// --- 5. The tarball installs and loads with plain npm ---------------------
 //
 // The check that earns the file. Everything above inspects files; this one asks
 // whether a consumer can use the package at all.

@@ -1,5 +1,6 @@
 /**
- * `dsh-jujutsu` — Jujutsu-native version control for the DeepSeek Harness.
+ * `dsh-jujutsu` — refuses Git inside a Jujutsu workspace and hands the model the
+ * jj command instead.
  *
  * A **policy plugin**, not a capability plugin: it owns no service, registers no
  * new capability, and exists only to constrain and inform the ones that do. The

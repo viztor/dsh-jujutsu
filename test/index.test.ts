@@ -1,16 +1,18 @@
 /**
- * The mount itself: the master switch, and the boundary it guards.
+ * The mount itself, and the cache boundary it guards.
  *
  * `apply` is the one function every other test calls to get a mounted plugin, and
- * its own first line — `if (!settings.enabled) return` — was covered by nothing.
- * The switch is the setting a user reaches for when the plugin is misbehaving, so
- * "off means off" has to be true of everything it registers, not just the guard.
+ * for a long time nothing tested `apply` directly. It now has two jobs worth
+ * pinning: it registers everything, unconditionally — the master switch this file
+ * was written for turned out to duplicate the enable toggle the Plugins page
+ * already gives every row, and was removed — and it invalidates the detection
+ * caches on every mount.
  *
- * The boundary matters too. Module-level caches outlive an unmount, because the
- * harness keeps the module in its registry after the bundle is removed — so a
- * workspace created while the plugin was unmounted would stay invisible for the
- * rest of the process. `apply` invalidates on every mount for that reason, and
- * the second test here pins it.
+ * That second one is the boundary. Module-level caches outlive an unmount,
+ * because the harness keeps the module in its registry after the bundle is
+ * removed — so a workspace created while the plugin was unmounted would stay
+ * invisible for the rest of the process. `apply` invalidates for that reason, and
+ * the last test here pins it.
  */
 
 import { readFileSync } from "node:fs";

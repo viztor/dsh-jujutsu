@@ -21,9 +21,8 @@
  *
  * This schema **is** the host half of the admin panel. It is projected into
  * JSON Schema with `x-cordis.volatile` on every field, and the Web UI renders it
- * on the plugin's row. There is no `autoGenerate` consumer shipped, so the
- * browser half is hand-written — see `client/panel.js` — and it reads this same
- * schema rather than duplicating the field list.
+ * on the plugin's row. The browser half is `src/client/panel.ts`, built to
+ * `lib/client.js`, and it draws these fields rather than duplicating the list.
  *
  * @module dsh-jujutsu/config
  */
