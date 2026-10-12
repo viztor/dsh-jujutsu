@@ -397,6 +397,41 @@
      * its own the model is a plain read.
      */
     function Panel(props) {
+      try {
+        return render(props);
+      } catch (error) {
+        // A panel that throws is retired from its slot and leaves the page
+        // blank, with nothing anywhere saying why -- the failure looks exactly
+        // like a plugin that simply has no settings. Reporting it in place is
+        // both better behaviour and the only diagnostic available from inside a
+        // browser we cannot open a console on.
+        return h(
+          "p",
+          { role: "alert" },
+          "dsh-jujutsu: the settings panel failed to render. " +
+            (error && error.message ? error.message : String(error)),
+        );
+      }
+    }
+
+    function render(props) {
+      // The browser's primitives are whatever the harness's own client graph
+      // serves, which need not export every symbol a local copy does. An absent
+      // component makes `createElement(undefined, ...)` throw "Element type is
+      // invalid", the slot retires the entry, and the page goes blank -- so name
+      // the missing symbols instead.
+      var REQUIRED = ["ConfigField", "DisclosureRow", "SettingsForm", "SettingsFormModel", "settingsTextField"];
+      var absent = REQUIRED.filter(function (name) {
+        return primitives[name] === undefined;
+      });
+      if (absent.length > 0) {
+        return h(
+          "p",
+          { role: "alert" },
+          "dsh-jujutsu: the client primitives are missing " + absent.join(", "),
+        );
+      }
+
       var t = translator(props);
       var state = react.useSyncExternalStore(
         props.store.subscribe,
