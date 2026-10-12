@@ -21,6 +21,17 @@ function schemaFields(): Set<string> {
 }
 
 /** Load the bundle with stubbed modules and return its exports. */
+/**
+ * The hooks called during one render, in order.
+ *
+ * A real renderer would enforce React's rules for us, but there is no renderer
+ * here — no `react-dom`, and this session cannot install one. So the stub does
+ * the one check that matters: hooks must be called in the same order on every
+ * render. A hook behind a condition throws at runtime in React, which the slot
+ * answers by retiring the entry, which is how this panel went blank before.
+ */
+const hookLog: string[] = [];
+
 function loadPanel(): Record<string, any> {
   let factory: ((require: (id: string) => unknown) => Record<string, any>) | undefined;
   const win = {
@@ -79,10 +90,16 @@ function loadPanel(): Record<string, any> {
     },
     react: {
       createElement: (type: unknown, props: unknown, ...kids: unknown[]) => ({ type, props, kids }),
-      useState: (initial: unknown) => [initial, () => {}],
+      useState: (initial: unknown) => {
+        hookLog.push("useState");
+        return [initial, () => {}];
+      },
       // The panel subscribes to a bound store. Calling `getSnapshot` is the
       // whole of what a one-shot render needs from this.
-      useSyncExternalStore: (_sub: unknown, get: () => unknown) => get(),
+      useSyncExternalStore: (_sub: unknown, get: () => unknown) => {
+        hookLog.push("useSyncExternalStore");
+        return get();
+      },
     },
   };
   return factory((id: string) => stubs[id]);
@@ -519,5 +536,31 @@ describe("each control gets the props it requires", () => {
     const ids = withIds.map(([, props]) => props.id as string);
     expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("hooks are called unconditionally, in a stable order", () => {
+  it("calls the same hooks in the same order on every render", () => {
+    const { Panel } = panelComponent();
+
+    hookLog.length = 0;
+    elementsOf(Panel({ view: "page" }));
+    const first = [...hookLog];
+
+    hookLog.length = 0;
+    elementsOf(Panel({ view: "page" }));
+    const second = [...hookLog];
+
+    expect(first.length).toBeGreaterThan(0);
+    expect(second).toEqual(first);
+  });
+
+  it("calls both of the hooks the panel relies on", () => {
+    // Named rather than counted, so replacing one with the other is visible.
+    const { Panel } = panelComponent();
+    hookLog.length = 0;
+    elementsOf(Panel({ view: "page" }));
+    expect(hookLog).toContain("useSyncExternalStore");
+    expect(hookLog).toContain("useState");
   });
 });
