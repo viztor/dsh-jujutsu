@@ -260,22 +260,16 @@ const STRINGS: Record<string, Record<string, string>> = {
     readOnly: "This deployment stores settings read-only.",
     reset: "Reset to default",
     overridden: "Overridden",
-    inherited: "Inherited",
     invalid: "Not a value this field accepts",
     // Localized segment text. The harness's SegmentedControl takes a label per
     // option precisely so these are words rather than raw config values.
     valueDeny: "Deny",
-    valueOff: "Off",
     valueAsk: "Ask",
     valueAllow: "Allow",
-    valueNever: "Never",
-    valueAuto: "Auto",
 
     groupGuard: "Guard",
     groupInit: "When there is no repository",
     groupPrompt: "Teaching",
-    groupBinaries: "Binaries",
-    groupBinariesBlurb: "Where jj and jj-hunk are found.",
     guardLabel: "Guard",
     guardHint:
       "On refuses Git commands inside a Jujutsu workspace. Off leaves the guard mounted but inert -- useful to watch what it would have caught.",
@@ -309,20 +303,14 @@ const STRINGS: Record<string, Record<string, string>> = {
     readOnly: "该部署以只读方式存储设置。",
     reset: "恢复默认值",
     overridden: "已覆盖",
-    inherited: "继承值",
     invalid: "不是该字段接受的值",
     valueDeny: "拒绝",
-    valueOff: "关闭",
     valueAsk: "询问",
     valueAllow: "允许",
-    valueNever: "从不",
-    valueAuto: "自动",
 
     groupGuard: "拦截",
     groupInit: "当目录中没有版本控制",
     groupPrompt: "引导",
-    groupBinaries: "可执行文件",
-    groupBinariesBlurb: "jj 与 jj-hunk 的查找位置。",
     guardLabel: "拦截",
     guardHint:
       "开启后拒绝 Jujutsu 工作区内的 Git 命令；关闭仍挂载拦截器但不生效——适合先观察它本会拦下什么。",

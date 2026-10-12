@@ -762,3 +762,44 @@ describe("a hint talks about settings the way the user sees them", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("every locale string is reachable", () => {
+  it("has no string nothing can render", () => {
+    // Six had accumulated: the Binaries group's title and blurb after the group
+    // moved to the config file, the `hunkInstall` choices, `Off` after Guard
+    // became a boolean, and an "Inherited" badge never wired to anything. Each
+    // was a real string for a real feature that had moved or gone.
+    //
+    // A dead string is not free: it is translated, reviewed, and read by whoever
+    // next edits this file, who has to work out whether something is broken or
+    // the string is simply unused.
+    const source = readFileSync("src/client/panel.ts", "utf8");
+    const { STRINGS } = loadPanel();
+    const english = STRINGS.en as Record<string, string>;
+    const defined = Object.keys(english).filter((key) => typeof english[key] === "string");
+
+    const used = new Set<string>();
+    for (const match of source.matchAll(/t\("([a-zA-Z]+)"\)/g)) used.add(match[1]!);
+    for (const match of source.matchAll(/(?:labelKey|hintKey|titleKey|blurbKey): "([a-zA-Z]+)"/g)) {
+      used.add(match[1]!);
+    }
+    // Enum labels resolve through `valueX` for each value a drawn field offers.
+    const offered = new Set<string>();
+    for (const match of source.matchAll(/choices: \[([^\]]+)\]/g)) {
+      for (const value of match[1]!.matchAll(/"([a-z]+)"/g)) offered.add(value[1]!);
+    }
+    for (const value of offered) {
+      used.add(`value${value.charAt(0).toUpperCase()}${value.slice(1)}`);
+    }
+
+    const dead = defined.filter((key) => !used.has(key)).sort();
+    expect(dead).toEqual([]);
+  });
+
+  it("defines every key in both locales", () => {
+    const { STRINGS } = loadPanel();
+    const en = Object.keys(STRINGS.en as Record<string, string>).sort();
+    const zh = Object.keys(STRINGS.zh as Record<string, string>).sort();
+    expect(zh).toEqual(en);
+  });
+});
