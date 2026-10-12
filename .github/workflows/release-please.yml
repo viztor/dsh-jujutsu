@@ -11,6 +11,10 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Read here because `if` cannot see `secrets`, and this is the only place the
+    # token can be read that both steps can then test.
+    env:
+      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
     steps:
       # Reads conventional commits (`feat:`, `fix:`, …) since the last tag and
       # opens a version-bump pull request. Merging that PR creates the tag and
@@ -38,13 +42,28 @@ jobs:
       # fine-grained PAT with Contents and Pull requests read/write on this
       # repository only. The one-time setup is in CONTRIBUTING.md.
       #
-      # Until that secret exists this job fails on every push with "Input
-      # required and not supplied: token". That is the action's own message and
-      # it is left alone: guarding the step on `secrets` in an `if` makes GitHub
-      # reject the whole file as invalid, which is a worse failure than a clear
-      # one.
+      # Until that secret exists this job would fail on every push with "Input
+      # required and not supplied: token". That is the action's own message and it
+      # is clear — but a workflow that is red on every push stops meaning
+      # anything, and this one trained its own author to ignore a red CI for a
+      # week while `ci` was failing underneath it.
+      #
+      # `secrets` cannot appear in an `if` — not at the job level and not at the
+      # step level; the contexts table allows it in `env`, `with` and a handful of
+      # other keys, and an `if` referencing it makes GitHub reject the whole file
+      # as invalid. Routing it through a job-level `env` first is the way to make
+      # the decision conditional, because `env` *is* available to `if`.
+      #
+      # So the action is skipped when the secret is absent, and a warning says
+      # what is missing. Green means green; the setup step is still visible.
       - uses: googleapis/release-please-action@v5
+        if: env.RELEASE_PLEASE_TOKEN != ''
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ env.RELEASE_PLEASE_TOKEN }}
+
+      - name: Say why nothing was released
+        if: env.RELEASE_PLEASE_TOKEN == ''
+        run: |
+          echo "::warning title=release-please is not running::Set the RELEASE_PLEASE_TOKEN repository secret — without it, tags made with the built-in GITHUB_TOKEN do not trigger the publish workflow, so a release looks cut and never ships. See CONTRIBUTING.md."
