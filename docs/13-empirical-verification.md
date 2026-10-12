@@ -484,3 +484,39 @@ cannot be pushed.** `jj_new` takes an optional `message`; a model that omits it
 builds a change it cannot publish. `jj` names the rejected commit in its hint, so
 the failure is recoverable, but it is predictable and worth warning about at the
 tool rather than at the push.
+
+### The guard, verified live from inside a session
+
+Every other check of the guard drives `apply()` through a harness double. This one
+is the plugin running in the real harness, on the real session that was editing
+this repository — the agent's own shell calls pass through the guard, so they are
+the test.
+
+```
+git status
+  Refused: git status describes a Git working tree that does not exist here.
+  Run: jj status
+
+git commit --allow-empty -m "should not happen"
+  Refused: git commit. Run: jj commit -m "<msg>". The working copy @ is already a
+  commit; this finalizes it and starts a new empty change on top.
+
+jj log --no-graph -r @ -T 'change_id.short()'
+  uqlpnllutvzr
+```
+
+Four things worth noting, all observed rather than assumed:
+
+- **The refusal is the plugin's own copy**, not Git's and not the harness's.
+- **`jj` is untouched.** The guard is not a blanket block on shell commands.
+- **The destructive-path rule fires on the command string**, before anything runs:
+  a command naming a repository-internal directory was refused whole even when
+  that clause was one of several. The rule is fail-closed by design.
+- **A read-only Git command is refused too**, because `readOnlyGit` defaults to
+  `ask` and this session has no answerer, so the ask fails closed.
+
+That last point is also a small demonstration of the rule's cost: writing _this
+paragraph_ through a shell heredoc was refused, because the text contains the very
+command being described. The guard cannot know a string is prose. The document was
+written with the file tools instead — the honest workaround, not a hole in the
+guard.
