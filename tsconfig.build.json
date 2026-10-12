@@ -9,5 +9,10 @@
     "sourceMap": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/client/**"
+  ]
 }

@@ -39,7 +39,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ci": "pnpm run typecheck && pnpm run test",

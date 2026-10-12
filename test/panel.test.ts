@@ -330,3 +330,32 @@ describe("the handlers come from the right object", () => {
     expect(() => elementsOf(Panel({ view: "page" }))).not.toThrow();
   });
 });
+
+describe("the client half is built, not hand-written", () => {
+  it("is generated from TypeScript", () => {
+    // It was hand-written JavaScript for three revisions, and every bug the
+    // panel had was a type error tsc would have refused. The bundle is now
+    // tsc output wrapped by scripts/build-client.mjs, so the source of truth is
+    // src/client/panel.ts.
+    expect(PANEL).toContain("GENERATED FILE — do not edit");
+    expect(PANEL).toContain("src/client/panel.ts");
+    const source = readFileSync("src/client/panel.ts", "utf8");
+    expect(source).toContain("interface SettingsFieldState");
+    expect(source).toContain("interface SettingsFormShell");
+  });
+
+  it("has a build that produces it", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts.build).toContain("tsconfig.client.json");
+    expect(pkg.scripts.build).toContain("build-client.mjs");
+  });
+
+  it("does not carry its own loader call in the module body", () => {
+    // The wrapper owns `__ModuleLoader__.load`; the emitted body must not, or
+    // the bundle would register twice.
+    const count = (PANEL.match(/__ModuleLoader__/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+});
