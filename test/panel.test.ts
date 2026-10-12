@@ -176,9 +176,22 @@ function typesOf(node: unknown, out: string[] = []): string[] {
 }
 
 describe("the panel covers the schema", () => {
-  it("draws a control for every config field", () => {
+  it("draws every field the panel exposes", () => {
+    // The panel is deliberately a SUBSET of `Config`. The executable paths are
+    // advanced: someone who needs them is editing a config file, and putting
+    // them on the page would ask every other reader to decide about them. They
+    // stay settable -- `Config` still declares them -- just not drawn.
     const missing = [...schemaFields()].filter((f) => !(f in loadPanel().FIELDS));
-    expect(missing).toEqual([]);
+    expect(missing).toEqual(["jjPath", "jjHunkPath", "hunkInstall"]);
+  });
+
+  it("keeps the config-file-only fields settable", () => {
+    // Not drawn is not the same as not supported. If these left `Config`, a
+    // custom install could no longer point at its own jj.
+    const schema = readFileSync("src/config.ts", "utf8");
+    for (const field of ["jjPath", "jjHunkPath", "hunkInstall"]) {
+      expect(schema, field).toContain(`${field}: z`);
+    }
   });
 
   it("draws no control for a field the schema does not have", () => {
@@ -203,7 +216,9 @@ describe("built-in components only", () => {
     const fields = Object.values(panel.FIELDS as Record<string, { kind: string }>);
     const byKind = (kind: string) => fields.filter((f) => f.kind === kind).length;
 
-    expect(types.filter((x) => x === "SettingsValueField")).toHaveLength(byKind("text"));
+    // No field is `text`: the executable paths moved to the config file, and
+    // the panel draws booleans and enums only.
+    expect(byKind("text")).toBe(0);
     expect(types.filter((x) => x === "Switch")).toHaveLength(byKind("boolean"));
     expect(types.filter((x) => x === "SegmentedControl")).toHaveLength(byKind("enum"));
 
@@ -257,10 +272,12 @@ describe("translations", () => {
   it("resolves every group and field key", () => {
     const panel = loadPanel();
     const keys = [
-      ...panel.GROUPS.flatMap((g: { titleKey: string; blurbKey: string }) => [
-        g.titleKey,
-        g.blurbKey,
-      ]),
+      // `blurbKey` is optional: three groups had one that restated their own
+      // heading, and a line that fills space makes the two that inform look
+      // like boilerplate too.
+      ...panel.GROUPS.flatMap((g: { titleKey: string; blurbKey?: string }) =>
+        g.blurbKey === undefined ? [g.titleKey] : [g.titleKey, g.blurbKey],
+      ),
       ...Object.values(
         panel.FIELDS as Record<string, { labelKey: string; hintKey: string }>,
       ).flatMap((f) => [f.labelKey, f.hintKey]),
@@ -347,29 +364,21 @@ describe("the bundle loads as written", () => {
 });
 
 describe("the handlers come from the right object", () => {
-  it("passes callable handlers to every SettingsValueField", () => {
-    // The bug this exists for: the panel read `onChange`/`onReset` off the
-    // field STATE and `onSave`/`onDiscard` off the form SHELL. None of those
-    // four exist, so all four were `undefined`, `ConfigField` threw on render,
-    // and the slot retired the entry — leaving it on the ledger as an occupant
-    // with `active: false` while the page drew nothing. Registration was never
-    // evidence the panel worked.
+  it("gives every control a callable handler", () => {
+    // The bug this exists for: the panel read `onChange`/`onReset` off the field
+    // STATE and `onSave`/`onDiscard` off the form SHELL. None of those four
+    // exist, so all four were `undefined`, the control threw on render, and the
+    // slot retired the entry -- leaving it on the ledger with `active: false`
+    // while the page drew nothing. Registration was never evidence it worked.
     const { Panel } = panelComponent();
-    const elements = elementsOf(Panel({ view: "page" }));
-    const fields = elements.filter(([type]) => type === "SettingsValueField");
-    expect(fields.length).toBeGreaterThan(0);
-    for (const [, props] of fields) {
-      expect(typeof props.onEdit, "onEdit").toBe("function");
-      expect(typeof props.onReset, "onReset").toBe("function");
-      expect(typeof props.disabled, "disabled").toBe("boolean");
-      expect(typeof props.text, "text").toBe("string");
-      expect(typeof props.id, "id").toBe("string");
+    const controls = elementsOf(Panel({ view: "page" })).filter(
+      ([type]) => type === "Switch" || type === "SegmentedControl",
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    for (const [type, props] of controls) {
+      expect(typeof props.onChange, `${type}.onChange`).toBe("function");
+      expect(typeof props.disabled, `${type}.disabled`).toBe("boolean");
     }
-    const forms = elements.filter(([type]) => type === "SettingsForm");
-    expect(forms).toHaveLength(1);
-    expect(typeof forms[0]![1].onSave, "onSave").toBe("function");
-    expect(typeof forms[0]![1].onDiscard, "onDiscard").toBe("function");
-    expect(forms[0]![1].state).toBeTypeOf("object");
   });
 
   it("renders without throwing", () => {

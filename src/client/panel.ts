@@ -24,7 +24,8 @@
  * ## Built-in components only
  *
  * `SettingsForm` for the frame, `SettingsFormModel` for the drafts,
- * `SettingsValueField` for each field, `DisclosureRow` for each group. Nothing
+ * `Switch`/`SegmentedControl` for each field, `DisclosureRow` for each group.
+ * Nothing
  * here draws its own label, input, reset or validation message.
  *
  * ## Where it is mounted
@@ -90,36 +91,6 @@ interface SettingsFieldSpec {
   readonly field: string;
   format(value: unknown): string;
   parse(text: string): { kind: "set"; value: unknown } | undefined;
-}
-
-/**
- * What every settings field control needs, as `SettingsValueField` takes it.
- *
- * Note what is absent: **no `choices`**. The harness's client-facing field is a
- * text control whose accepted values are decided by the field's *spec*, not by
- * a list the control renders — so an enum is typed, and the spec rejects what it
- * does not accept. There is no select to pass options to.
- */
-interface SettingsValueFieldProps {
-  /** Stable id associating the label with its control. */
-  id: string;
-  label: string;
-  /** One-line explanation rendered under the control. */
-  hint?: string;
-  /** Draft text this control renders. */
-  text: string;
-  overridden: boolean;
-  invalid: boolean;
-  /** Copy for the overridden badge. */
-  overriddenLabel: string;
-  /** Copy for the reset control. */
-  resetLabel: string;
-  /** Copy shown in place of the hint while the draft is invalid. */
-  invalidLabel: string;
-  /** Disables the control: read-only document, or an unavailable namespace. */
-  disabled: boolean;
-  onEdit(text: string): void;
-  onReset(): void;
 }
 
 /** Props every configuration slot entry receives from the page. */
@@ -207,16 +178,6 @@ interface ClientPrimitives {
 }
 
 interface ClientPrimitivesModule {
-  /**
-   * The client-facing field control.
-   *
-   * NOT `ConfigField`: that component exists in the package but is not exported
-   * from its index, because it belongs to the *generated* forms rather than to
-   * plugin UIs. Requiring it yields `undefined`, and `createElement(undefined)`
-   * throws "Element type is invalid" — which the slot answers by retiring the
-   * entry, leaving a page with no form and no explanation.
-   */
-  SettingsValueField: (props: SettingsValueFieldProps) => unknown;
   /** The toggle for boolean fields. */
   Switch: (props: SwitchProps) => unknown;
   /** The tablist for enum fields, whose options carry localized labels. */
@@ -311,12 +272,8 @@ const STRINGS: Record<string, Record<string, string>> = {
     valueAuto: "Auto",
 
     groupGuard: "Guard",
-    groupGuardBlurb: "What happens when the model reaches for Git inside a Jujutsu workspace.",
     groupInit: "When there is no repository",
-    groupInitBlurb:
-      "A directory with neither .jj nor .git has no history at all. The plugin can say so.",
     groupPrompt: "Teaching",
-    groupPromptBlurb: "What the model is told about version control here.",
     groupBinaries: "Binaries",
     groupBinariesBlurb: "Where jj and jj-hunk are found.",
     groupMaster: "Master switch",
@@ -349,15 +306,6 @@ const STRINGS: Record<string, Record<string, string>> = {
     teachSkillLabel: "Offer the jj manual",
     teachSkillHint:
       "Offer the jj manual as an on-demand skill. Token-neutral; off only means the model has less to read when it needs depth.",
-    jjPathLabel: "jj executable",
-    jjPathHint:
-      "The jj executable. Change this when jj is not on PATH, or to pin a specific build.",
-    jjHunkPathLabel: "jj-hunk executable",
-    jjHunkPathHint:
-      "The jj-hunk executable. Hunk-level split and squash need it; without it those tools report unavailable rather than failing.",
-    hunkInstallLabel: "When jj-hunk is missing",
-    hunkInstallHint:
-      "What to do when jj-hunk is missing. ask offers a pinned cargo install; never only reports; auto installs without asking.",
   },
   zh: {
     save: "保存",
@@ -377,11 +325,8 @@ const STRINGS: Record<string, Record<string, string>> = {
     valueAuto: "自动",
 
     groupGuard: "拦截",
-    groupGuardBlurb: "当模型在 Jujutsu 工作区内尝试使用 Git 时的行为。",
     groupInit: "当目录中没有版本控制",
-    groupInitBlurb: "既没有 .jj 也没有 .git 的目录完全没有历史记录，插件可以提醒模型。",
     groupPrompt: "引导",
-    groupPromptBlurb: "向模型说明此处的版本控制方式。",
     groupBinaries: "可执行文件",
     groupBinariesBlurb: "jj 与 jj-hunk 的查找位置。",
     groupMaster: "总开关",
@@ -413,20 +358,12 @@ const STRINGS: Record<string, Record<string, string>> = {
     teachSkillLabel: "提供 jj 手册",
     teachSkillHint:
       "将 jj 手册作为按需技能提供。对 token 影响中性；关闭只意味着模型在需要深入时能读到的内容更少。",
-    jjPathLabel: "jj 可执行文件",
-    jjPathHint: "jj 可执行文件。当 jj 不在 PATH 中，或需要固定某个构建时修改此项。",
-    jjHunkPathLabel: "jj-hunk 可执行文件",
-    jjHunkPathHint:
-      "jj-hunk 可执行文件。按块拆分与合并需要它；缺失时相关工具会报告不可用，而不是直接失败。",
-    hunkInstallLabel: "缺少 jj-hunk 时",
-    hunkInstallHint:
-      "jj-hunk 缺失时的行为。ask 提议使用固定版本的 cargo 安装；never 仅报告；auto 直接安装。",
   },
 };
 
 /** Field metadata: the string keys, and the values the spec accepts. */
 interface FieldMeta {
-  readonly kind: "boolean" | "enum" | "text";
+  readonly kind: "boolean" | "enum";
   readonly labelKey: string;
   readonly hintKey: string;
   /**
@@ -466,20 +403,21 @@ const FIELDS: Record<string, FieldMeta> = {
   preferJj: { kind: "boolean", labelKey: "preferJjLabel", hintKey: "preferJjHint" },
   injectContext: { kind: "boolean", labelKey: "injectContextLabel", hintKey: "injectContextHint" },
   teachSkill: { kind: "boolean", labelKey: "teachSkillLabel", hintKey: "teachSkillHint" },
-  jjPath: { kind: "text", labelKey: "jjPathLabel", hintKey: "jjPathHint" },
-  jjHunkPath: { kind: "text", labelKey: "jjHunkPathLabel", hintKey: "jjHunkPathHint" },
-  hunkInstall: {
-    kind: "enum",
-    labelKey: "hunkInstallLabel",
-    hintKey: "hunkInstallHint",
-    choices: ["ask", "never", "auto"],
-  },
 };
 
 interface GroupMeta {
   readonly id: string;
   readonly titleKey: string;
-  readonly blurbKey: string;
+  /**
+   * One line under the heading, **only where it says something the heading
+   * cannot**.
+   *
+   * Three groups had one and do not now. "Guard" followed by "What happens when
+   * the model reaches for Git inside a Jujutsu workspace" is a fragment that
+   * restates its own title, and a line that exists to fill space is worse than
+   * no line — it makes the two that inform look like boilerplate too.
+   */
+  readonly blurbKey?: string;
   readonly fields: readonly string[];
 }
 
@@ -487,26 +425,17 @@ const GROUPS: readonly GroupMeta[] = [
   {
     id: "guard",
     titleKey: "groupGuard",
-    blurbKey: "groupGuardBlurb",
     fields: ["guard", "readOnlyGit", "bypass", "rememberBypass"],
   },
   {
     id: "init",
     titleKey: "groupInit",
-    blurbKey: "groupInitBlurb",
     fields: ["alertUninitialised", "preferJj"],
   },
   {
     id: "prompt",
     titleKey: "groupPrompt",
-    blurbKey: "groupPromptBlurb",
     fields: ["injectContext", "teachSkill"],
-  },
-  {
-    id: "binaries",
-    titleKey: "groupBinaries",
-    blurbKey: "groupBinariesBlurb",
-    fields: ["jjPath", "jjHunkPath", "hunkInstall"],
   },
   { id: "master", titleKey: "groupMaster", blurbKey: "groupMasterBlurb", fields: ["enabled"] },
 ];
@@ -580,7 +509,7 @@ function translator(props: PanelProps): (key: string) => string {
  * Shared chrome for a non-text control: label, override badge with its reset,
  * the control, and one message line.
  *
- * The primitives ship `SettingsValueField` for text and deliberately stop there
+ * The primitives ship `SettingsValueField` for text and stop there
  * — a card owns its boolean and enum fields, because only the card knows what
  * its values *mean*. So the chrome is built once here from the primitives'
  * `Tag` and `Button`, and each control supplies only what differs.
@@ -673,7 +602,7 @@ function valueKey(value: string): string {
  * One field, as the control its kind deserves.
  *
  * Booleans get a `Switch` and enums a `SegmentedControl`; only free text uses
- * `SettingsValueField`. Showing a boolean as a text box reading `true` — and
+ * `SegmentedControl`. Showing a boolean as a text box reading `true` — and
  * then explaining in the hint that `true` is what you type — is worse than not
  * having a control at all, and the enum values are words now rather than config
  * tokens.
@@ -729,21 +658,8 @@ function control(
     );
   }
 
-  return h(primitives.SettingsValueField, {
-    key: name,
-    id,
-    label: t(meta.labelKey),
-    hint: t(meta.hintKey),
-    text: state.text,
-    overridden: state.overridden,
-    invalid: state.invalid,
-    overriddenLabel: t("overridden"),
-    resetLabel: t("reset"),
-    invalidLabel: t("invalid"),
-    disabled,
-    onEdit: (text: string) => props.edit(name, text),
-    onReset: () => props.resetField(name),
-  } satisfies SettingsValueFieldProps & { key: string });
+  /* v8 ignore next -- the kind union has two members and both return above */
+  throw new Error(`dsh-jujutsu: no control for field kind "${String(meta.kind)}"`);
 }
 
 interface GroupProps {
@@ -794,7 +710,7 @@ function renderGroup(props: GroupProps): unknown {
       onToggle: () => setOpen(!open),
       expandOnRowClick: true,
     } satisfies DisclosureRowProps,
-    h("p", { key: "blurb" }, t(props.group.blurbKey)),
+    props.group.blurbKey === undefined ? null : h("p", { key: "blurb" }, t(props.group.blurbKey)),
     props.group.fields.map((name) =>
       control(name, props.fields[name] as SettingsFieldState, props.props, props.shell, t),
     ),
@@ -816,7 +732,6 @@ function renderGroup(props: GroupProps): unknown {
  */
 function render(props: PanelProps): unknown {
   const REQUIRED = [
-    "SettingsValueField",
     "SettingsForm",
     "SettingsFormModel",
     "settingsTextField",
