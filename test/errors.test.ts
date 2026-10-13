@@ -80,14 +80,10 @@ describe("every error code comes from the vocabulary", () => {
     // Recording the set makes it a ratchet: implementing one means deleting a
     // line here, and adding a code without emitting it fails immediately.
     const KNOWN_UNIMPLEMENTED = [
-      "NOT_JJ_WORKSPACE",
       "JJ_VERSION_TOO_OLD",
       "JJ_REPO_UNREADABLE",
       "JJ_REPO_BROKEN",
       "JJ_CONFLICTS_PRESENT",
-      "JJ_HUNK_VERSION_TOO_OLD",
-      "REVSET_INVALID",
-      "REVSET_NOT_SINGLE",
       "HUNK_SPEC_INVALID",
       "HUNK_SPEC_STALE",
       "SHELL_EXEC_FAILED",

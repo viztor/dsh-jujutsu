@@ -109,12 +109,73 @@ export type HunkOutcome<T> =
       readonly error: ToolError;
     };
 
+/**
+ * Refuse a revset that does not name exactly one revision.
+ *
+ * `jj-hunk list -r 'all()'` **exits 0** and silently diffs the merged revision
+ * set — measured, and recorded in `docs/26`. There is nothing to detect in the
+ * exit code or the output, so the plugin has to count for itself, which is what
+ * `docs/26` says it must do:
+ *
+ *     jj log --no-graph -T 'change_id' -r '<revset>'   # must be exactly 1 line
+ *
+ * The default `@` is always one revision, so the check runs only when the caller
+ * supplied a revset.
+ */
+async function requireSingleRevision(
+  ctx: Context,
+  settings: Settings,
+  options: HunkOptions,
+): Promise<HunkOutcome<undefined>> {
+  if (options.revset === undefined) return { ok: true, value: undefined };
+
+  let result;
+  try {
+    result = await runJj(
+      ctx,
+      settings.jjPath,
+      ["log", "--no-graph", "-T", 'change_id ++ "\\n"', "-r", options.revset],
+      {
+        cwd: options.cwd,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    );
+  } catch (error) {
+    return fail(
+      ErrorCode.JJ_EXEC_FAILED,
+      `Could not resolve the revset: ${String(error).slice(0, 160)}`,
+      `Run \`jj log -r '${options.revset}'\` by hand.`,
+    );
+  }
+
+  if (result.exitCode !== 0) {
+    return fail(
+      ErrorCode.REVSET_INVALID,
+      `Invalid revset: ${result.stderr.trim().slice(0, 200)}`,
+      "Run `jj log -r <revset>` to check it, or see `jj help revsets`.",
+    );
+  }
+
+  const count = result.stdout.split("\n").filter((line) => line.trim() !== "").length;
+  if (count !== 1) {
+    return fail(
+      ErrorCode.REVSET_NOT_SINGLE,
+      `The revset "${options.revset}" resolves to ${String(count)} revisions; a hunk operation needs exactly one.`,
+      "Narrow it to a single revision — `jj-hunk` would otherwise diff the merged set and exit 0.",
+    );
+  }
+  return { ok: true, value: undefined };
+}
+
 /** List the hunks a query selects. Always called before a mutation. */
 export async function listHunks(
   ctx: Context,
   settings: Settings,
   options: HunkOptions,
 ): Promise<HunkOutcome<HunkList>> {
+  const single = await requireSingleRevision(ctx, settings, options);
+  if (!single.ok) return single;
+
   const args = ["list", "--format", "json"];
   if (options.revset !== undefined) args.push("-r", options.revset);
   if (options.query !== undefined) args.push("--query", options.query);
@@ -158,6 +219,9 @@ export async function applyHunks(
   options: HunkOptions,
   message?: string,
 ): Promise<HunkOutcome<string>> {
+  const single = await requireSingleRevision(ctx, settings, options);
+  if (!single.ok) return single;
+
   const query = options.query;
   if (query === undefined || query.trim() === "") {
     // An empty query exits 0 and, on `split`, does nothing at all. Refusing is
@@ -224,8 +288,12 @@ async function invoke(
       // failure and useless for this one: running it by hand reproduces the same
       // message and no more. So this case says what is actually wrong.
       if (/unexpected argument '--query'|unrecognized subcommand|--format/.test(stderr)) {
+        // `JJ_HUNK_VERSION_TOO_OLD` is declared for exactly this — "P4 resolves a
+        // version < 0.5.1" — and was unused while this path reported the generic
+        // `JJ_EXEC_FAILED`. A caller cannot tell a version mismatch from a crash
+        // if both arrive under the same code.
         return fail(
-          ErrorCode.JJ_EXEC_FAILED,
+          ErrorCode.JJ_HUNK_VERSION_TOO_OLD,
           `jj-hunk rejected the query interface: ${stderr.slice(0, 160)}`,
           `This is the wrong jj-hunk. The crates.io release (0.3.0) has a different CLI; install the pinned build: cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`,
         );

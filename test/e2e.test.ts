@@ -168,6 +168,37 @@ describe.skipIf(!HAS_JJ)("the tools run real jj", () => {
   });
 });
 
+describe.skipIf(!HAS_JJ)("a hunk revset must name exactly one revision", () => {
+  it("refuses a revset that resolves to more than one", async () => {
+    // `jj-hunk list -r 'all()'` **exits 0** and silently diffs the merged
+    // revision set — measured, and recorded in `docs/26`. Nothing about the exit
+    // code or the output says so, which is why `docs/26` says the plugin has to
+    // count for itself. This is that count, against a real repository: `all()`
+    // resolves to two revisions here.
+    const h = harnessAt(ROOT);
+    const result = (await h.call("jj_hunk_list", { query: "added()", revset: "all()" })) as {
+      error?: { code: string; message: string; hint?: string };
+    };
+    expect(result.error?.code).toBe("REVSET_NOT_SINGLE");
+    // The count is the fixture's, not a constant: asserting `2` made this fail
+    // against a repository with three revisions, which is the test being wrong
+    // rather than the check.
+    expect(result.error?.message).toMatch(/resolves to [2-9]\d* revisions/);
+    expect(result.error?.hint).toContain("merged set");
+  });
+
+  it("allows a revset that resolves to one", async () => {
+    // The check must not refuse the ordinary case. `@` is one revision, and the
+    // tool proceeds past the count — whether `jj-hunk` is present is a different
+    // question, answered by a different code.
+    const h = harnessAt(ROOT);
+    const result = (await h.call("jj_hunk_list", { query: "added()", revset: "@" })) as {
+      error?: { code: string };
+    };
+    expect(result.error?.code).not.toBe("REVSET_NOT_SINGLE");
+  });
+});
+
 describe.skipIf(!HAS_JJ || !HAS_JJ_HUNK)("the hunk bridge runs real jj-hunk", () => {
   it("jj_hunk_list returns real hunks for a real query", async () => {
     const h = harnessAt(ROOT);

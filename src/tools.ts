@@ -115,10 +115,32 @@ async function jj(
       ...(signal === undefined ? {} : { signal }),
     });
     if (result.exitCode !== 0) {
+      const stderr = result.stderr.trim();
+      // Two of `jj`'s own failures have declared codes, and reporting them as
+      // `JJ_EXEC_FAILED` made a caller unable to tell them apart from a crash.
+      // Both messages are `jj`'s own, verified against 0.46.0.
+      if (/There is no jj repo|not a Jujutsu/i.test(stderr)) {
+        return {
+          error: {
+            code: ErrorCode.NOT_JJ_WORKSPACE,
+            message: `Not a Jujutsu workspace: ${stderr.slice(0, 200)}`,
+            hint: "Initialise one with `jj git init`, or `jj git init --colocate` to keep Git tooling working.",
+          },
+        };
+      }
+      if (/Failed to parse revset/i.test(stderr)) {
+        return {
+          error: {
+            code: ErrorCode.REVSET_INVALID,
+            message: `Invalid revset: ${stderr.slice(0, 200)}`,
+            hint: "Run `jj log -r <revset>` to check it, or see `jj help revsets`.",
+          },
+        };
+      }
       return {
         error: {
           code: ErrorCode.JJ_EXEC_FAILED,
-          message: `jj exited ${String(result.exitCode)}: ${result.stderr.trim().slice(0, 300)}`,
+          message: `jj exited ${String(result.exitCode)}: ${stderr.slice(0, 300)}`,
           hint: `Run \`jj ${args.join(" ")}\` by hand to see the full output.`,
         },
       };
