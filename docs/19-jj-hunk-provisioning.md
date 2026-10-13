@@ -24,6 +24,13 @@ does not disable the guard.
 
 ## The offer
 
+**Implemented.** This section described the flow for several commits while
+`hunkInstall` was declared, typed, documented in the README, and read nowhere —
+the setting existed in every sense except behaviour. `src/hunk.ts` now carries it:
+`missingBinary` for the offer, `offerInstall` for the question, and a
+session-keyed map for the "ask once" rule. `test/hunk-install.test.ts` covers the
+five branches.
+
 Modelled on the approval design in [17](17-bypass-and-approval.md) — the install
 is a mutation, so it needs an explicit yes — **but not through `approval`.**
 
