@@ -33,7 +33,7 @@ import type { Context } from "@deepseek-ai/cordis";
 
 import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import type { Settings } from "./settings.ts";
-import { type RunResult, runJj } from "./shell.ts";
+import { type RunResult, run, runJj } from "./shell.ts";
 
 /** The commands the bridge exposes. */
 export type HunkMode = "split" | "commit" | "squash";
@@ -59,6 +59,46 @@ export interface HunkOptions {
   /** A revset that must resolve to exactly one revision. Defaults to `@`. */
   readonly revset?: string;
   readonly signal?: AbortSignal;
+  /**
+   * The live agent, for the one thing that needs a human: offering to install
+   * `jj-hunk`. `ctx.userQuestions.ask` requires it, and rejects with
+   * `CALLER_NOT_LIVE` or `DELEGATED_CALLER` when it is absent or owned.
+   *
+   * Typed `unknown` deliberately. This module must not depend on `dsh-agent` for
+   * a field it only forwards, and the service validates it.
+   */
+  readonly agent?: unknown;
+}
+
+/**
+ * The pinned install, which `docs/19` and the `JJ_HUNK_MISSING` hint both name.
+ *
+ * A tag, not a branch: a branch-tracking install builds whatever `main` is at
+ * that moment. Not the crates.io crate either — it is two minor versions behind
+ * with a different CLI.
+ */
+const INSTALL_ARGV = [
+  "cargo",
+  "install",
+  "--git",
+  "https://github.com/laulauland/jj-hunk",
+  "--tag",
+  "v0.5.1",
+  "jj-hunk",
+] as const;
+
+/**
+ * Sessions that already answered the install question.
+ *
+ * `docs/19` requires asking **once per session**, not once per call. Module-level
+ * because the answer outlives any one tool call and the module outlives an
+ * unmount, which is the same reason `detect.ts` caches.
+ */
+const installAnswers = new Map<string, "declined" | "installed">();
+
+/** Forget the cached answers. For tests, and for a session restart. */
+export function forgetInstallAnswers(): void {
+  installAnswers.clear();
 }
 
 /** Either a result or a typed error, never a throw. */
@@ -190,6 +230,21 @@ async function invoke(
           `This is the wrong jj-hunk. The crates.io release (0.3.0) has a different CLI; install the pinned build: cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`,
         );
       }
+      // A binary that is not there is not a runtime failure, and it does not
+      // throw: the shell runs `jj-hunk ...`, the shell itself reports 127, and
+      // the command comes back as an ordinary non-zero exit. So the install
+      // offer belongs here as much as in the catch below — putting it only in
+      // the catch left it unreachable for the case it was written for, which is
+      // what the tests for it caught.
+      if (result.exitCode === 127 || /not found|command not found/i.test(stderr)) {
+        return await missingBinary(
+          ctx,
+          settings,
+          args,
+          options,
+          new Error(stderr || "jj-hunk not found"),
+        );
+      }
       return fail(
         ErrorCode.JJ_EXEC_FAILED,
         `jj-hunk exited ${String(result.exitCode)}: ${stderr.slice(0, 200)}`,
@@ -198,17 +253,166 @@ async function invoke(
     }
     return { ok: true, value: result };
   } catch (error) {
+    return await missingBinary(ctx, settings, args, options, error);
+  }
+}
+
+/**
+ * `jj-hunk` could not be started. Offer to install it, or say how.
+ *
+ * The flow is `docs/19`'s, and every branch of it exists for a reason recorded
+ * there. In short:
+ *
+ * - `hunkInstall: 'never'` — report the command and stop. No question.
+ * - no `cargo` — report that, because offering an install that cannot run is
+ *   worse than not offering.
+ * - otherwise — ask, once per session, with three answers.
+ *
+ * The question is asked **here**, at the moment the user wanted a hunk
+ * operation, and never on plugin load or in the background: that is when it
+ * means something.
+ */
+async function missingBinary(
+  ctx: Context,
+  settings: Settings,
+  args: readonly string[],
+  options: HunkOptions,
+  error: unknown,
+): Promise<HunkOutcome<RunResult>> {
+  const instruction = `Install it with: ${INSTALL_ARGV.join(" ")}`;
+
+  if (settings.hunkInstall === "never") {
     return fail(
       ErrorCode.JJ_HUNK_MISSING,
       `${settings.jjHunkPath} could not be started: ${String(error).slice(0, 160)}`,
-      // Pinned to a tag, which `docs/19` requires and `config.ts` already
-      // promises ("ask offers a pinned cargo install"). An unpinned `--git`
-      // install builds whatever `main` is at that moment, so two users following
-      // the same instruction a week apart get different binaries — and the
-      // published crate is two minor versions behind, with a different CLI, so
-      // `cargo install jj-hunk` is not an option either.
-      `Install it with: cargo install --git https://github.com/laulauland/jj-hunk --tag v0.5.1 jj-hunk`,
+      instruction,
     );
+  }
+
+  const cargo = await run(ctx, ["cargo", "--version"], { cwd: options.cwd }).catch(() => undefined);
+  if (cargo === undefined || cargo.exitCode !== 0) {
+    return fail(
+      ErrorCode.CARGO_MISSING,
+      `cargo not found; cannot install jj-hunk.`,
+      "Install the Rust toolchain from https://rustup.rs, then re-run.",
+    );
+  }
+
+  const sessionId = sessionOf(options.agent);
+  const remembered = sessionId === undefined ? undefined : installAnswers.get(sessionId);
+  if (remembered === "declined") {
+    return fail(
+      ErrorCode.JJ_HUNK_INSTALL_DECLINED,
+      "jj-hunk is not installed and installation was declined for this session.",
+      instruction,
+    );
+  }
+
+  if (remembered !== "installed") {
+    const answer = await offerInstall(ctx, options, instruction);
+    if (answer === "declined") {
+      if (sessionId !== undefined) installAnswers.set(sessionId, "declined");
+      return fail(
+        ErrorCode.JJ_HUNK_INSTALL_DECLINED,
+        "jj-hunk is not installed and installation was declined for this session.",
+        instruction,
+      );
+    }
+    if (answer === "unavailable") {
+      // The ask failed closed — a subagent, no provider, or no client. The
+      // instruction is the right answer, and is what a caller that cannot be
+      // asked should get instead of an error about asking (`docs/19`).
+      return fail(
+        ErrorCode.JJ_HUNK_MISSING,
+        `${settings.jjHunkPath} could not be started: ${String(error).slice(0, 160)}`,
+        instruction,
+      );
+    }
+  }
+
+  const installed = await run(ctx, [...INSTALL_ARGV], { cwd: options.cwd, timeoutMs: 300_000 });
+  if (installed.exitCode !== 0) {
+    return fail(
+      ErrorCode.JJ_HUNK_INSTALL_FAILED,
+      `Installing jj-hunk failed (cargo exit ${String(installed.exitCode)}). Last output: ${installed.stderr.trim().slice(-200)}`,
+      "Install manually, then set jjHunkPath to the binary.",
+    );
+  }
+  if (sessionId !== undefined) installAnswers.set(sessionId, "installed");
+
+  // Retry **once**, and only once. A successful install that still fails is a
+  // real failure, and looping would hide it.
+  try {
+    const retry = await runJj(ctx, settings.jjHunkPath, args, {
+      cwd: options.cwd,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+    if (retry.exitCode === 0) return { ok: true, value: retry };
+    return fail(
+      ErrorCode.JJ_EXEC_FAILED,
+      `jj-hunk exited ${String(retry.exitCode)} after a successful install: ${retry.stderr.trim().slice(0, 200)}`,
+      "Run the same command by hand to see the full output.",
+    );
+  } catch (again) {
+    return fail(
+      ErrorCode.JJ_HUNK_INSTALL_FAILED,
+      `jj-hunk installed but still cannot start: ${String(again).slice(0, 160)}`,
+      "Set jjHunkPath to the installed binary if it is not on PATH.",
+    );
+  }
+}
+
+/** The session id behind an agent, if the caller supplied one. */
+function sessionOf(agent: unknown): string | undefined {
+  const id = (agent as { session?: { id?: unknown } } | undefined)?.session?.id;
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * Ask the human, once. `'install'`, `'declined'`, or `'unavailable'`.
+ *
+ * `unavailable` is not a failure of the plugin: it is the documented fallback
+ * when there is nobody to ask. A subagent is the case that actually happens —
+ * it cannot raise a question, and must get the instruction.
+ */
+async function offerInstall(
+  ctx: Context,
+  options: HunkOptions,
+  instruction: string,
+): Promise<"install" | "declined" | "unavailable"> {
+  const service = ctx.get("userQuestions") as
+    | { ask: (request: unknown) => Promise<unknown> }
+    | undefined;
+  if (service === undefined || options.agent === undefined) return "unavailable";
+
+  const yes = "Install now";
+  const no = "Never ask again";
+  try {
+    const answer = (await service.ask({
+      // `agent` is mandatory: omit it and the bridge drops the event and the ask
+      // fails with `NO_PROVIDER` (`docs/19`).
+      agent: options.agent,
+      questions: [
+        {
+          id: "dsh-jujutsu.jj-hunk-install",
+          header: "jj-hunk is missing",
+          question: `Install jj-hunk? Rust, ~40 s, builds from a pinned tag.`,
+          detail: instruction,
+          options: [
+            { label: yes, description: "Builds v0.5.1 from git and retries this call." },
+            { label: "Show me the command", description: "Returns the command and stops." },
+            { label: no, description: "Stops offering for the rest of this session." },
+          ],
+        },
+      ],
+    })) as { answers?: { id?: string; selected?: string[] }[] } | undefined;
+
+    const chosen = answer?.answers?.find((a) => a.id === "dsh-jujutsu.jj-hunk-install")?.selected;
+    return chosen?.includes(yes) === true ? "install" : "declined";
+  } catch {
+    // `CALLER_NOT_LIVE`, `DELEGATED_CALLER`, `NO_PROVIDER`, or an abort. All of
+    // them mean "nobody to ask", and all of them fall back to the instruction.
+    return "unavailable";
   }
 }
 

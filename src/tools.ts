@@ -88,6 +88,19 @@ function cwdOf(exec: unknown): string | undefined {
   return agent?.session?.header?.cwd;
 }
 
+/**
+ * The live agent behind a tool call, forwarded opaquely.
+ *
+ * Only one thing needs it: `ctx.userQuestions.ask` refuses to run without it, and
+ * the offer to install `jj-hunk` is the only human interaction this plugin has.
+ * Typed `unknown` on purpose — `hunk.ts` forwards it and the service validates
+ * it, so neither module depends on `dsh-agent` for a field it does not read.
+ */
+function agentOf(exec: unknown): { agent?: unknown } {
+  const agent = (exec as { agent?: unknown }).agent;
+  return agent === undefined ? {} : { agent };
+}
+
 /** Run `jj` and return its raw stdout, or a typed error object. */
 async function jj(
   ctx: Context,
@@ -527,6 +540,9 @@ export function buildToolDefinitions(
       if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
       const outcome = await listHunks(ctx, settings, {
         cwd,
+        // The live agent: `ctx.userQuestions.ask` requires it, and the offer to
+        // install jj-hunk is the only thing here that needs a human.
+        ...agentOf(exec),
         ...(typeof args.query === "string" ? { query: args.query } : {}),
         ...(typeof args.revset === "string" ? { revset: args.revset } : {}),
       });
@@ -572,6 +588,8 @@ export function buildToolDefinitions(
         {
           cwd,
           query: String(args.query),
+          // Same reason as `jj_hunk_list`: the install offer needs the live agent.
+          ...agentOf(exec),
           ...(typeof args.revset === "string" ? { revset: args.revset } : {}),
         },
         typeof args.message === "string" ? args.message : undefined,
