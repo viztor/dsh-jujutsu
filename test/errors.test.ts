@@ -79,16 +79,7 @@ describe("every error code comes from the vocabulary", () => {
     //
     // Recording the set makes it a ratchet: implementing one means deleting a
     // line here, and adding a code without emitting it fails immediately.
-    const KNOWN_UNIMPLEMENTED = [
-      "JJ_VERSION_TOO_OLD",
-      "JJ_REPO_UNREADABLE",
-      "JJ_REPO_BROKEN",
-      "JJ_CONFLICTS_PRESENT",
-      "HUNK_SPEC_INVALID",
-      "HUNK_SPEC_STALE",
-      "SHELL_EXEC_FAILED",
-      "FS_ERROR",
-    ];
+    const KNOWN_UNIMPLEMENTED = ["JJ_REPO_UNREADABLE", "JJ_REPO_BROKEN", "JJ_CONFLICTS_PRESENT"];
     const codes = [...readFileSync("src/errors.ts", "utf8").matchAll(/^ {2}([A-Z_]+):/gm)].map(
       (m) => m[1]!,
     );

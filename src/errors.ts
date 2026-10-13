@@ -44,11 +44,18 @@ export const ErrorCode = {
   REVSET_NOT_SINGLE: "REVSET_NOT_SINGLE",
   HUNK_QUERY_EMPTY: "HUNK_QUERY_EMPTY",
   HUNK_QUERY_INVALID: "HUNK_QUERY_INVALID",
-  HUNK_SPEC_INVALID: "HUNK_SPEC_INVALID",
-  HUNK_SPEC_STALE: "HUNK_SPEC_STALE",
+  // `HUNK_SPEC_INVALID` and `HUNK_SPEC_STALE` were here. Both named the
+  // `--spec-file` mechanism, and `docs/18` records that the plugin does not
+  // accept a spec **by design**: a spec file must live outside the working copy
+  // or it invalidates its own hunk IDs, and `--query` is the supported form.
+  // The codes outlived the decision to reject the mechanism.
   SHELL_EXEC_FAILED: "SHELL_EXEC_FAILED",
   SHELL_TIMEOUT: "SHELL_TIMEOUT",
-  FS_ERROR: "FS_ERROR",
+  // `FS_ERROR` was here. It named "ctx.fs.stat / readText throws while probing",
+  // which this plugin swallows everywhere on purpose: the guard fails **open** on
+  // a filesystem error, and a probe that cannot read is treated as a path that is
+  // not there (`detect.ts` `safeType`, `marker.ts` `readMarker`). There is no
+  // caller that could report it, so it was a code for a decision not to act.
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

@@ -33,7 +33,7 @@ import type { Context } from "@deepseek-ai/cordis";
 
 import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import type { Settings } from "./settings.ts";
-import { type RunResult, run, runJj } from "./shell.ts";
+import { type RunResult, ShellUnavailableError, run, runJj } from "./shell.ts";
 
 /** The commands the bridge exposes. */
 export type HunkMode = "split" | "commit" | "squash";
@@ -347,6 +347,17 @@ async function missingBinary(
   options: HunkOptions,
   error: unknown,
 ): Promise<HunkOutcome<RunResult>> {
+  // Before anything else: a missing shell is not a missing binary. Offering to
+  // install `jj-hunk` here would be advice that cannot be followed, and the
+  // `cargo` probe below would fail for the same reason and blame the toolchain.
+  if (error instanceof ShellUnavailableError) {
+    return fail(
+      ErrorCode.SHELL_EXEC_FAILED,
+      "No shell service is mounted, so jj-hunk could not be run.",
+      "Enable the harness shell service; the hunk tools need it to execute anything.",
+    );
+  }
+
   const instruction = `Install it with: ${INSTALL_ARGV.join(" ")}`;
 
   if (settings.hunkInstall === "never") {

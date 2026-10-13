@@ -80,3 +80,33 @@ describe("jj's own failures carry their declared code", () => {
     expect(outcome?.error?.hint).toContain("by hand");
   });
 });
+
+describe("a missing shell service is not a missing binary", () => {
+  it("reports SHELL_EXEC_FAILED rather than offering an install", async () => {
+    // `fakeHarness` mounts no shell. Before this, the hunk bridge read that as
+    // "jj-hunk is not installed" and offered to install it — advice that could
+    // not be followed, because the install would need the same shell.
+    const harness = fakeHarness();
+    applyTools(harness.ctx, resolveSettings({ hunkInstall: "ask" }));
+
+    const { buildToolDefinitions } = await import("../src/tools.ts");
+    const defs = buildToolDefinitions(harness.ctx, resolveSettings({ hunkInstall: "ask" }));
+    const hunk = defs.find((d) => d.name === "jj_hunk_list") as {
+      execute: (a: unknown, e: unknown) => Promise<unknown>;
+    };
+    const outcome = (await hunk.execute(
+      { query: "added()" },
+      harness.session("s1", "/tmp").exec("bash", {}),
+    )) as { error?: { code: string; hint?: string } };
+    expect(outcome.error?.code).toBe("SHELL_EXEC_FAILED");
+    expect(outcome.error?.hint).toContain("shell service");
+
+    const status = defs.find((d) => d.name === "jj_status") as {
+      execute: (a: unknown, e: unknown) => Promise<unknown>;
+    };
+    const fromJj = (await status.execute({}, harness.session("s1", "/tmp").exec("bash", {}))) as {
+      error?: { code: string };
+    };
+    expect(fromJj.error?.code).toBe("SHELL_EXEC_FAILED");
+  });
+});

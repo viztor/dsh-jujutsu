@@ -44,6 +44,14 @@ export function shellQuote(arg: string): string {
   return `'${arg.replaceAll("'", `'\\''`)}'`;
 }
 
+/** The shell service is absent, so no process could be started at all. */
+export class ShellUnavailableError extends Error {
+  constructor() {
+    super("no shell service mounted");
+    this.name = "ShellUnavailableError";
+  }
+}
+
 /**
  * Run one command and collect its output.
  *
@@ -57,7 +65,11 @@ export async function run(
   options: RunOptions,
 ): Promise<RunResult> {
   const shell = ctx.get("shell") as ShellExecutor | undefined;
-  if (shell === undefined) throw new Error("no shell service mounted");
+  // Typed, because a caller has to tell "no process could start" from "the
+  // process ran and said no". The hunk bridge offers to install `jj-hunk` when a
+  // binary is missing — and without this it read a missing *shell service* the
+  // same way, then offered an install that could not have run either.
+  if (shell === undefined) throw new ShellUnavailableError();
 
   const request: ShellExecRequest = {
     command: argv.map(shellQuote).join(" "),

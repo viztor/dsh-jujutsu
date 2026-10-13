@@ -38,7 +38,7 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 import { ErrorCode } from "./errors.ts";
 import { applyHunks, listHunks } from "./hunk.ts";
 import type { Settings } from "./settings.ts";
-import { runJj } from "./shell.ts";
+import { ShellUnavailableError, runJj } from "./shell.ts";
 
 /**
  * The tool set, in the order `docs/18-tool-surface.md` presents them: four
@@ -101,6 +101,72 @@ function agentOf(exec: unknown): { agent?: unknown } {
   return agent === undefined ? {} : { agent };
 }
 
+/**
+ * The oldest `jj` whose templates this plugin's output can rely on.
+ *
+ * `json(self)` emits no separator, so `parseJsonLines` splits on newlines the
+ * plugin adds itself; the conflict query and `--summary` shapes were verified
+ * against 0.46.0 and not before it.
+ */
+const MINIMUM_JJ = [0, 46, 0] as const;
+
+/**
+ * Whether the running `jj` is new enough — cached, because it cannot change
+ * within a process and a probe per tool call would be waste.
+ *
+ * `docs/26` asks for a version **and** a capability probe: a version string alone
+ * can be wrong (a wrapper, a shim, a vendored build). The capability is the thing
+ * actually relied on, so a version below the floor is confirmed by running the
+ * template once before it is reported.
+ */
+let versionChecked: Promise<string | undefined> | undefined;
+
+function checkJjVersion(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<string | undefined> {
+  versionChecked ??= (async () => {
+    let result;
+    try {
+      result = await runJj(ctx, settings.jjPath, ["--version"], { cwd });
+    } catch {
+      return undefined;
+    }
+    if (result.exitCode !== 0) return undefined;
+
+    const match = /(\d+)\.(\d+)\.(\d+)/.exec(result.stdout);
+    if (match === null) return undefined;
+    const found = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const older = found.findIndex((part, i) => part !== MINIMUM_JJ[i]);
+    if (older === -1 || found[older]! > MINIMUM_JJ[older]!) return undefined;
+
+    // Below the floor: confirm the capability is actually missing before blaming
+    // the version, so a shim that reports an odd version but works is not refused.
+    try {
+      // `json(self)` with no separator is exactly the trap the rest of this file
+      // documents, and the test for it caught this line: the template must end
+      // with `++ "\n"` even when it emits one object.
+      const probe = await runJj(
+        ctx,
+        settings.jjPath,
+        ["log", "--no-graph", "-r", "@", "-T", 'json(self) ++ "\\n"'],
+        { cwd },
+      );
+      if (probe.exitCode === 0) return undefined;
+    } catch {
+      return undefined;
+    }
+    return `${match[0]}`;
+  })();
+  return versionChecked;
+}
+
+/** Forget the cached version. For tests. */
+export function forgetJjVersion(): void {
+  versionChecked = undefined;
+}
+
 /** Run `jj` and return its raw stdout, or a typed error object. */
 async function jj(
   ctx: Context,
@@ -109,6 +175,17 @@ async function jj(
   args: readonly string[],
   signal?: AbortSignal,
 ): Promise<unknown> {
+  const tooOld = await checkJjVersion(ctx, settings, cwd);
+  if (tooOld !== undefined) {
+    return {
+      error: {
+        code: ErrorCode.JJ_VERSION_TOO_OLD,
+        message: `jj ${tooOld} is older than the supported floor 0.46.0; the required template features are missing.`,
+        hint: "Upgrade jj. The Git guard still works; only the jj_* tools are unavailable.",
+      },
+    };
+  }
+
   try {
     const result = await runJj(ctx, settings.jjPath, args, {
       cwd,
@@ -147,6 +224,17 @@ async function jj(
     }
     return result.stdout;
   } catch (error) {
+    // "No process could start" and "jj is not installed" are different failures
+    // with different advice, and only one of them is about `jj`.
+    if (error instanceof ShellUnavailableError) {
+      return {
+        error: {
+          code: ErrorCode.SHELL_EXEC_FAILED,
+          message: "No shell service is mounted, so no command could run.",
+          hint: "Enable the harness shell service; the jj tools need it to execute anything.",
+        },
+      };
+    }
     return {
       error: {
         code: ErrorCode.JJ_MISSING,
