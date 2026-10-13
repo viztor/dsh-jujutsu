@@ -71,15 +71,14 @@ describe("guard-utils", () => {
 });
 
 describe("every error code comes from the vocabulary", () => {
-  it("keeps the unimplemented vocabulary to a recorded set", () => {
-    // `ErrorCode` is the vocabulary `docs/26` specifies, and the implementation
-    // has reached part of it. Fifteen of twenty-four are declared and never
-    // emitted — a promise, not a defect, but one that should not grow by accident
-    // and should not be mistaken for coverage.
+  it("declares no code that is never emitted", () => {
+    // This started as a ratchet: fifteen of twenty-four codes were declared and
+    // nothing emitted them, so the set was recorded rather than asserted empty,
+    // and implementing one meant deleting a line. The last line is gone, so the
+    // strict form is now the true one.
     //
-    // Recording the set makes it a ratchet: implementing one means deleting a
-    // line here, and adding a code without emitting it fails immediately.
-    const KNOWN_UNIMPLEMENTED = ["JJ_REPO_UNREADABLE", "JJ_REPO_BROKEN", "JJ_CONFLICTS_PRESENT"];
+    // A declared-but-unused code is a promise the plugin does not keep. It reads
+    // as coverage in `docs/26` and answers nothing at runtime.
     const codes = [...readFileSync("src/errors.ts", "utf8").matchAll(/^ {2}([A-Z_]+):/gm)].map(
       (m) => m[1]!,
     );
@@ -87,8 +86,8 @@ describe("every error code comes from the vocabulary", () => {
       .filter((f) => f.endsWith(".ts") && f !== "errors.ts")
       .map((f) => readFileSync(join("src", f), "utf8"))
       .join("\n");
-    const unused = codes.filter((code) => !sources.includes(`ErrorCode.${code}`)).sort();
-    expect(unused).toEqual([...KNOWN_UNIMPLEMENTED].sort());
+    const unused = codes.filter((code) => !sources.includes(`ErrorCode.${code}`));
+    expect(unused).toEqual([]);
   });
 
   it("emits no code that is not declared", () => {

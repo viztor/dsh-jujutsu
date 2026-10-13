@@ -110,3 +110,70 @@ describe("a missing shell service is not a missing binary", () => {
     expect(fromJj.error?.code).toBe("SHELL_EXEC_FAILED");
   });
 });
+
+describe("the repository layout probes", () => {
+  /** A harness whose fs answers for one path and throws for another. */
+  function withFs(options: { readonly gitTarget?: string; readonly throwOn?: string }) {
+    const harness = fakeHarness();
+    const shell = {
+      resolve: (r: unknown) => r,
+      execute: async () => ({
+        result: async () => ({
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          stdout: { text: "", truncated: false },
+          stderr: { text: "", truncated: false },
+        }),
+      }),
+    };
+    const fs = {
+      resolve: async (path: string) => path,
+      stat: async (target: string) => {
+        if (options.throwOn !== undefined && String(target).includes(options.throwOn)) {
+          throw new Error("EACCES");
+        }
+        if (String(target).endsWith("git_target")) return { type: "file" };
+        if (String(target).endsWith("/.jj/repo/store/../../../.git")) return undefined;
+        return { type: "directory" };
+      },
+      readText: async () => options.gitTarget ?? "",
+    };
+    const target = harness.ctx as unknown as { get: (n: string) => unknown };
+    const get = target.get;
+    target.get = (name: string) =>
+      name === "shell" ? shell : name === "fs" ? fs : get.call(target, name);
+    applyTools(harness.ctx, resolveSettings({}));
+    return harness;
+  }
+
+  it("reports JJ_REPO_BROKEN when git_target names a missing directory", async () => {
+    // `docs/26` P9. A colocated repo whose `.git` was deleted leaves `git_target`
+    // naming a path that is not there, and `jj` fails with something generic.
+    const harness = withFs({ gitTarget: "../../../.git" });
+    const { buildToolDefinitions, forgetRepoChecks } = await import("../src/tools.ts");
+    forgetRepoChecks();
+    const defs = buildToolDefinitions(harness.ctx, resolveSettings({}));
+    const status = defs.find((d) => d.name === "jj_status") as {
+      execute: (a: unknown, e: unknown) => Promise<unknown>;
+    };
+    const outcome = (await status.execute({}, harness.session("s1", "/repo").exec("bash", {}))) as {
+      error?: { code: string };
+    };
+    expect(outcome.error?.code).toBe("JJ_REPO_BROKEN");
+  });
+
+  it("stays silent for a native repo, where git_target is the literal `git`", async () => {
+    const harness = withFs({ gitTarget: "git" });
+    const { buildToolDefinitions, forgetRepoChecks } = await import("../src/tools.ts");
+    forgetRepoChecks();
+    const defs = buildToolDefinitions(harness.ctx, resolveSettings({}));
+    const status = defs.find((d) => d.name === "jj_status") as {
+      execute: (a: unknown, e: unknown) => Promise<unknown>;
+    };
+    const outcome = (await status.execute({}, harness.session("s1", "/repo").exec("bash", {}))) as {
+      error?: { code: string };
+    };
+    expect(outcome.error?.code).not.toBe("JJ_REPO_BROKEN");
+  });
+});

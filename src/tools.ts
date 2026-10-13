@@ -175,6 +175,9 @@ async function jj(
   args: readonly string[],
   signal?: AbortSignal,
 ): Promise<unknown> {
+  const broken = await repoRefusal(ctx, cwd);
+  if (broken !== undefined) return broken;
+
   const tooOld = await checkJjVersion(ctx, settings, cwd);
   if (tooOld !== undefined) {
     return {
@@ -405,6 +408,119 @@ async function conflictOf(
 }
 
 /**
+ * Refuse to build on a conflicted working copy.
+ *
+ * `jj new` **propagates** a conflict rather than escaping it, and a squash or a
+ * hunk split rewrites the conflicted tree. An agent that does not know it is
+ * conflicted will build on top of one and hand back a change nobody can review,
+ * which is what `docs/26`'s P12 is for.
+ *
+ * Only the tools that rewrite `@` check this. `jj_describe` edits a message and
+ * `jj_bookmark` moves a ref; neither touches the conflicted tree, and refusing
+ * them would block work that is safe.
+ */
+async function conflictRefusal(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<unknown | undefined> {
+  if ((await conflictOf(ctx, settings, cwd)) !== true) return undefined;
+  return {
+    error: {
+      code: ErrorCode.JJ_CONFLICTS_PRESENT,
+      message: "The working copy has unresolved conflicts, so this would build on top of them.",
+      hint: "Resolve them first (`jj resolve --list`, then `jj resolve <path>`), or start from a clean revision.",
+    },
+  };
+}
+
+/**
+ * Whether the repository's own layout is intact — `docs/26`'s P9.
+ *
+ * A colocated repository records where its Git directory is in
+ * `.jj/repo/store/git_target`. When that path no longer exists, `jj` itself fails
+ * with something generic, and the useful statement is the specific one.
+ *
+ * Two rules from `docs/26`, both load-bearing:
+ *
+ * - `git_target` containing the literal `git` means a **native** repo, which has
+ *   no Git directory to check. Nothing to report.
+ * - A missing or unparseable `git_target` is **unknown, not broken**. The file is
+ *   an internal layout detail, verified on 0.46.0 and no other version, so
+ *   refusing on its absence would refuse repositories that are fine.
+ */
+const repoChecks = new Map<string, unknown | undefined>();
+
+/** Forget the cached repository probes. For tests. */
+export function forgetRepoChecks(): void {
+  repoChecks.clear();
+}
+
+async function repoRefusal(ctx: Context, cwd: string): Promise<unknown | undefined> {
+  // Once per directory per process. The layout cannot change under a running
+  // tool call, and an fs probe on every `jj_*` call would be waste.
+  if (repoChecks.has(cwd)) return repoChecks.get(cwd);
+  const result = await probeRepo(ctx, cwd);
+  repoChecks.set(cwd, result);
+  return result;
+}
+
+async function probeRepo(ctx: Context, cwd: string): Promise<unknown | undefined> {
+  const fs = ctx.get("fs") as
+    | {
+        resolve: (p: string) => Promise<unknown>;
+        readText: (t: unknown) => Promise<string>;
+        stat: (t: unknown) => Promise<{ type?: string } | undefined>;
+      }
+    | undefined;
+  if (fs === undefined) return undefined;
+
+  const root = cwd.replace(/\/+$/, "") || "/";
+  const repoDir = `${root}/.jj/repo`;
+
+  let target: unknown;
+  let text: string;
+  try {
+    target = await fs.resolve(`${repoDir}/store/git_target`);
+    const info = await fs.stat(target);
+    // Absent means native, or a layout this plugin does not know. Either way it
+    // is not evidence of breakage.
+    if (info === undefined) return undefined;
+    text = (await fs.readText(target)).trim();
+  } catch {
+    // `.jj` is there but cannot be read. That IS reportable, and different from
+    // "the file is not there".
+    return {
+      error: {
+        code: ErrorCode.JJ_REPO_UNREADABLE,
+        message: `The jj repo at ${repoDir} exists but could not be read.`,
+        hint: "Check permissions on the .jj directory.",
+      },
+    };
+  }
+
+  if (text === "git") return undefined;
+  if (text === "") return undefined;
+
+  // A relative path from `.jj/repo/store` to the Git directory.
+  const resolved = text.startsWith("/") ? text : `${repoDir}/store/${text}`;
+  try {
+    const gitInfo = await fs.stat(await fs.resolve(resolved));
+    if (gitInfo !== undefined) return undefined;
+  } catch {
+    return undefined;
+  }
+
+  return {
+    error: {
+      code: ErrorCode.JJ_REPO_BROKEN,
+      message: `The jj repo at ${root} points at a Git directory that does not exist (${text}).`,
+      hint: "The Git directory was probably deleted. Re-create it, or re-init the repo with `jj git init --colocate`.",
+    },
+  };
+}
+
+/**
  * Build the eleven definitions.
  *
  * Separate from registration so a test can validate every definition against the
@@ -526,6 +642,8 @@ export function buildToolDefinitions(
       if ((await identityConfigured(ctx, settings, cwd)) === false) {
         return identityRefusal();
       }
+      const conflicted = await conflictRefusal(ctx, settings, cwd);
+      if (conflicted !== undefined) return conflicted;
       const argv = ["new"];
       if (typeof args.revset === "string") argv.push(args.revset);
       if (typeof args.message === "string") argv.push("-m", args.message);
@@ -570,6 +688,8 @@ export function buildToolDefinitions(
     execute: async (args: ToolArgs, exec: unknown) => {
       const cwd = cwdOf(exec);
       if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+      const conflicted = await conflictRefusal(ctx, settings, cwd);
+      if (conflicted !== undefined) return conflicted;
       const argv = ["squash"];
       if (typeof args.from === "string") argv.push("--from", args.from);
       if (typeof args.into === "string") argv.push("--into", args.into);
@@ -691,6 +811,10 @@ export function buildToolDefinitions(
       if (mode !== "squash" && (await identityConfigured(ctx, settings, cwd)) === false) {
         return identityRefusal();
       }
+      // A hunk operation rewrites the tree it selects from, so a conflicted
+      // working copy is not a safe base for any of the three modes.
+      const conflicted = await conflictRefusal(ctx, settings, cwd);
+      if (conflicted !== undefined) return conflicted;
       const outcome = await applyHunks(
         ctx,
         settings,
