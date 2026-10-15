@@ -57,6 +57,22 @@ export default defineConfig({
     },
   ],
 
+  lint: {
+    options: {
+      // `vp check` advertises "format, lint, and type checks", and its own docs
+      // say type-checking needs these two. Verified: without them `vp check`
+      // exits **0** on a file containing `const x: number = "s"`, while
+      // `tsc --noEmit` on the same file reports TS2322. So they are what makes
+      // `vp check` honest, and the `ci` script's separate `tsc --noEmit` is a
+      // belt-and-braces second opinion rather than the only typecheck.
+      //
+      // `typeAware` is a prerequisite of `typeCheck`, not an alternative:
+      // tsgolint drives both, and enabling one without the other has no effect.
+      typeAware: true,
+      typeCheck: true,
+    },
+  },
+
   test: {
     // The fixture repositories are built here rather than assumed. They were
     // built by a script nothing invoked, which made the suite pass on the machine

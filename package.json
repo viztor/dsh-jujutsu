@@ -49,12 +49,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vp pack && node scripts/name-client-bundle.ts",
+    "check": "node scripts/check.ts",
+    "ci": "vp check && pnpm run build && vp test run && pnpm run check",
+    "lint": "vp lint",
+    "test": "vp test run",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "ci": "tsc --noEmit && vp check && pnpm run build && vitest run && pnpm run check",
     "prepublishOnly": "pnpm run ci",
-    "prepare": "pnpm run build",
-    "check": "node scripts/check.ts"
+    "prepare": "pnpm run build"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4"
