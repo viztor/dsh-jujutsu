@@ -8,6 +8,16 @@ description: Node, pnpm, and the two binaries the test suite drives.
 # so every test that drives a real binary skipped — and a skip is not a failure,
 # so `verify` would have passed and a release would have shipped having tested
 # nothing. Extracting the setup is what stops the two lists drifting again.
+#
+# **Deliberately not `voidzero-dev/setup-vp`, which the Vite+ CI guide
+# recommends.** The toolchain is a devDependency here — `vite-plus` in
+# `package.json` — so every `vp` any script runs, including the `vp pack` that
+# `prepare` invokes during `pnpm install` itself, resolves from
+# `node_modules/.bin` once pnpm has linked. A globally installed `vp` would be a
+# second copy of a tool the lockfile already pins, and what it would replace is
+# exactly the two steps below, which provision Node and pnpm from the same
+# `packageManager` field the rest of the toolchain reads. Revisit the day
+# something needs `vp` *before* the first install; nothing does today.
 
 runs:
   using: composite

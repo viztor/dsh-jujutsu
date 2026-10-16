@@ -1,50 +1,144 @@
 # Contributing
 
-## One-time setup for releases
+## Releasing
 
-Release-please reads conventional commits and opens a version-bump pull request.
-Merging that PR tags the release, and the tag publishes it. Two things have to be
-in place once, by a repository admin, before any of that works.
+Three ways in, one publish path (`release.yml`), so the entries cannot drift:
 
-### 1. A `RELEASE_PLEASE_TOKEN` secret
+| Trigger                       | What it needs                                | When to use it                                          |
+| ----------------------------- | -------------------------------------------- | ------------------------------------------------------- |
+| Manual, from the Actions page | the npm Trusted Publisher, and nothing else  | the default when you want a release now                 |
+| Merging a release-please PR   | `RELEASE_PLEASE_TOKEN` for that PR to get CI | steady state, conventional commits doing the versioning |
+| Pushing a `vX.Y.Z` tag        | nothing                                      | when the tag already exists                             |
 
-**Not optional.** Tags and releases created with the built-in `GITHUB_TOKEN` do
-not trigger downstream workflows — so a release-please running on the default
-token produces a tag that never publishes. The release looks cut and is not.
+**Reach for the manual path first.** Actions → _release_ → _Run workflow_ →
+`dry-run: false`. It runs the full gate, creates the tag and the GitHub Release if
+they are missing, and publishes whatever version `package.json` holds. It needs no
+secret at all: the tag is made with that run's own `GITHUB_TOKEN`, which is safe
+**because** the publish happens in the same run — the standing objection to a
+`GITHUB_TOKEN` tag is that it triggers no workflow, and here nothing needs
+triggering.
 
-Create a fine-grained personal access token with **Contents** and **Pull
-requests** read/write on this repository only, and add it as the repository
-secret `RELEASE_PLEASE_TOKEN`.
+`dry-run: true` is the default, and it is worth using: it runs every step except
+the publish, so a stale npm, a failing build or a broken tag check surfaces
+without a version on the registry.
 
-Until it exists, the `release-please` workflow **skips** and emits a warning
-naming the secret. It used to fail on every push with _"Input required and not
-supplied: token"_ — the action's own message, and clear enough — but a workflow
-that is red on every push stops meaning anything. That one trained its own author
-to ignore a red CI for a week while `ci` was failing underneath it, so the red is
-gone and the warning replaces it.
+**Rehearse from a tag, not just a branch, and know the difference.** The
+tag-vs-manifest check keys on `github.ref_type`, so:
 
-Getting there needed a fact worth recording: `secrets` cannot appear in an `if`.
-Not at the job level and not at the step level — the
-[contexts reference](https://docs.github.com/actions/reference/workflows-and-actions/contexts)
-lists what each workflow key may read, and neither `jobs.<job_id>.if` nor
-`jobs.<job_id>.steps.if` includes it. Referencing it makes GitHub reject the whole
-file as invalid. `env` _is_ available to `if`, so the token is read into a
-job-level `env` first and the steps test that.
+- dispatched from a **branch**, it is skipped — there is no tag to compare, and
+  the run says so in its own summary rather than claiming otherwise;
+- dispatched from a **tag**, it runs, and that is the only way to exercise it
+  without publishing. `dry-run: true` still stops short of the registry.
 
-### 2. A Trusted Publisher entry on npm
+So `gh workflow run release.yml --ref <tag> -f dry-run=true` covers the tag check
+and `--ref <branch>` does not. The check's failure path is worth rehearsing once
+against a deliberately mismatched tag; it is the step that prevents an npm version
+nobody can match to a commit.
 
-Publishing uses OIDC, so no npm token is stored anywhere and provenance is
-automatic. On npmjs.com, add a Trusted Publisher to the `dsh-jujutsu` package:
+### 1. Trusted Publisher entries on npm
 
-| Field      | Value                |
-| ---------- | -------------------- |
-| Repository | `viztor/dsh-jujutsu` |
-| Workflow   | `release.yml`        |
-| Action     | `npm publish`        |
+**Required for every release, whichever path.** Publishing uses OIDC, so no npm
+token is stored anywhere and provenance is automatic. On npmjs.com — package
+`dsh-jujutsu` → Settings → Trusted publishing — add **two** GitHub Actions
+entries:
+
+| Field      | Value                                                                |
+| ---------- | -------------------------------------------------------------------- |
+| Repository | `viztor/dsh-jujutsu`                                                 |
+| Workflow   | `release.yml` — the tag-push and manual paths                        |
+| Workflow   | `release-please.yml` — the automated path, which calls `release.yml` |
+| Action     | tick **Allow npm publish** (see below)                               |
+
+**Why two.** npm's own documentation, on this exact shape: _"Some GitHub Actions
+workflows use `workflow_call` to invoke other workflows that run `npm publish`…
+When this happens, validation checks the **calling workflow's name** instead of
+the workflow that actually contains the publish command."_ On the automated path
+the caller is `release-please.yml`, so that is the filename npm validates —
+registering `release.yml` alone leaves the automated path failing authentication
+while the manual one works. A package may hold up to ten trusted publishers, so
+this is a normal configuration rather than a workaround. If you only ever intend
+to use the manual path, the `release.yml` entry is enough.
+
+**Tick "Allow npm publish".** A configuration created after 2026-09-03 permits
+`npm stage publish` only, and `release.yml` runs a direct `npm publish`. The
+checkbox (or `--allow-publish` on the CLI) is what grants it. This is the kind of
+setting that fails at publish time with an authentication error and no hint about
+which box was missed.
+
+**npm does not validate a configuration when you save it** — a wrong repository or
+filename surfaces only on the first publish, as an auth error. And a new
+configuration must complete its first successful publish **within two days** or it
+expires and must be recreated, so add it when you are ready to release.
 
 Without it the publish step fails with an authentication error naming the
 workflow — which is the point of trusted publishing: there is no secret to leak,
 expire, or accidentally commit.
+
+#### The first version is the exception, and it needs a token
+
+`npm trust` is explicit — _"The package you're configuring must already exist on
+the npm registry"_ — and npmjs.com has no settings page for a name nobody has
+published. `dsh-jujutsu` has never been published, so the bootstrap is one
+token-based publish, once, before any of the above can be configured:
+
+```bash
+npm login                     # interactive; OIDC cannot bootstrap a new package
+pnpm run build
+npm publish --access public --ignore-scripts
+```
+
+Then add the two trusted publishers above. Every version after that goes through
+the workflow with no secret in the repository at all. `npm trust` can create the
+entries from the command line once the package exists:
+
+```bash
+npm trust github dsh-jujutsu --file release.yml --repo viztor/dsh-jujutsu --allow-publish
+npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu --allow-publish
+```
+
+#### If a publish fails with an auth error
+
+Check the filename before anything else: it must be the **calling** workflow's
+filename for that path (`release-please.yml` for the automated one), it must
+include `.yml`, and `id-token: write` must be granted to the calling job and
+declared by the publishing job — which is where the grant actually comes from for
+a `uses:` job. `release.yml` and `release-please.yml` both carry it, with comments
+pointing at this rule.
+
+If the automated path still fails after the filenames are right, add
+`id-token: write` to `release-please.yml`'s **workflow-level** `permissions:` block
+as well. It is deliberately not there: the job-level grant is the documented
+mechanism, and a workflow-level grant would also be inherited by the
+`release-please` job, which runs a third-party action pinned to a mutable major
+tag and has no use for OIDC — and that job's workflow is the filename npm
+validates. No rehearsal can settle which form is required, because a dry run skips
+the `npm publish` that mints the token, so the first real release is the test.
+
+### 2. A `RELEASE_PLEASE_TOKEN` secret — optional
+
+Release-please reads conventional commits and opens a version-bump pull request.
+It runs on the built-in `GITHUB_TOKEN` when this secret is absent, **and the
+release still publishes**: `release-please.yml` calls `release.yml` in the same run
+that creates the tag.
+
+What the secret buys is the pull request, not the release. A PR opened with
+`GITHUB_TOKEN` does not trigger `ci`, so the version bump would be the one change
+in the repository that is never tested; and whether the action can open the PR at
+all depends on the repository's _"Allow GitHub Actions to create and approve pull
+requests"_ setting. Create a fine-grained personal access token with **Contents**
+and **Pull requests** read/write on this repository only, and add it as the
+repository secret `RELEASE_PLEASE_TOKEN`.
+
+Without it, use the manual path above.
+
+**Why this is not just "a token to add".** The first version of this pipeline made
+the PAT load-bearing: a tag created with `GITHUB_TOKEN` triggers no workflow, so
+release-please tagged, `release.yml` never fired, and the release looked cut
+without shipping. It had never run once — no tag, no GitHub Release, no version on
+npm — while `ci` was green on every push, because none of that is visible from the
+working tree. Publishing from the run that creates the tag removes the dependency
+rather than documenting it, and `scripts/check.ts` now asserts the wiring instead
+of trusting it.
 
 ## The gate
 
@@ -53,8 +147,15 @@ pnpm install
 pnpm run ci
 ```
 
-`ci` is the whole gate in one command: typecheck, then `vp check` for format and
-lint, then the build, then the suite, then the package checks.
+`ci` is the whole gate in one command: `vp check` for format, lint and typecheck —
+with warnings failing it, so a new warning stops the run instead of accumulating —
+then the build, then the suite, then the package checks.
+
+There is deliberately no commit hook. Vite+ can install one (`vp hooks enable`,
+`vp staged`) and a contributor will reach for it, but commits here are `jj commit`,
+and `jj` does not run Git hooks: measured on 0.46.0 with a colocated repository,
+an executable `.git/hooks/pre-commit` is left untouched. What runs the gate is CI,
+plus `prepublishOnly` for a publish by hand.
 
 **But a green local run is not a green pull request.** That claim was here, and it
 was wrong for a week: CI installs `jj` and `jj-hunk`, and a laptop often does not,

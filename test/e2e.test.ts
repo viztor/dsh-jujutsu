@@ -13,32 +13,84 @@
  * The binaries are a hard requirement: `jj` 0.46.0 and `jj-hunk` 0.5.1. A
  * missing binary fails the suite rather than skipping, because a silently
  * skipped end-to-end test is worse than none.
+ *
+ * **The identity is generated, never set in the user's config.** An earlier
+ * version of this file used jj's repo-scoped `config set` (the flag
+ * `test/hermetic.test.ts` bans by name), which writes
+ * `~/.config/jj/repos/<id>/config.toml`. Under the DSH file sandbox that path
+ * is not writable, so the suite was red on exactly the machines the plugin
+ * ships to and green only where `HOME` happened to be writable — and it left a
+ * file behind in the user's own config. `docs/20-test-plan.md` §b states the
+ * contract and says not to do this: pin `JJ_CONFIG` to `/dev/null` plus a
+ * generated file inside the test's own temp root. Two files are needed,
+ * because the unconfigured-identity case must read a config with no `[user]`
+ * table at all.
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resolveSettings } from "../src/settings.ts";
 import { buildToolDefinitions } from "../src/tools.ts";
-import { fakeHarness, HAS_JJ, HAS_JJ_HUNK, realShell } from "./helpers.ts";
+import {
+  declaredTests,
+  fakeHarness,
+  HAS_JJ,
+  HAS_JJ_HUNK,
+  realShell,
+  REQUIRE_TOOLS,
+} from "./helpers.ts";
 
-const ROOT = "/tmp/dsh-jujutsu-e2e";
+/**
+ * A root unique to this process.
+ *
+ * `mkdtemp`, not a fixed `/tmp/dsh-jujutsu-e2e`: two runs at once — two agents,
+ * or a wave of workers — shared the fixed path, and one run's `rmSync` deleted
+ * the other's repository mid-test. The symptom was a spurious `jj_hunk_apply`
+ * failure that passed deterministically when this file ran alone. The platform
+ * temp area is the one location outside the workspace the sandbox permits.
+ */
+const ROOT = mkdtempSync(join(tmpdir(), "dsh-jujutsu-e2e-"));
 
-/** Run `jj` in a directory and return its stdout. */
-function jj(cwd: string, args: readonly string[]): string {
-  return execFileSync("jj", args, {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, JJ_CONFIG: "/dev/null" },
-  });
+/** The generated identity. Inside ROOT, so nothing is written to `$HOME`. */
+const IDENTITY = join(ROOT, "jj-config.toml");
+
+/**
+ * A config with **no** `[user]` table, for the unconfigured-identity case.
+ *
+ * A comment rather than an empty file, so a reader who finds it knows the
+ * absence is deliberate rather than a truncated write.
+ */
+const NO_IDENTITY = join(ROOT, "jj-config-empty.toml");
+
+/** `/dev/null` first, so `~/.config/jj/config.toml` is never read. */
+const CONFIGURED = `/dev/null:${IDENTITY}`;
+const UNCONFIGURED = `/dev/null:${NO_IDENTITY}`;
+
+/** The environment every `jj` invocation in this file runs under. */
+function envFor(config: string): NodeJS.ProcessEnv {
+  return { ...process.env, JJ_CONFIG: config };
 }
 
-/** A harness whose shell is real, bound to one repository. */
-function harnessAt(cwd: string) {
+/** Run `jj` in a directory and return its stdout. */
+function jj(cwd: string, args: readonly string[], config = CONFIGURED): string {
+  return execFileSync("jj", args, { cwd, encoding: "utf8", env: envFor(config) });
+}
+
+/**
+ * A harness whose shell is real, bound to one repository.
+ *
+ * The config is passed to the shell double rather than written into
+ * `process.env`, so the tools' own `jj` invocations read the same identity the
+ * assertions do without leaking it into every other file in the worker.
+ */
+function harnessAt(cwd: string, config = CONFIGURED) {
   const harness = fakeHarness();
-  realShell(harness.ctx);
+  realShell(harness.ctx, { JJ_CONFIG: config });
   const settings = resolveSettings({});
   const definitions = buildToolDefinitions(harness.ctx, settings);
   const exec = harness.session("e2e", cwd);
@@ -54,19 +106,64 @@ function harnessAt(cwd: string) {
   };
 }
 
+/** How many `it(` blocks this file declares, counted as `docs.test.ts` counts. */
+const DECLARED_HERE = declaredTests(import.meta.url);
+let executed = 0;
+
+beforeEach(() => {
+  executed += 1;
+});
+
+afterAll(() => {
+  // A skip is not a failure, so a missing `jj-hunk` would silently drop the
+  // whole hunk bridge from a run that still reports green. When the environment
+  // demands the binaries, every test this file declares must have run. Vitest
+  // does not run hooks for a skipped test, so `executed` falls short of the
+  // declaration exactly when something skipped. The fixture-gated suites are
+  // covered by `test/global-setup.ts`; `jj-hunk` ships only on crates.io, so it
+  // is installed out of band and this is the file that has to count for itself.
+  if (!REQUIRE_TOOLS) return;
+  expect(
+    executed,
+    `DSH_JUJUTSU_REQUIRE_TOOLS=1, but ${DECLARED_HERE - executed} of ` +
+      `${DECLARED_HERE} tests in test/e2e.test.ts did not run — a missing ` +
+      `jj or jj-hunk, most likely`,
+  ).toBe(DECLARED_HERE);
+});
+
+afterAll(() => {
+  // Leave nothing behind. A leaked root is a repository per run, and the suite
+  // runs in waves. Cleanup must not turn a green run red, though: a file the OS
+  // still holds open is not a test failure, and the directory is in the temp
+  // area the platform reclaims anyway.
+  try {
+    rmSync(ROOT, { recursive: true, force: true });
+  } catch {
+    /* the temp area is the OS's to reclaim */
+  }
+});
+
 beforeAll(() => {
   // A real repository with a described base and a real working-copy change.
-  rmSync(ROOT, { recursive: true, force: true });
-  mkdirSync(ROOT, { recursive: true });
-  const env = { ...process.env, JJ_CONFIG: "/dev/null" };
-  execFileSync("jj", ["git", "init", "--colocate"], { cwd: ROOT, env });
-  execFileSync("jj", ["config", "set", "--repo", "user.name", "E2E"], { cwd: ROOT, env });
-  execFileSync("jj", ["config", "set", "--repo", "user.email", "e2e@example.invalid"], {
-    cwd: ROOT,
-    env,
-  });
+  // ROOT already exists: `mkdtempSync` created it, empty, at module load.
+  writeFileSync(
+    IDENTITY,
+    [
+      "# Generated by test/e2e.test.ts. Never written to ~/.config/jj.",
+      "[user]",
+      'name = "E2E"',
+      'email = "e2e@example.invalid"',
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    NO_IDENTITY,
+    "# Generated by test/e2e.test.ts. Deliberately no [user] table: this is the\n" +
+      "# unconfigured-identity case that `jj new` must refuse.\n",
+  );
+  execFileSync("jj", ["git", "init", "--colocate"], { cwd: ROOT, env: envFor(CONFIGURED) });
   writeFileSync(`${ROOT}/f.txt`, "one\ntwo\nthree\n");
-  execFileSync("jj", ["commit", "-m", "base"], { cwd: ROOT, env });
+  execFileSync("jj", ["commit", "-m", "base"], { cwd: ROOT, env: envFor(CONFIGURED) });
   // Both edits go in the working copy: `jj-hunk` defaults to `-r @`, and a
   // `jj new` here would leave the f.txt edit in @-'s parent where the query
   // cannot see it.
@@ -154,13 +251,17 @@ describe.skipIf(!HAS_JJ)("the tools run real jj", () => {
 
   it("jj_new refuses when the identity is unconfigured", async () => {
     // The empty-identity trap, against the real binary. A separate repo, because
-    // the check reads the repo's own config.
+    // the check reads the repo's own config — and a config file with no `[user]`
+    // table, because that is the only way to reach the trap without writing to
+    // the user's real config.
     const bare = `${ROOT}/no-identity`;
     mkdirSync(bare, { recursive: true });
-    const env = { ...process.env, JJ_CONFIG: "/dev/null" };
-    execFileSync("jj", ["git", "init", "--colocate"], { cwd: bare, env });
+    execFileSync("jj", ["git", "init", "--colocate"], {
+      cwd: bare,
+      env: envFor(UNCONFIGURED),
+    });
 
-    const h = harnessAt(bare);
+    const h = harnessAt(bare, UNCONFIGURED);
     const result = (await h.call("jj_new", { message: "should refuse" })) as {
       error?: { code: string };
     };

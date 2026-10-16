@@ -44,7 +44,9 @@ describe("the eleven tools", () => {
     const harness = fakeHarness();
     applyTools(harness.ctx, resolveSettings({}));
     for (const tool of harness.tools) {
-      expect(String(tool.description ?? "").length, String(tool.name)).toBeGreaterThan(40);
+      const description = tool.description;
+      expect(typeof description, String(tool.name)).toBe("string");
+      expect((description as string).length, String(tool.name)).toBeGreaterThan(40);
     }
   });
 

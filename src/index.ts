@@ -29,6 +29,7 @@ import { applyPreflight } from "./preflight.ts";
 import { invalidateDetection } from "./detect.ts";
 import { invalidateMarkers } from "./marker.ts";
 import { resolveSettings } from "./settings.ts";
+import { applySkill } from "./skill.ts";
 import { applyTools } from "./tools.ts";
 
 export { Config };
@@ -78,6 +79,12 @@ export function apply(ctx: Context, config?: unknown): void {
   applyExplain(ctx, settings);
 
   if (settings.injectContext) applyContext(ctx, settings);
+
+  // The manual, as a catalog line instead of a prompt section. Registered
+  // unconditionally and gated inside, because `teachSkill` is a user-reversible
+  // decision: off must mean the session's catalog never gains the entry
+  // (docs/28 §1.5). It degrades silently where `ctx.skills` is not mounted.
+  applySkill(ctx, settings);
 
   // Preflight is cheap and self-gating on `.jj`, and its own body is wrapped —
   // a throw in `agent/created` fails session creation, not one tool call.

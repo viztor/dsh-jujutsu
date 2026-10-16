@@ -1,30 +1,71 @@
 name: release
 
+# Three ways in, one publish path.
+#
+#   push:tags          a tag was pushed — the classic path, and the only one that
+#                      works when something else created the tag
+#   workflow_dispatch  a human asks for a release by hand, with no secret and no
+#                      PAT anywhere in the chain (see `create-release` below)
+#   workflow_call      `release-please.yml` calls this workflow in the SAME run
+#                      that created the tag
+#
+# The third trigger is what makes publishing independent of the PAT. A tag made
+# with the built-in `GITHUB_TOKEN` does not trigger workflows, so a design where
+# `release-please` tags and `release` publishes cannot work on the default token:
+# the tag exists and nothing runs. Calling this workflow from the run that created
+# the tag removes that dependency instead of documenting it.
+#
+# The three entries share one body on purpose. Adding a second entry point by
+# copying the publish steps is how `verify` and `publish` drifted apart once
+# already — `.github/actions/setup/action.yml` records that incident.
 on:
   push:
     tags: ["v*.*.*"]
-  # The tag trigger is the only way this workflow runs in normal use, which means
-  # it cannot be exercised until a release is already happening — the worst moment
-  # to discover a defect in it. A manual run builds, checks the tag against the
-  # manifest and stops before publishing, so the machinery can be tested on
-  # purpose rather than during a release.
+  # The tag trigger cannot be exercised until a release is already happening —
+  # the worst moment to discover a defect in it. A manual run builds, runs the
+  # npm gate and stops before publishing, so the machinery can be tested on
+  # purpose rather than during a release. With `dry-run: false` it is also the
+  # credential-free release path: it creates the tag and publishes.
+  #
+  # Dispatch from a BRANCH to rehearse the ordinary path, and from a TAG to
+  # rehearse the tag-vs-manifest check as well — the step keys on
+  # `github.ref_type`, so a tag ref runs it and a branch ref has nothing to
+  # compare. `dry-run: true` keeps both from publishing.
   workflow_dispatch:
     inputs:
       dry-run:
         description: Build and verify without publishing
         type: boolean
         default: true
+  workflow_call:
+    inputs:
+      dry-run:
+        type: boolean
+        default: false
+      expected-tag:
+        description: Tag the caller created, which must agree with package.json.
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
-# Keyed on the tag, never cancelled. Two runs of the SAME tag race — the second
-# would hit a half-published registry — and they are both wanted here: a re-run
-# after a transient npm fault is exactly how a release recovers, and the publish
-# steps skip versions already on the registry. Cancelling one would leave the
-# release in the state where neither run finished.
+# One group for every release run, never cancelled. Two runs of the SAME release
+# race — the second would hit a half-published registry — and they are both
+# wanted: a re-run after a transient npm fault is exactly how a release recovers,
+# and the publish step skips versions already on the registry. Cancelling one
+# would leave the release in the state where neither run finished.
+#
+# The group is the repository, not the ref, and that is the fix for a race the
+# ref-keyed version created. When a PAT is configured, one release produces TWO
+# runs of this workflow: the tag push (`release-v0.2.0`) and the `workflow_call`
+# from `release-please.yml`, which reports the caller's ref (`release-main`).
+# Different refs meant different groups, so the two ran concurrently, both found
+# the version absent in the `npm view` guard, and one `npm publish` lost the
+# race. Serializing all releases costs nothing — they are rare, and they are the
+# one operation that must not overlap.
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -39,9 +80,9 @@ jobs:
       - uses: ./.github/actions/setup
 
       # `ci` is the whole gate in one command: typecheck, then `vp check` for
-      # format and lint, then the build, then the suite. It is deliberately not
-      # spelled out step by step here — a tag should run exactly what a commit
-      # runs, and two lists would drift.
+      # format and lint, then the build, then the suite, then the package checks.
+      # It is deliberately not spelled out step by step here — a tag should run
+      # exactly what a commit runs, and two lists would drift.
       - name: Gate
         env:
           DSH_JUJUTSU_REQUIRE_TOOLS: "1"
@@ -51,7 +92,11 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # `contents: write` is for the manual path only, which creates the tag and
+      # the GitHub Release when they do not exist yet — that is what makes a
+      # release possible with no PAT in the repository. On the tag and
+      # release-please paths the tag already exists and the write goes unused.
+      contents: write
       # OIDC trusted publishing needs this and nothing else: no token is stored
       # in the repository, and provenance is automatic.
       id-token: write
@@ -61,7 +106,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-          cache: pnpm
+          # Deliberately no `cache: pnpm` here, though the gate job uses one.
+          # npm's trusted-publishing guide is explicit for release builds —
+          # "never use caching in release builds" — because a cache a lower
+          # privilege job can write is a way to influence what the publishing job
+          # installs. This job holds `id-token: write` and `contents: write`; a
+          # cold install is a few seconds, and that is the cheaper side of the
+          # trade.
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
 
@@ -87,44 +138,96 @@ jobs:
       #
       # Whether it actually breaks is contested — the action's maintainers tested
       # it working with the dummy token present and closed the report, while the
-      # issue has 124 cross-references from people it did break. This job has never
-      # run and holds `id-token: write`, so it is not the place to bet on a
-      # contested behaviour for the sake of one line.
+      # issue has 124 cross-references from people it did break. This job holds
+      # `id-token: write`, so it is not the place to bet on a contested behaviour
+      # for the sake of one line.
       #
       # See https://github.com/actions/setup-node/issues/1551
+      #
+      # Written with `grep`/`mv` rather than `sed -i`, because `sed -i` is the one
+      # step here whose meaning differs between the runner and the machine the
+      # repository is developed on: GNU sed treats the next argument as the script,
+      # BSD sed treats it as the backup suffix. The workflow only ever runs on
+      # Ubuntu, so either would work in CI — but a step that cannot be exercised
+      # locally is a step nobody checks, and this one is the difference between
+      # OIDC working and `ENEEDAUTH`.
       - name: Let npm use OIDC rather than the placeholder token
         run: |
           npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           if [ -f "$npmrc" ]; then
-            sed -i '/_authToken/d' "$npmrc"
+            grep -v '_authToken' "$npmrc" > "$npmrc.oidc" || true
+            mv "$npmrc.oidc" "$npmrc"
             echo "removed the placeholder _authToken line from $npmrc"
           fi
 
       # A tag that disagrees with the manifest publishes a version nobody can
       # match to a commit, so this is checked before anything is built.
       #
-      # The ref arrives through the environment rather than being interpolated
+      # The tag arrives through the environment rather than being interpolated
       # into the script text: a tag name may contain `;`, `"`, `$` or a
       # backtick, and this job holds `id-token: write`.
+      #
+      # The `if` keys on whether there IS a tag to compare, not on the event, and
+      # the first version of this step got that wrong in a way no local run could
+      # see. It read `if: inputs.expected-tag != ''` — which is **false on a tag
+      # push**, because `inputs` is only populated for `workflow_dispatch` and
+      # `workflow_call` and is the empty string otherwise. The step was skipped,
+      # the tag was never compared, and a mismatched tag would have produced a
+      # green run that published nothing. `scripts/check.ts` now pins the shape.
+      #
+      # `github.ref_type` is what makes the check reachable by a rehearsal as well
+      # as correct: a dispatch from a TAG runs it, so `gh workflow run release.yml
+      # --ref <tag> -f dry-run=true` exercises this step — including its refusal —
+      # without publishing. A dispatch from a branch has nothing to compare: the
+      # manual path creates the tag from `package.json` a few steps below.
       - name: The tag matches the manifest version
-        # A manual run has no tag to compare against.
-        if: github.event_name == 'push'
+        if: github.ref_type == 'tag' || inputs.expected-tag != ''
         env:
-          TAG: ${{ github.ref_name }}
+          # `inputs.expected-tag` when this was called, `github.ref_name` — the
+          # pushed or dispatched tag — when it was not. The `||` fails closed: on
+          # the called path an empty `tag_name` would fall back to the caller's ref
+          # (`main`) and refuse, rather than silently skipping the comparison.
+          EXPECTED_TAG: ${{ inputs.expected-tag || github.ref_name }}
         run: |
           expected="v$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "$expected" ]; then
-            echo "::error::$TAG does not match package.json $expected"
+          if [ "$EXPECTED_TAG" != "$expected" ]; then
+            echo "::error::$EXPECTED_TAG does not match package.json $expected"
             exit 1
           fi
 
       - name: Build
         run: pnpm run build
 
+      # The manual path has no tag to publish against, and an npm version with no
+      # matching tag is the thing the check above exists to prevent. So it creates
+      # the tag itself, with the `GITHUB_TOKEN` this job already holds.
+      #
+      # That is safe precisely because publishing happens in this same run: the
+      # usual objection to a `GITHUB_TOKEN` tag — that it triggers no workflow —
+      # does not apply when nothing needs triggering.
+      - name: Create the tag and release, on the manual path only
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag already exists"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes
+            echo "created $tag"
+          fi
+
       # Trusted publishing: the registry verifies this workflow's OIDC identity,
-      # so no secret exists to leak or expire. To set it up, add
-      # viztor/dsh-jujutsu + `release.yml` to the package's Trusted Publisher
-      # settings on npmjs.com and allow the `npm publish` action.
+      # so no secret exists to leak or expire. To set it up, add TWO Trusted
+      # Publisher entries to the `dsh-jujutsu` package on npmjs.com — one for this
+      # file and one for `release-please.yml`, which reaches this step through
+      # `workflow_call` and is therefore the filename npm validates. Both must
+      # allow the `npm publish` action; a new entry permits only `npm stage
+      # publish` unless that is ticked. CONTRIBUTING.md has the bootstrap, which
+      # is not obvious: `npm trust` refuses a package that does not exist yet, so
+      # the first version has to be published with a token.
       #
       # `--ignore-scripts` because the `verify` job already ran the full gate on
       # this same commit; letting `prepublishOnly` run it again would double the
@@ -134,6 +237,11 @@ jobs:
       # to republish a version, so a retried tag has to skip rather than fail.
       # The publish itself is NOT guarded — a swallowed error here once produced
       # a green release for a version that never reached the registry.
+      #
+      # It also makes the `workflow_call` path safe against a double run: when a
+      # PAT is configured, the tag release-please creates DOES trigger this
+      # workflow as well as being published by the caller, and the second run
+      # finds the version present and stops here.
       - name: Publish to npmjs (OIDC, provenance)
         # `inputs.dry-run` is unset on a tag push, where the step must run.
         if: inputs.dry-run != true
@@ -156,11 +264,6 @@ jobs:
       # knowing: the publish steps above were green, so this is npm still
       # indexing rather than a failed publish; and the command to re-check by
       # hand.
-      - name: Dry run — nothing was published
-        if: inputs.dry-run == true
-        run: |
-          echo "::notice::Dry run: the tag check, the build and the package checks all ran; publishing was skipped."
-
       - name: Verify the published version is readable
         if: inputs.dry-run != true
         run: |
@@ -180,3 +283,21 @@ jobs:
           echo "::error::dsh-jujutsu@$version is still unreadable after $((attempts * interval - interval))s"
           echo "::error::The publish step above was green, so npm is still processing it rather than having rejected it. Re-check with: npm view dsh-jujutsu@$version version"
           exit 1
+
+      # A dry run's whole value is that it exercises everything above it — the npm
+      # gate, the OIDC `.npmrc` fix and the build, plus the tag check when the ref
+      # is a tag — and stops at the one step that cannot be undone. So it says what
+      # it did NOT do, in the run's own summary.
+      #
+      # "Every step above ran" would be a lie in the branch case, and a specific
+      # one: the tag check is skipped there, so a rehearsal dispatched from a
+      # branch does not cover it. The notice names the gap instead of papering
+      # over it, and `scripts/check.ts` asserts the guard that creates it.
+      - name: Dry run — nothing was published
+        if: inputs.dry-run == true
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "::notice::Dry run: every step above ran, including the tag check; publishing was skipped."
+          else
+            echo "::notice::Dry run: every step above ran except the tag check, which has no tag to compare when dispatched from a branch. Publishing was skipped. Dispatch from a tag to cover it."
+          fi

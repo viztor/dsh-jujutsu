@@ -25,6 +25,22 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const failures: string[] = [];
 const checks: string[] = [];
 
+/**
+ * npm's cache, moved inside the temp area for this run.
+ *
+ * npm writes to `~/.npm/_cacache` and `~/.npm/_logs` by default, and neither is
+ * writable under the sandbox a coding agent runs in. The tarball check — the only
+ * check here that sees what a consumer receives — therefore failed with
+ * `EPERM … /Users/<name>/.npm/_cacache`, which names the symptom (a stale
+ * root-owned cache) and not the cause (a check that depends on a writable home
+ * directory). CI has a writable `$HOME`, so this was invisible there and fatal
+ * locally, which is the wrong way round: the local run is where it is needed.
+ *
+ * Per-process, like the e2e root, so two concurrent runs cannot share a cache
+ * directory they are both mutating.
+ */
+const NPM_CACHE = mkdtempSync(join(tmpdir(), "dsh-jujutsu-npm-cache-"));
+
 /** Record one check's outcome. */
 function check(name: string, ok: boolean, detail = ""): void {
   if (ok) {
@@ -41,6 +57,8 @@ function check(name: string, ok: boolean, detail = ""): void {
  * failing with a message that names neither the cause nor the command. Stripping
  * the namespace rather than just `dry_run` is deliberate: a future npm setting
  * that changes what an install writes is the same failure wearing a new name.
+ *
+ * `cache` is then set explicitly, after the strip, for the reason above it.
  */
 function npmEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -48,6 +66,7 @@ function npmEnv(): NodeJS.ProcessEnv {
     if (key.startsWith("npm_config_")) continue;
     env[key] = value;
   }
+  env.npm_config_cache = NPM_CACHE;
   return env;
 }
 
@@ -101,6 +120,183 @@ function run(command: string, args: string[], cwd: string): string {
     "tags are plain vX.Y.Z, so the publish workflow fires",
     config["include-component-in-tag"] === false,
   );
+}
+
+// --- 1b. The release path is wired, not merely written ---------------------
+//
+// Everything above checks that a release WOULD be named consistently. This block
+// checks that anything ever runs at all, because for this repository nothing did:
+// the publish steps existed, were correct, and had never executed once. No tag,
+// no GitHub release, no version on npm — and `pnpm run ci` was green throughout,
+// because none of it is visible from the working tree.
+//
+// The cause was structural. `release-please.yml` created the tag with a
+// `GITHUB_TOKEN` (or, with no secret, did not run at all), and a tag made that way
+// triggers no workflow — so `release.yml`, which fires on `v*.*.*`, was never
+// reached. The fix is that the run which creates the tag also publishes it.
+{
+  const workflows = join(ROOT, ".github/workflows");
+  const release = readFileSync(join(workflows, "release.yml"), "utf8");
+  const please = readFileSync(join(workflows, "release-please.yml"), "utf8");
+
+  check(
+    "release.yml is callable, so a tag is published by the run that made it",
+    /^ {2}workflow_call:/m.test(release),
+  );
+  check("release.yml still fires on a version tag", /tags:\s*\["v\*\.\*\.\*"\]/.test(release));
+  check(
+    "release-please publishes in the same run that creates the tag",
+    /uses:\s*\.\/\.github\/workflows\/release\.yml/.test(please),
+  );
+  // Without the gate, every push to main would try to publish the version that is
+  // already on the registry. The `npm view` guard would absorb it, which is why a
+  // missing gate is easy to miss and worth pinning.
+  check(
+    "the publish job runs only when a release was actually created",
+    /needs\.release-please\.outputs\.release_created\s*==\s*'true'/.test(please),
+  );
+  // A publish step wrapped in `|| true` or `continue-on-error` reports green for a
+  // version that never reached the registry. That is not hypothetical here: the
+  // comment above the publish step records that it happened once, which is why the
+  // step is unguarded by design.
+  check(
+    "the publish step cannot be swallowed",
+    !/continue-on-error/.test(release) && !/npm publish[^\n]*\|\|/.test(release),
+  );
+
+  // The tag-vs-manifest guard, pinned to the shape that is correct.
+  //
+  // This check exists because the guard was written the obvious way and the
+  // obvious way is wrong: `if: inputs.expected-tag != ''` reads as "run when the
+  // caller supplied a tag", but `inputs` is only populated for `workflow_dispatch`
+  // and `workflow_call`. On a tag push it is the empty string, so the comparison
+  // evaluates to false and the step is SKIPPED — a tag that disagrees with
+  // `package.json` would build, find the version absent, publish it, and report
+  // green. Nothing in a local run catches that: it needs a runner, and the
+  // rehearsal that looked like it covered the step (a dry run dispatched from a
+  // branch) skips it too, because a branch has no tag to compare.
+  //
+  // So the invariant is asserted instead: the guard must key on whether there is
+  // a tag to compare — the ref type, or a tag supplied by the caller — and must
+  // not be gated on `inputs` alone.
+  const tagStep =
+    /- name: The tag matches the manifest version\n([\s\S]*?)\n {6}- name:/.exec(release)?.[1] ??
+    "";
+  check(
+    "the tag-vs-manifest guard runs whenever there is a tag to compare",
+    tagStep !== "" &&
+      /if:\s*github\.ref_type == 'tag' \|\| inputs\.expected-tag != ''/.test(tagStep),
+    tagStep === "" ? "step not found" : "the guard does not name github.ref_type",
+  );
+  check(
+    "the tag-vs-manifest guard falls back to the pushed tag",
+    /EXPECTED_TAG:\s*\$\{\{\s*inputs\.expected-tag\s*\|\|\s*github\.ref_name\s*\}\}/.test(tagStep),
+    "expected `inputs.expected-tag || github.ref_name`",
+  );
+  // A trusted publisher is registered on npm against a workflow FILENAME. Two
+  // things make that harder to keep true than it looks: npm does not validate a
+  // configuration when it is saved — a wrong name surfaces only as an auth error
+  // on the first publish — and when `workflow_call` is involved npm validates the
+  // CALLING workflow's name, not the file that runs `npm publish`. So the
+  // automated path needs an entry for the caller as well.
+  const named = [
+    ...readFileSync(join(ROOT, "CONTRIBUTING.md"), "utf8").matchAll(
+      /^\|\s*Workflow\s*\|\s*`([^`]+)`/gm,
+    ),
+  ].map((match) => match[1] ?? "");
+  check(
+    "CONTRIBUTING names at least one trusted-publisher workflow",
+    named.length > 0,
+    "no `| Workflow | `name` |` row found",
+  );
+  for (const file of named) {
+    check(`the trusted-publisher workflow ${file} exists`, existsSync(join(workflows, file)));
+  }
+  check(
+    "the workflow that runs npm publish is among the named ones",
+    named.some(
+      (file) =>
+        existsSync(join(workflows, file)) &&
+        readFileSync(join(workflows, file), "utf8").includes("npm publish"),
+    ),
+    named.join(", "),
+  );
+  // Derived rather than hard-coded, so renaming the caller cannot quietly skip
+  // this: whatever calls the publishing workflow must have its own npm entry.
+  const callers = readdirSync(workflows).filter(
+    (file) =>
+      /\.ya?ml$/.test(file) &&
+      /uses:\s*\.\/\.github\/workflows\/release\.yml/.test(
+        readFileSync(join(workflows, file), "utf8"),
+      ),
+  );
+  check(
+    "every workflow that calls the publisher has a trusted-publisher entry",
+    callers.every((file) => named.includes(file)),
+    `callers: ${callers.join(", ") || "none"}; named: ${named.join(", ")}`,
+  );
+}
+
+// --- 1c. The gate is one command, and every workflow runs all of it ---------
+//
+// Twice now a subset of the gate has run and reported green, and neither time
+// was any individual step wrong:
+//
+//   - `release.yml` ran `pnpm run ci` without `jj` or `jj-hunk` installed, so
+//     every test that drives a real binary skipped — and a skip is not a
+//     failure (`release.yml` sets `DSH_JUJUTSU_REQUIRE_TOOLS` for exactly this).
+//   - `ci.yml` ran the package checks twice, because they are the tail of
+//     `pnpm run ci` and also had a step of their own — the same command in two
+//     places, which is the drift a single gate command exists to prevent.
+//
+// So the invariant is about composition rather than about any one step: a
+// workflow that runs the gate runs the same gate, under the same conditions,
+// once, and the stages are in the order that makes each of them meaningful.
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  const gate = pkg.scripts?.ci ?? "";
+  // The panel tests read `lib/client.js`, the *built* artifact, so a suite that
+  // ran before the build would test whatever was built last. The comment in
+  // `ci.yml` records why the build is inside the gate at all.
+  const build = gate.indexOf("pnpm run build");
+  const test = gate.indexOf("vp test run");
+  check("the gate builds before it tests", build !== -1 && test !== -1 && build < test, gate);
+  // The tarball check is the only one that sees what a consumer receives. As the
+  // tail of `ci` it covers a local run and a release alike; a gate without it
+  // cannot notice the package that installs and does not load.
+  check("the gate ends with the package checks", /&&\s*pnpm run check\s*$/.test(gate), gate);
+
+  const workflows = join(ROOT, ".github/workflows");
+  const runners = readdirSync(workflows)
+    .filter((file) => /\.ya?ml$/.test(file))
+    .filter((file) => readFileSync(join(workflows, file), "utf8").includes("pnpm run ci"));
+  // Without this, a renamed gate command would make every assertion below match
+  // nothing, and a check that matches nothing passes for the wrong reason.
+  check(
+    "at least one workflow runs the gate",
+    runners.length > 0,
+    `no workflow runs \`pnpm run ci\``,
+  );
+  for (const file of runners) {
+    const text = readFileSync(join(workflows, file), "utf8");
+    check(
+      `${file} sets up the tools the gate needs`,
+      /uses:\s*\.\/\.github\/actions\/setup/.test(text),
+      "a setup that is not shared is one that drifts",
+    );
+    check(
+      `${file} demands that the real binaries ran`,
+      /DSH_JUJUTSU_REQUIRE_TOOLS\s*:\s*["']?1["']?/.test(text),
+      "a skip is not a failure",
+    );
+    check(
+      `${file} does not run the package checks beside the gate`,
+      !/\brun:\s*node scripts\/check\.ts/.test(text),
+      "`scripts/check.ts` is the tail of `pnpm run ci`, not a step of its own",
+    );
+  }
 }
 
 // --- 2. The build output is current and complete --------------------------
@@ -316,6 +512,7 @@ function run(command: string, args: string[], cwd: string): string {
 }
 
 // --- report ----------------------------------------------------------------
+rmSync(NPM_CACHE, { recursive: true, force: true });
 for (const name of checks) console.log(`ok    ${name}`);
 for (const failure of failures) console.error(`FAIL  ${failure}`);
 console.log(`\n${checks.length} passed, ${failures.length} failed`);

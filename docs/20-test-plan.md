@@ -35,6 +35,23 @@ Built by `test/fixtures/build-fixtures.sh` (the only committed generator). The
 script deletes its root, rebuilds, and then **verifies** every shape below,
 exiting non-zero if any check fails.
 
+**Two callers, and only one of them is destructive.** Run by hand with no
+argument, the script behaves as it always has: it wipes
+`/tmp/dsh-jujutsu-fixtures` and rebuilds it. Run by `test/global-setup.ts` — the
+path the suite takes — it is atomic instead, because the fixed root is shared by
+every concurrent run and the old in-place rebuild let one run delete the tree
+another was asserting on (the same bug the e2e root had). The suite's path builds
+into a private sibling directory and publishes it with `rename`, which succeeds
+only when the destination is absent or an empty directory; a loser discards its
+staging root. A complete root is never rebuilt, so the common case is now zero
+work.
+
+One consequence worth knowing: if `/tmp/dsh-jujutsu-fixtures` exists but is
+**incomplete** — left by an interrupted build or by the old in-place script — the
+suite refuses to run rather than deleting a path another run may be reading, and
+says which directory to remove. That is deliberate: a silent rebuild is how the
+race got in.
+
 | Fixture           | Shape (verified)                                                                                                                | Layer | Acceptance criteria                 |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------- |
 | `plain-git`       | `git init -b main` + 1 commit. `.git/` directory, **no `.jj`**                                                                  | L3    | AC1, AC7                            |
@@ -399,7 +416,7 @@ decided.
 
 ```bash
 pnpm install
-pnpm run ci          # typecheck, vp check, build, the suite, the package checks
+pnpm run ci          # vp check (format, lint, typecheck), build, the suite, the tarball
 ```
 
 The fixtures are **not** a step you run. `test/global-setup.ts` builds them before

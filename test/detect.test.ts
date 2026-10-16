@@ -9,9 +9,11 @@
  * (`docs/13-empirical-verification.md` §2).
  */
 
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { detect, effectiveCwd, findWorkspaceRoot, invalidateDetection } from "../src/detect.ts";
 import { apply } from "../src/index.ts";
@@ -133,13 +135,25 @@ describe.skipIf(!HAS_FIXTURES)("effectiveCwd", () => {
 });
 
 describe.skipIf(!HAS_FIXTURES)("cache invalidation — the stale-negative bug", () => {
-  const SCRATCH = "/tmp/dsh-jujutsu-cache-test";
+  // A root unique to this process. It used to be a fixed `/tmp` path, which two
+  // concurrent suite runs shared: one run's `beforeAll` deleted the tree the
+  // other was asserting on. `mkdtemp` also removes the reason the old code had
+  // to wipe a tree left behind by a previous run — this one starts empty.
+  //
+  // Created in `beforeAll` rather than here, because a `describe` body runs at
+  // COLLECTION time even when `skipIf` will skip the suite: a `mkdtemp` on this
+  // line made a directory on every run, and the `afterAll` that would have
+  // removed it never runs for a skipped suite. One leaked directory per run on a
+  // machine without `jj` — invisible in CI, and exactly the kind of thing that
+  // accumulates in `/tmp` for a year.
+  let SCRATCH = "";
 
   beforeAll(() => {
-    // The scratch tree persists between runs, and a `.jj` left by a previous run
-    // would make the first assertion in each test fail. Start from nothing.
-    rmSync(SCRATCH, { recursive: true, force: true });
-    mkdirSync(SCRATCH, { recursive: true });
+    SCRATCH = mkdtempSync(join(tmpdir(), "dsh-jujutsu-cache-test-"));
+  });
+
+  afterAll(() => {
+    if (SCRATCH !== "") rmSync(SCRATCH, { recursive: true, force: true });
   });
 
   it("clears the cache when the plugin is applied", async () => {

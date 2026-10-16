@@ -7,16 +7,50 @@
  * plugin, and that the nearest marker wins.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apply } from "../src/index.ts";
 import { invalidateDetection } from "../src/detect.ts";
 import { MARKER_FILE, invalidateMarkers, markerFor } from "../src/marker.ts";
 import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
-const ROOT = "/tmp/dsh-jujutsu-marker-test";
+/**
+ * A root unique to this process.
+ *
+ * It used to be a fixed `/tmp` path, which two concurrent suite runs shared —
+ * the same failure the note further down records for `/tmp/.dsh-jujutsu.json`,
+ * one level up: one run's `beforeEach` deleted the tree the other was asserting
+ * on. Per test, `beforeEach` still clears it, because the tests below write
+ * markers and expect a clean tree.
+ */
+/**
+ * Created in `beforeAll`, not at module scope, and that distinction is the whole
+ * point of this comment.
+ *
+ * `mkdtempSync` at module scope ran at COLLECTION time — and a skipped suite
+ * still collects. `describe.skipIf` runs its factory, so a module-scope
+ * `mkdtemp` made a directory on every run, including runs where nothing in this
+ * file executes. The `afterAll` that removes it is a file-level hook, and Vitest
+ * does not run file-level hooks for a file where every suite was skipped.
+ *
+ * Measured, not assumed: with `HAS_FIXTURES` forced false, `dsh-jujutsu-marker-test-*`
+ * went from 1 directory to 2 across one skipped run, while the same experiment on
+ * `detect.test.ts` — fixed first — stayed at 0. One leaked directory per run on a
+ * machine without `jj`, which is invisible in CI and accumulates in `$TMPDIR`.
+ */
+let ROOT = "";
+
+beforeAll(() => {
+  ROOT = mkdtempSync(join(tmpdir(), "dsh-jujutsu-marker-test-"));
+});
+
+afterAll(() => {
+  if (ROOT !== "") rmSync(ROOT, { recursive: true, force: true });
+});
 
 function writeMarker(dir: string, body: string): void {
   mkdirSync(dir, { recursive: true });

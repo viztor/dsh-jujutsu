@@ -7,6 +7,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 import { describe, expect, it } from "vitest";
 
@@ -20,7 +21,6 @@ function schemaFields(): Set<string> {
   return new Set([...body.matchAll(/^  ([a-zA-Z]+): z\b/gm)].map((m) => m[1] ?? ""));
 }
 
-/** Load the bundle with stubbed modules and return its exports. */
 /**
  * The hooks called during one render, in order.
  *
@@ -32,6 +32,7 @@ function schemaFields(): Set<string> {
  */
 const hookLog: string[] = [];
 
+/** Load the bundle with stubbed modules and return its exports. */
 function loadPanel(
   fieldState: { text?: string; overridden?: boolean; invalid?: boolean } = {},
 ): Record<string, any> {
@@ -43,7 +44,10 @@ function loadPanel(
       },
     },
   };
-  new Function("window", PANEL)(win);
+  // `node:vm` rather than the `Function` constructor: the bundle has to run with
+  // `window` in scope, and a context of its own is both closer to the browser
+  // (one global, nothing else of this process) and not an eval-class construct.
+  runInNewContext(PANEL, { window: win });
   if (factory === undefined) throw new Error("bundle did not register a factory");
 
   const stubs: Record<string, unknown> = {
@@ -90,7 +94,11 @@ function loadPanel(
       },
       settingsTextField: (f: string) => ({
         field: f,
-        format: (v: unknown) => String(v ?? ""),
+        // The real `settingsTextField`'s own rule: a string is the draft text,
+        // anything else is empty. A `String(value)` here would turn a
+        // non-string into `[object Object]` in the very stub that exists to
+        // check what the panel asks of it.
+        format: (v: unknown) => (typeof v === "string" ? v : ""),
         parse: (t: string) => ({ kind: "set", value: t }),
       }),
     },
@@ -383,8 +391,11 @@ describe("the bundle loads as written", () => {
   });
 
   it("requires only what the client runtime provides", () => {
-    const requires = [...PANEL.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
-    expect(requires.sort()).toEqual(["@deepseek-ai/dsh-client-ui-primitives", "react"]);
+    const requires = [...PANEL.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1] ?? "");
+    expect(requires.sort((a, b) => a.localeCompare(b))).toEqual([
+      "@deepseek-ai/dsh-client-ui-primitives",
+      "react",
+    ]);
   });
 
   it("mounts on the bundle's own page, keyed by the package name", () => {

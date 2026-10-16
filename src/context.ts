@@ -1,5 +1,5 @@
 /**
- * Teaching the model: the rule, the state, and (later) the manual.
+ * Teaching the model: the rule and the state here, the manual in `skill.ts`.
  *
  * The seam is `ctx.systemPrompt`, and the pattern is copied from
  * `dsh-user-approval`'s own registration — `ctx.inject(['systemPrompt'], scope =>

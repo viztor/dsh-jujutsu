@@ -7,3 +7,23 @@ allowBuilds:
 # blocks dependency build scripts by default, which makes `pnpm install` exit 1
 # with ERR_PNPM_IGNORED_BUILDS and leaves vitest unable to run. Approving exactly
 # this one dependency is the narrowest fix.
+# pnpm's release-age gate holds back versions published inside its window —
+# 1440 minutes, pnpm's own default, which neither this repo nor a home config
+# overrides. `pnpm install` wrote this list itself: `vite-plus@1.3.0` and
+# `@deepseek-ai/cordis@4.0.5` were published 18 and 10 hours before the bump
+# resolved, and naming them here is what lets a resolution take them anyway
+# instead of holding them back for the rest of the window. Both entries stop
+# doing work once the versions age out.
+minimumReleaseAgeExclude:
+  - "@deepseek-ai/cordis@4.0.5"
+  - "@deepseek-ai/cosmokit@1.8.6"
+  - "@voidzero-dev/vite-plus-core@1.3.0"
+  - "@voidzero-dev/vite-plus-darwin-arm64@1.3.0"
+  - "@voidzero-dev/vite-plus-darwin-x64@1.3.0"
+  - "@voidzero-dev/vite-plus-linux-arm64-gnu@1.3.0"
+  - "@voidzero-dev/vite-plus-linux-arm64-musl@1.3.0"
+  - "@voidzero-dev/vite-plus-linux-x64-gnu@1.3.0"
+  - "@voidzero-dev/vite-plus-linux-x64-musl@1.3.0"
+  - "@voidzero-dev/vite-plus-win32-arm64-msvc@1.3.0"
+  - "@voidzero-dev/vite-plus-win32-x64-msvc@1.3.0"
+  - vite-plus@1.3.0

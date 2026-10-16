@@ -9,6 +9,16 @@
 # verifies the shape of every fixture it builds and exits non-zero if any check
 # fails, so a green run means the fixtures are usable.
 #
+# Two callers, one build:
+#
+#   * by hand, with no argument — the destructive in-place rebuild above, which
+#     is what you want when the fixtures look wrong and you want them gone;
+#   * `test/global-setup.ts`, which passes a private staging ROOT and then
+#     publishes it to the documented path with an atomic rename. That is what
+#     keeps two concurrent suite runs from deleting each other's fixtures. The
+#     script does not do the publishing itself, because a human running it wants
+#     the path they named, not a path the harness chose.
+#
 # Requires: jj >= 0.46 and git on PATH. jj-hunk is optional; when present it is
 # used for one smoke check on jj-with-changes.
 #

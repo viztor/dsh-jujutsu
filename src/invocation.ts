@@ -670,8 +670,8 @@ function extractSubstitutions(text: string) {
 }
 
 /** Named `$VAR` / `${VAR}` references outside single quotes. */
-function findVariableRefs(text: string) {
-  const found = new Set();
+function findVariableRefs(text: string): string[] {
+  const found = new Set<string>();
   let quote = null;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];

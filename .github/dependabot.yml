@@ -51,8 +51,11 @@ updates:
         dependency-type: development
         update-types: [minor, patch]
 
-  # Workflow actions, including `voidzero-dev/setup-vp`, which the CI guide
-  # recommends keeping current by exact tag.
+  # Workflow actions — the `actions/*` and `pnpm/action-setup` steps the two
+  # workflows are built from. `voidzero-dev/setup-vp`, which the Vite+ CI guide
+  # recommends, is deliberately not one of them: `./.github/actions/setup` says
+  # why, so this entry keeps the pinned steps current rather than a global
+  # toolchain this repository does not need.
   - package-ecosystem: github-actions
     directory: /
     schedule:

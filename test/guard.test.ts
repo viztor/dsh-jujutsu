@@ -342,9 +342,10 @@ describe("a denial carries a durable code", () => {
     apply(harness.ctx, { guard: true, bypass: "deny", readOnlyGit: "deny" });
     return {
       harness,
-      bashAt(command: string, cwd = `${FIXTURES}/jj-colocated`) {
-        return harness.session("s1", cwd).exec("bash", { command, description: "test" });
-      },
+      // A property, not a method: the tests below destructure it, and a bare
+      // reference to a method reads as an unbound receiver.
+      bashAt: (command: string, cwd = `${FIXTURES}/jj-colocated`) =>
+        harness.session("s1", cwd).exec("bash", { command, description: "test" }),
     };
   }
 

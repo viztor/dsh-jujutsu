@@ -88,6 +88,14 @@ In a directory with **no** version control, the plugin says so — so the agent
 can offer to initialise one, suggesting `jj git init` (colocated, so Git tooling
 still works).
 
+Depth is deferred rather than paid for. The rule and the workspace state ride the
+system prompt because they must be in force before the model's first Git command;
+the **manual** — the working-copy model, the Git→`jj` verb map, what each of the
+eleven tools returns — is registered as a `jujutsu` runtime skill, so its cost is
+one catalog line until the model actually needs it. Turn it off with _Offer the
+jj manual_. Why the split is drawn there, and why the manual is not an MCP
+server, is [docs/36](docs/36-ai-and-jujutsu.md).
+
 ## Configuration
 
 Open **Plugins → Jujutsu**. Most settings are on that page:
@@ -176,7 +184,7 @@ The rest of this file is about building and verifying the plugin itself.
 
 ```bash
 pnpm run build     # tsc -> lib/   then   vp pack -> lib/client.js
-pnpm run ci        # typecheck, format + lint, build, then the suite
+pnpm run ci        # vp check (format, lint, typecheck), build, suite, package
 ```
 
 **`lib/` is not optional and not committed.** The published entry is emitted
@@ -198,8 +206,14 @@ wrapper is the bundler's `banner`/`footer` in `vite.config.ts`. The route serves
 `${package}/client.js` and accepts only `/^client\..*\.js$/`, so
 `scripts/name-client-bundle.ts` renames what `vp pack` emits as `client.cjs`.
 
+Releases do not go through a local `pnpm publish`. The registry entry is created
+by CI through npm's OIDC trusted publishing, so there is no token to hold and
+provenance is automatic; a hand-published version would be the one release with
+no provenance and no tag check. Three ways to trigger it, and the one-time setup
+each needs, are in [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+
 ```bash
-pnpm publish       # prepublishOnly runs `ci`, which builds and tests
+npm publish --dry-run   # what a publish would upload, from the working tree
 ```
 
 ### Layout
@@ -210,7 +224,7 @@ pnpm publish       # prepublishOnly runs `ci`, which builds and tests
 | `src/client/`        | The panel, built to `lib/client.js` by `vp pack`. Harness primitives only.             |
 | `locale/`            | Display name and one-liner, per language.                                              |
 | `SPEC.md`            | The build specification.                                                               |
-| `docs/`              | 36 documents: verified contracts, measurements, decisions.                             |
+| `docs/`              | 37 documents: verified contracts, measurements, decisions.                             |
 | `research/digest.md` | The durable record of the conversation that seeded the design.                         |
 
 ### What is verified, and how
@@ -221,7 +235,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **218 tests**, `pnpm run ci` green.
+observed working in a live session. **231 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

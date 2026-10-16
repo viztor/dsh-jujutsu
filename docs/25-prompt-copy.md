@@ -158,19 +158,32 @@ the model to run `jj git init` in place, because that exits 1 with
 
 ### 2.2 Fallback, destructive paths, write-protection, low confidence (7 rows)
 
-| Case                                                                                             | Message                                                                                                                                                                                                                | Chars |
-| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| R3–R5 generic fallback (bare `git`, `git --version`, unknown subcommand)                         | Refused: this is a Jujutsu workspace and git is not used here. Run: jj help for the command list, or jj log for history with change IDs.                                                                               | 136   |
-| Destructive verb on exact component `.git` (SPEC §5.7)                                           | Deleting .git destroys the object store Jujutsu reads. It is unrecoverable and jj cannot restore it. To de-colocate deliberately run jj git colocation disable; for a second working copy run jj workspace add <path>. | 214   |
-| Destructive verb on exact component `.jj` (SPEC §5.7)                                            | Deleting .jj destroys the operation log and working-copy state. It is unrecoverable. To recover a good state run jj op restore <opId> (list with jj op log); for a second working copy run jj workspace add <path>.    | 211   |
-| Destructive verb, path contains an expansion (`"$PWD/.git"`) — ask, never allow                  | The target path contains a shell expansion, so it cannot be resolved before running. Re-run with a literal path, or use jj git colocation disable (de-colocate) or jj workspace add <path> (second working copy).      | 209   |
-| `write`/`edit` into `.jj/**`                                                                     | Refused: writing inside .jj corrupts the operation log and working-copy state. Read is allowed. To undo a bad operation run: jj op restore <opId> (list operations with jj op log).                                    | 179   |
-| `write`/`edit` into `.git/**`                                                                    | Refused: writing inside .git corrupts the Git backend Jujutsu reads. Read is allowed. To undo a bad operation run: jj op restore <opId> (list operations with jj op log).                                              | 169   |
-| Low confidence: program unresolved (indirect, computed, interpreter inline) — asks, never allows | This invocation cannot be resolved confidently (indirect or computed program). If it runs Git, replace it with the jj equivalent (run jj help). Otherwise re-run it with the program named literally.                  | 197   |
+| Case                                                                                             | Message                                                                                                                                                                                                                                    | Chars |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| R3–R5 generic fallback (bare `git`, `git --version`, unknown subcommand)                         | Refused: this is a Jujutsu workspace and git is not used here. Run: jj help for the command list, or jj log for history with change IDs.                                                                                                   | 136   |
+| Destructive verb on exact component `.git` (SPEC §5.7)                                           | Refused: this deletes .git, which is where Jujutsu keeps its commit objects — so it destroys the history, not just the Git plumbing, and jj cannot restore it. If you meant to stop using Git here, run jj git colocation disable instead. | 234   |
+| Destructive verb on exact component `.jj` (SPEC §5.7)                                            | Refused: this deletes .jj, which holds the operation log — the record every jj undo depends on. Without it nothing is recoverable. To get back to a good state use jj op restore <opId> (list them with jj op log).                        | 211   |
+| Destructive verb, path contains an expansion (`"$PWD/.git"`) — ask, never allow                  | Refused: this deletes a computed path that resolves to .git or .jj. It cannot be checked before the command runs, and both are unrecoverable — .git holds Jujutsu's commits, .jj its operation log. Use a literal path if you mean it.     | 230   |
+| `write`/`edit` into `.jj/**`                                                                     | Refused: writing inside .jj corrupts the operation log and working-copy state. Read is allowed. To undo a bad operation run: jj op restore <opId> (list operations with jj op log).                                                        | 179   |
+| `write`/`edit` into `.git/**`                                                                    | Refused: writing inside .git corrupts the Git backend Jujutsu reads. Read is allowed. To undo a bad operation run: jj op restore <opId> (list operations with jj op log).                                                                  | 169   |
+| Low confidence: program unresolved (indirect, computed, interpreter inline) — asks, never allows | This invocation cannot be resolved confidently (indirect or computed program). If it runs Git, replace it with the jj equivalent (run jj help). Otherwise re-run it with the program named literally.                                      | 197   |
 
 `read` into `.jj/**` or `.git/**` is allowed and produces no message
 ([14](14-decision-log.md) D6). Exact-component matching keeps `.gitignore`,
 `.gitattributes`, `.gitkeep` and `.github/` out of the destructive predicate.
+
+**The three destructive rows were corrected to the shipped copy.** They were the
+only rows in this table without the `Refused:` prefix that every other denial
+carries, and `src/messages.ts` emits `reason` verbatim as the refusal — so the
+document, not the module, was the odd one out. Two further tells: the README
+already described the `.git` case as "explains that `jj`'s commit objects live
+there", which is this wording and not the old one, and the old rows offered `jj
+workspace add <path>` as a second alternative, which the shipped copy dropped to
+stay inside the 240-character budget the module asserts at load. The module's
+header says the document wins; the fix for a disagreement is to correct whichever
+side is stale, and here that was the document. `test/transcription.test.ts` now
+checks the two against each other in both directions, so the next disagreement
+fails rather than waiting to be noticed.
 
 ### 2.3 `displayReason` variants (11 rows)
 

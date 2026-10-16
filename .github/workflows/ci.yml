@@ -29,27 +29,24 @@ jobs:
       # cannot drift into running different suites.
       - uses: ./.github/actions/setup
 
-      # `ci` is the whole gate in one command — typecheck, `vp check` for format
-      # and lint, the build, then the suite — and it is deliberately not spelled
-      # out step by step here. A tag runs exactly what a commit runs, and two
-      # lists of the same steps drift.
+      # `ci` is the whole gate in one command — `vp check` for format, lint and
+      # typecheck, the build, the suite, then the package checks — and it is
+      # deliberately not spelled out step by step here. A tag runs exactly what a
+      # commit runs, and two lists of the same steps drift.
       #
       # The build is inside it for a reason worth keeping: the panel tests read
       # `lib/client.js`, the *built* artifact, because the source and the bundle
       # are two different things and it is the bundle the browser loads. Running
       # the suite without building first would test whatever was built last.
-      - name: Gate (typecheck, format, lint, build, test)
+      #
+      # The package checks are the tail of the same command, not a step after it.
+      # They were repeated here once — `pnpm run ci` finishes with
+      # `scripts/check.ts`, and this job then ran the identical command again —
+      # which made the one check that sees what a consumer receives the one with
+      # a second copy of itself to keep in step.
+      - name: Gate (check, build, test, package)
         env:
           # A skip is not a failure. Here the binaries are installed, so a skip
           # would mean the install silently did not happen.
           DSH_JUJUTSU_REQUIRE_TOOLS: "1"
         run: pnpm run ci
-
-      # Everything above runs against the working tree. This is the only check
-      # that sees what a consumer receives: it packs the tarball, installs it
-      # with plain npm into a scratch directory, and loads it. The type-stripping
-      # constraint that shapes this package — Node refuses to strip types for
-      # files under `node_modules` — is invisible to every test above and fatal
-      # here, which is the whole reason the step exists.
-      - name: Package checks
-        run: node scripts/check.ts

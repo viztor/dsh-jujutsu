@@ -35,7 +35,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 
-import { ErrorCode } from "./errors.ts";
+import { ErrorCode, type ToolError } from "./errors.ts";
 import { applyHunks, listHunks } from "./hunk.ts";
 import type { Settings } from "./settings.ts";
 import { ShellUnavailableError, runJj } from "./shell.ts";
@@ -99,6 +99,27 @@ function cwdOf(exec: unknown): string | undefined {
 function agentOf(exec: unknown): { agent?: unknown } {
   const agent = (exec as { agent?: unknown }).agent;
   return agent === undefined ? {} : { agent };
+}
+
+/** The `execute` every tool definition exposes: arguments in, a JSON value out. */
+type ToolHandler = (args: ToolArgs, exec: unknown) => Promise<unknown>;
+
+/**
+ * Wrap a handler so it runs against the session's workspace root.
+ *
+ * All eleven tools refuse an unresolved root identically, and the refusal is the
+ * bare code — no `message`, no `hint` — which makes the shape model-visible and
+ * not an implementation detail. Eleven hand-written copies of that two-line
+ * preamble were eleven chances for one tool to drift from it.
+ */
+function onWorkspaceRoot(
+  run: (args: ToolArgs, cwd: string, exec: unknown) => Promise<unknown>,
+): ToolHandler {
+  return async (args, exec) => {
+    const cwd = cwdOf(exec);
+    if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    return run(args, cwd, exec);
+  };
 }
 
 /**
@@ -368,7 +389,7 @@ async function identityConfigured(
 }
 
 /** The refusal every commit-creating tool returns when the identity is unset. */
-function identityRefusal(): unknown {
+function identityRefusal(): ToolError {
   return {
     error: {
       code: ErrorCode.JJ_IDENTITY_UNCONFIGURED,
@@ -423,7 +444,7 @@ async function conflictRefusal(
   ctx: Context,
   settings: Settings,
   cwd: string,
-): Promise<unknown | undefined> {
+): Promise<ToolError | undefined> {
   if ((await conflictOf(ctx, settings, cwd)) !== true) return undefined;
   return {
     error: {
@@ -449,14 +470,14 @@ async function conflictRefusal(
  *   an internal layout detail, verified on 0.46.0 and no other version, so
  *   refusing on its absence would refuse repositories that are fine.
  */
-const repoChecks = new Map<string, unknown | undefined>();
+const repoChecks = new Map<string, ToolError | undefined>();
 
 /** Forget the cached repository probes. For tests. */
 export function forgetRepoChecks(): void {
   repoChecks.clear();
 }
 
-async function repoRefusal(ctx: Context, cwd: string): Promise<unknown | undefined> {
+async function repoRefusal(ctx: Context, cwd: string): Promise<ToolError | undefined> {
   // Once per directory per process. The layout cannot change under a running
   // tool call, and an fs probe on every `jj_*` call would be waste.
   if (repoChecks.has(cwd)) return repoChecks.get(cwd);
@@ -465,7 +486,7 @@ async function repoRefusal(ctx: Context, cwd: string): Promise<unknown | undefin
   return result;
 }
 
-async function probeRepo(ctx: Context, cwd: string): Promise<unknown | undefined> {
+async function probeRepo(ctx: Context, cwd: string): Promise<ToolError | undefined> {
   const fs = ctx.get("fs") as
     | {
         resolve: (p: string) => Promise<unknown>;
@@ -553,9 +574,7 @@ export function buildToolDefinitions(
       "Show the Jujutsu working copy: the current revision, its parent, and whether there are unresolved conflicts.",
     parameters: {},
     output: JSON_OUTPUT,
-    execute: async (_args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (_args, cwd) => {
       const revisions = await jjJson(ctx, settings, cwd, [
         "log",
         "--no-graph",
@@ -567,7 +586,7 @@ export function buildToolDefinitions(
       if (!Array.isArray(revisions)) return revisions; // error object
       const conflict = await conflictOf(ctx, settings, cwd);
       return { conflict: conflict ?? null, revisions };
-    },
+    }),
   });
 
   register({
@@ -578,14 +597,12 @@ export function buildToolDefinitions(
       limit: { type: "integer", description: "Maximum revisions to return." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       const revset = typeof args.revset === "string" ? args.revset : "::@";
       const argv = ["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
       return jjJson(ctx, settings, cwd, argv);
-    },
+    }),
   });
 
   register({
@@ -596,14 +613,12 @@ export function buildToolDefinitions(
       revset: { type: "string", description: "Defaults to `@`." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       const revset = typeof args.revset === "string" ? args.revset : "@";
       const raw = await jj(ctx, settings, cwd, ["diff", "--summary", "-r", revset]);
       if (typeof raw !== "string") return raw; // error object
       return { files: parseSummary(raw) };
-    },
+    }),
   });
 
   register({
@@ -614,13 +629,11 @@ export function buildToolDefinitions(
       limit: { type: "integer", description: "Maximum operations to return." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       const argv = ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
       return jjJson(ctx, settings, cwd, argv);
-    },
+    }),
   });
 
   register({
@@ -635,9 +648,7 @@ export function buildToolDefinitions(
       },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       // `jj new` mints a commit, so an unconfigured identity makes it a trap.
       if ((await identityConfigured(ctx, settings, cwd)) === false) {
         return identityRefusal();
@@ -648,7 +659,7 @@ export function buildToolDefinitions(
       if (typeof args.revset === "string") argv.push(args.revset);
       if (typeof args.message === "string") argv.push("-m", args.message);
       return jj(ctx, settings, cwd, argv);
-    },
+    }),
   });
 
   register({
@@ -660,13 +671,11 @@ export function buildToolDefinitions(
       revset: { type: "string", description: "Defaults to `@`." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       const argv = ["describe", "-m", String(args.message)];
       if (typeof args.revset === "string") argv.push("-r", args.revset);
       return jj(ctx, settings, cwd, argv);
-    },
+    }),
   });
 
   register({
@@ -685,16 +694,14 @@ export function buildToolDefinitions(
       },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       const conflicted = await conflictRefusal(ctx, settings, cwd);
       if (conflicted !== undefined) return conflicted;
       const argv = ["squash"];
       if (typeof args.from === "string") argv.push("--from", args.from);
       if (typeof args.into === "string") argv.push("--into", args.into);
       return jj(ctx, settings, cwd, argv);
-    },
+    }),
   });
 
   register({
@@ -721,9 +728,7 @@ export function buildToolDefinitions(
       },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       return jj(
         ctx,
         settings,
@@ -735,7 +740,7 @@ export function buildToolDefinitions(
           typeof args.newName === "string" ? args.newName : undefined,
         ),
       );
-    },
+    }),
   });
 
   register({
@@ -746,11 +751,9 @@ export function buildToolDefinitions(
       opId: { type: "string", description: "Operation id from jj_op_log.", required: true },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd) => {
       return jj(ctx, settings, cwd, ["op", "restore", String(args.opId)]);
-    },
+    }),
   });
 
   register({
@@ -765,9 +768,7 @@ export function buildToolDefinitions(
       revset: { type: "string", description: "Defaults to `@`." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd, exec) => {
       const outcome = await listHunks(ctx, settings, {
         cwd,
         // The live agent: `ctx.userQuestions.ask` requires it, and the offer to
@@ -777,7 +778,7 @@ export function buildToolDefinitions(
         ...(typeof args.revset === "string" ? { revset: args.revset } : {}),
       });
       return outcome.ok ? outcome.value : outcome.error;
-    },
+    }),
   });
 
   register({
@@ -801,9 +802,7 @@ export function buildToolDefinitions(
       revset: { type: "string", description: "Defaults to `@`." },
     },
     output: JSON_OUTPUT,
-    execute: async (args: ToolArgs, exec: unknown) => {
-      const cwd = cwdOf(exec);
-      if (cwd === undefined) return { error: { code: ErrorCode.WORKSPACE_ROOT_UNRESOLVED } };
+    execute: onWorkspaceRoot(async (args, cwd, exec) => {
       const mode = String(args.mode) as "split" | "commit" | "squash";
       // `squash` moves changes into an existing commit and preserves its author;
       // `split` and `commit` create one, so they are the modes that mint the
@@ -829,7 +828,7 @@ export function buildToolDefinitions(
         typeof args.message === "string" ? args.message : undefined,
       );
       return outcome.ok ? { stdout: outcome.value } : outcome.error;
-    },
+    }),
   });
 
   return definitions;

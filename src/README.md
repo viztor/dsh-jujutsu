@@ -1,8 +1,7 @@
 # `src/` — module map
 
-Every module below has a real signature and a documented contract. The guard
-chain is implemented and tested; `tools.ts` is the remaining piece. Build order
-is `docs/24-implementation-plan.md` §4.
+Every module below has a real signature and a documented contract. Build order is
+`docs/24-implementation-plan.md` §4.
 
 | Module           | Responsibility                                          | Spec                                      |
 | ---------------- | ------------------------------------------------------- | ----------------------------------------- |
@@ -18,6 +17,7 @@ is `docs/24-implementation-plan.md` §4.
 | `explain.ts`     | the denial's second channel via `tools/post-execute`    | `SPEC.md` §5.2                            |
 | `paths.ts`       | destructive-path predicate for `.git` / `.jj`           | `SPEC.md` §5.7, `docs/21` §e              |
 | `context.ts`     | `systemPrompt` rule + state                             | `docs/22`, `SPEC.md` §5.9                 |
+| `skill.ts`       | the `jujutsu` manual, as a runtime skill                | `docs/28` §1, `docs/36`                   |
 | `preflight.ts`   | the 14 environment checks at `agent/created`            | `docs/26` Part A                          |
 | `hunk.ts`        | the `jj-hunk` bridge                                    | `docs/08`, `docs/24` §3.8                 |
 | `tools.ts`       | the eleven first-class tools                            | `docs/18`, `docs/25` §3                   |
@@ -30,24 +30,25 @@ is `docs/24-implementation-plan.md` §4.
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 218 tests, `pnpm run ci` green:
+Implemented and tested — 231 tests, `pnpm run ci` green:
 
-| Module          | What works                                                                   |
-| --------------- | ---------------------------------------------------------------------------- |
-| `invocation.ts` | the ported resolver; corpus test passes (64 commands, **0 false positives**) |
-| `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing              |
-| `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                   |
-| `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback            |
-| `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)          |
-| `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                         |
-| `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read          |
-| `explain.ts`    | the denial's second channel; learns an approval                              |
-| `bypass.ts`     | the session-scoped remembered grant                                          |
-| `context.ts`    | the rule and the state, empty outside a `jj` workspace                       |
-| `preflight.ts`  | gathers detection, `@`, and `jj-hunk` at `agent/created`                     |
-| `shell.ts`      | the `ctx.shell` wrapper and `shellQuote`                                     |
-| `hunk.ts`       | the `jj-hunk` bridge with its pre-checks                                     |
-| `tools.ts`      | the eleven `jj` tools, and `buildToolDefinitions` for testing them           |
+| Module          | What works                                                                       |
+| --------------- | -------------------------------------------------------------------------------- |
+| `invocation.ts` | the ported resolver; corpus test passes (64 commands, **0 false positives**)     |
+| `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing                  |
+| `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                       |
+| `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback                |
+| `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)              |
+| `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                             |
+| `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read              |
+| `explain.ts`    | the denial's second channel; learns an approval                                  |
+| `bypass.ts`     | the session-scoped remembered grant                                              |
+| `context.ts`    | the rule and the state, empty outside a `jj` workspace                           |
+| `skill.ts`      | the `jujutsu` manual as a runtime skill, registered only when `teachSkill` is on |
+| `preflight.ts`  | gathers detection, `@`, and `jj-hunk` at `agent/created`                         |
+| `shell.ts`      | the `ctx.shell` wrapper and `shellQuote`                                         |
+| `hunk.ts`       | the `jj-hunk` bridge with its pre-checks                                         |
+| `tools.ts`      | the eleven `jj` tools, and `buildToolDefinitions` for testing them               |
 
 ### Live verification
 

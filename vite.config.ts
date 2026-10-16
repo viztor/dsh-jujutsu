@@ -59,17 +59,27 @@ export default defineConfig({
 
   lint: {
     options: {
-      // `vp check` advertises "format, lint, and type checks", and its own docs
-      // say type-checking needs these two. Verified: without them `vp check`
-      // exits **0** on a file containing `const x: number = "s"`, while
-      // `tsc --noEmit` on the same file reports TS2322. So they are what makes
-      // `vp check` honest, and the `ci` script's separate `tsc --noEmit` is a
-      // belt-and-braces second opinion rather than the only typecheck.
+      // This pair is what makes `vp check`'s third promise — "type checks" — real
+      // rather than advertised. Verified: without them `vp check` exits **0** on a
+      // file containing `const x: number = "s"`, while `tsc --noEmit` on the same
+      // file reports TS2322.
       //
       // `typeAware` is a prerequisite of `typeCheck`, not an alternative:
       // tsgolint drives both, and enabling one without the other has no effect.
+      //
+      // They are also the typecheck the `ci` script relies on. It used to run a
+      // separate `tsc --noEmit` beside an honest-looking `vp check`; that step is
+      // gone, and `tsconfig.json`'s `include` now names every checked file group
+      // (`src/`, `test/`, `scripts/`, `vite.config.ts`) so the standalone
+      // `typecheck` script is a second opinion on the same set rather than a
+      // narrower one.
       typeAware: true,
       typeCheck: true,
+      // Warnings fail the check. Turning the pair above on surfaced 17 of them,
+      // the commit message recorded the count so it would not be a surprise —
+      // and nothing acted on it. A count in a message is not a gate. The tree was
+      // taken to zero deliberately; this keeps it there.
+      denyWarnings: true,
     },
   },
 

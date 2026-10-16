@@ -33,7 +33,7 @@ import type { Context } from "@deepseek-ai/cordis";
 
 import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import type { Settings } from "./settings.ts";
-import { type RunResult, ShellUnavailableError, run, runJj } from "./shell.ts";
+import { type RunOptions, type RunResult, ShellUnavailableError, run, runJj } from "./shell.ts";
 
 /** The commands the bridge exposes. */
 export type HunkMode = "split" | "commit" | "squash";
@@ -110,6 +110,20 @@ export type HunkOutcome<T> =
     };
 
 /**
+ * The run options a `jj-hunk` invocation inherits from its caller.
+ *
+ * The retry after a successful install has to repeat the first attempt exactly,
+ * and it is a separate call on purpose — "retry once, and only once" is the rule
+ * — so a second hand-built options object is one an edit can miss.
+ */
+function runOptions(options: HunkOptions): RunOptions {
+  return {
+    cwd: options.cwd,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  };
+}
+
+/**
  * Refuse a revset that does not name exactly one revision.
  *
  * `jj-hunk list -r 'all()'` **exits 0** and silently diffs the merged revision
@@ -135,10 +149,7 @@ async function requireSingleRevision(
       ctx,
       settings.jjPath,
       ["log", "--no-graph", "-T", 'change_id ++ "\\n"', "-r", options.revset],
-      {
-        cwd: options.cwd,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
+      runOptions(options),
     );
   } catch (error) {
     return fail(
@@ -269,10 +280,7 @@ async function invoke(
   options: HunkOptions,
 ): Promise<HunkOutcome<RunResult>> {
   try {
-    const result = await runJj(ctx, settings.jjHunkPath, args, {
-      cwd: options.cwd,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    });
+    const result = await runJj(ctx, settings.jjHunkPath, args, runOptions(options));
     if (result.timedOut) {
       return fail(ErrorCode.SHELL_TIMEOUT, "jj-hunk timed out");
     }
@@ -422,10 +430,7 @@ async function missingBinary(
   // Retry **once**, and only once. A successful install that still fails is a
   // real failure, and looping would hide it.
   try {
-    const retry = await runJj(ctx, settings.jjHunkPath, args, {
-      cwd: options.cwd,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    });
+    const retry = await runJj(ctx, settings.jjHunkPath, args, runOptions(options));
     if (retry.exitCode === 0) return { ok: true, value: retry };
     return fail(
       ErrorCode.JJ_EXEC_FAILED,

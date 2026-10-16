@@ -168,7 +168,13 @@ interface SettingsFormProps {
 
 /** What the client runtime resolves for this bundle. */
 interface ClientPrimitives {
-  createElement(type: unknown, props: unknown, ...children: unknown[]): unknown;
+  /**
+   * `this: void` because React's `createElement` is a module-level function, not
+   * a method on the namespace: the panel holds a bare reference to it (`h`), and
+   * a `this`-free signature is what makes that extraction safe rather than
+   * lucky.
+   */
+  createElement(this: void, type: unknown, props: unknown, ...children: unknown[]): unknown;
   useState<S>(initial: S): [S, (next: S) => void];
   useSyncExternalStore<S>(
     subscribe: (listener: () => void) => () => void,
@@ -227,6 +233,8 @@ interface ClientContext {
 const primitives = require("@deepseek-ai/dsh-client-ui-primitives") as ClientPrimitivesModule;
 const react = require("react") as ClientPrimitives;
 
+// A bare reference: `createElement` is declared `this: void` above, so the
+// extraction cannot lose a receiver.
 const h = react.createElement;
 
 /** The settings namespace. Must equal the host half's exported `name`. */
@@ -734,10 +742,14 @@ function render(props: PanelProps): unknown {
   }
 
   const t = translator(props);
+  // The store's methods are reached through the object rather than extracted:
+  // `SnapshotStore` above is a transcription of the harness's declaration, so
+  // the panel cannot claim its methods are receiver-free — and
+  // `useSyncExternalStore` calls whatever it is given as a plain function.
   const state = react.useSyncExternalStore(
-    props.store.subscribe,
-    props.store.getSnapshot,
-    props.store.getSnapshot,
+    (listener) => props.store.subscribe(listener),
+    () => props.store.getSnapshot(),
+    () => props.store.getSnapshot(),
   );
   const shell = state.shell;
   const blocks = GROUPS.map((group) =>
