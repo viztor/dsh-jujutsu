@@ -61,7 +61,7 @@ runs:
     # Pinned to a tag, because a branch-tracking install builds whatever `main` is
     # at that moment.
     - name: Cache jj-hunk
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cargo/bin/jj-hunk
         key: jj-hunk-git-v0.5.1-${{ runner.os }}
