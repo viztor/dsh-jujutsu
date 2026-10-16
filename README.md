@@ -1,8 +1,22 @@
-# Jujutsu for DeepSeek Harness
+<div align="center">
+  <img src="icon.svg" alt="Jujutsu on DeepSeek Harness" width="112" />
+  <h1>dsh-jujutsu</h1>
+  <p><b>Jujutsu for DeepSeek Harness</b><br />Makes the harness <i>jj-native</i> — the agent uses <code>jj</code> instead of Git, and is told why.</p>
 
-Makes the harness **jj-native**. Inside a [Jujutsu](https://jj-vcs.dev) workspace
-the agent stops reaching for Git and uses `jj` instead — and it is _told_ why,
-rather than just being blocked.
+  <p>
+    <a href="https://www.npmjs.com/package/dsh-jujutsu"><img src="https://img.shields.io/npm/v/dsh-jujutsu.svg" alt="npm version" /></a>
+    <a href="https://www.npmjs.com/package/dsh-jujutsu"><img src="https://img.shields.io/npm/dm/dsh-jujutsu.svg" alt="npm downloads" /></a>
+    <a href="https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml"><img src="https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/viztor/dsh-jujutsu/actions/workflows/release.yml"><img src="https://github.com/viztor/dsh-jujutsu/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+    <a href="https://github.com/viztor/dsh-jujutsu/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/dsh-jujutsu.svg" alt="license" /></a>
+    <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/dsh-jujutsu.svg" alt="node" /></a>
+  </p>
+</div>
+
+---
+
+Inside a [Jujutsu](https://jj-vcs.dev) workspace the agent stops reaching for Git
+and uses `jj` instead — and it is _told_ why, rather than just being blocked.
 
 - **Refuses Git where it would mislead.** `git status` in a colocated repo
   reports a different state than `jj status`. The guard catches that and hands
