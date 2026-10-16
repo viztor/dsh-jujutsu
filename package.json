@@ -69,12 +69,12 @@
     "@deepseek-ai/dsh-shell": "0.2.0-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.5",
     "@types/react": "^18.3.31",
     "react": "^18.3.1",
     "typescript": "^7.0.2",
-    "vite-plus": "1.1.0",
-    "vitest": "^5.0.4"
+    "vite-plus": "1.2.0",
+    "vitest": "^5.0.5"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4 || >=4.0.5-0 <4.1.0",
