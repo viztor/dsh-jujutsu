@@ -18,6 +18,15 @@ on:
 permissions:
   contents: read
 
+# Keyed on the tag, never cancelled. Two runs of the SAME tag race — the second
+# would hit a half-published registry — and they are both wanted here: a re-run
+# after a transient npm fault is exactly how a release recovers, and the publish
+# steps skip versions already on the registry. Cancelling one would leave the
+# release in the state where neither run finished.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest

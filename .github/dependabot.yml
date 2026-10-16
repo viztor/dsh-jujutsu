@@ -1,0 +1,63 @@
+# Dependency updates for a DSH bundle.
+#
+# The @deepseek-ai/* devDependencies are prereleases that move fast, and moving
+# them is the single most likely thing to break this package: the harness
+# surfaces in `src/` are typed against them. Bumping one to a version whose
+# contract moved is a real task — move them all together, run `pnpm run ci`,
+# and read what the panel tests say — so they are opened as pull requests rather
+# than merged automatically.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    ignore:
+      # React is never shipped from here: the panel leaves `react` and
+      # `react/jsx-runtime` to the host's module loader, and the host is React
+      # 18 — a devDependency on 19 would run the suite against a React line the
+      # harness does not have: green tests answering a question the runtime
+      # never asks. Move both together, on the day the host does.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      # The Voidzero toolchain moves as one lever, by hand. `vite-plus` bundles
+      # its own Vitest at an exact version, so the two are not independent
+      # choices: a pull request moving `vitest` alone leaves the suite importing
+      # a different Vitest than the one running it — and a `vite-plus` bump is
+      # red on arrival when the new exact version is inside pnpm's 24-hour
+      # release-age window. Move both together at one version and run the gate.
+      - dependency-name: "vite-plus"
+      - dependency-name: "vitest"
+    groups:
+      # One PR for the whole harness set. They are released together, so bumping
+      # one without the others produces a lockfile that resolves a mixture of
+      # two runtimes.
+      dsh-runtime:
+        patterns:
+          - "@deepseek-ai/*"
+      # The toolchain pieces vite-plus does not bundle.
+      tooling:
+        patterns:
+          - "typescript"
+          - "@types/node"
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Workflow actions, including `voidzero-dev/setup-vp`, which the CI guide
+  # recommends keeping current by exact tag.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]
