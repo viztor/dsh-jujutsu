@@ -1,6 +1,6 @@
 {
   "name": "dsh-jujutsu",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Refuses Git inside a Jujutsu workspace and hands the model the jj command instead. Eleven jj tools, prompt teaching, and a jj-hunk bridge for the DeepSeek Harness.",
   "keywords": [
     "cordis",
