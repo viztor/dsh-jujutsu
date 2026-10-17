@@ -13,6 +13,7 @@ Every module below has a real signature and a documented contract. Build order i
 | `parse.ts`       | the resolver's **typed public surface**                 | `docs/15` §4, `docs/21`                   |
 | `invocation.ts`  | the resolver **engine** — a verbatim port, annotated    | `docs/21`, `scripts/probe-invocation.mjs` |
 | `verbs.ts`       | the Git→`jj` table and classification                   | `docs/15`, `docs/25` §2                   |
+| `translate.ts`   | static analysis: the concrete `jj` command for an argv  | `docs/15` §6, `docs/25` §2.4              |
 | `guard.ts`       | the `tools/pre-execute` listener                        | `SPEC.md` §5.2, `docs/31` Q1              |
 | `explain.ts`     | the denial's second channel via `tools/post-execute`    | `SPEC.md` §5.2                            |
 | `paths.ts`       | destructive-path predicate for `.git` / `.jj`           | `SPEC.md` §5.7, `docs/21` §e              |
@@ -30,7 +31,7 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 231 tests, `pnpm run ci` green:
+Implemented and tested — 269 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                       |
 | --------------- | -------------------------------------------------------------------------------- |
@@ -38,6 +39,7 @@ Implemented and tested — 231 tests, `pnpm run ci` green:
 | `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing                  |
 | `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                       |
 | `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback                |
+| `translate.ts`  | static analysis: argv → the concrete `jj` command, or `undefined`                |
 | `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)              |
 | `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                             |
 | `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read              |

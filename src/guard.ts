@@ -31,6 +31,7 @@ import { markAsked, markDenied } from "./explain.ts";
 import { invalidateMarkers, markerFor } from "./marker.ts";
 import { classifyInvocation } from "./parse.ts";
 import { type DestructiveTarget, destructiveTargetsVcs } from "./paths.ts";
+import { refusalReason } from "./translate.ts";
 import type { Settings } from "./settings.ts";
 import { DESTRUCTIVE, WRITE_PROTECTION } from "./messages.ts";
 import { type Refusal, classifyGitInvocation } from "./verbs.ts";
@@ -204,6 +205,15 @@ function gate(
     return { kind: "allow" };
   }
 
+  // The reason is composed once, for both postures: when static analysis
+  // produced the concrete `jj` command for the arguments as typed, the model
+  // gets that verbatim (`translate.ts`); otherwise the catalogue message
+  // stands. Composing only on the deny arm would have been the worse bug —
+  // `readOnlyGit: 'ask'` is the shipped default, so the *common* path would
+  // have kept handing back the generic string while the tests, which pin
+  // `readOnlyGit: 'deny'`, all passed.
+  const reason = refusalReason(refusal.source ?? "", refusal.equivalent, refusal.message.reason);
+
   if (posture === "deny" || !isPromptable(ctx, exec)) {
     markDenied(exec, refusal);
     // `info` is for durable diagnostics; the model sees only `reason`. The
@@ -211,15 +221,17 @@ function gate(
     // safe to put here and useless in the message.
     return {
       kind: "deny",
-      reason: refusal.message.reason,
+      reason,
       info: { name: "dsh-jujutsu", code },
     };
   }
 
   markAsked(exec, refusal);
+  // `displayReason` stays the family string from `docs/25` §2.3: the human
+  // approving the call is deciding about the consequence, not the syntax.
   return {
     kind: "ask",
-    reason: refusal.message.reason,
+    reason,
     displayReason: { en: refusal.message.display ?? refusal.message.reason },
   };
 }

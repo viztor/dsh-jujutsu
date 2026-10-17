@@ -367,3 +367,76 @@ Each of these was UNVERIFIED here and has now been exercised against
   "nothing to do" is correct; a caller that treats it as "the query failed" is
   not, and `jj_hunk_apply` with one of these selections would have nothing to
   apply.
+
+## 6. Static translation of the actual arguments
+
+§1 maps a _gesture_ to a `jj` verb. It says nothing about the arguments, so the
+denial for `git log --oneline -6` used to be the denial for `git log` — and the
+model was left to work out that `--oneline` is `--no-graph`, that `-6` is
+`--limit 6`, and that `HEAD` is not a revset. `src/translate.ts` does that
+analysis and the guard composes the result into the reason
+([25](25-prompt-copy.md) §2.4).
+
+**Every emitted command was executed against `jj` 0.46 before being documented.**
+That is not ceremony: `HEAD` is not a `jj` revset, so a translation that passed a
+Git revision through produces a command that fails on the user's next call.
+
+### 6.1 Revisions — the one thing that must never pass through
+
+| Git               | `jj`              | Evidence                                                         |
+| ----------------- | ----------------- | ---------------------------------------------------------------- |
+| `HEAD`            | `@`               | `jj log -r HEAD` → `Error: Revision 'HEAD' doesn't exist`        |
+| `HEAD~N`          | `@` + N × `-`     | `jj log -r HEAD~1` → the same error                              |
+| `HEAD^`, `HEAD^1` | `@-`              | same                                                             |
+| `HEAD^2`          | _none_            | revsets have no positional parent selector; translation withheld |
+| `main`, `<sha>`   | unchanged         | already a valid revset atom                                      |
+| `A..B` (log)      | `-r A..B`         | unchanged                                                        |
+| `A..B` (diff)     | `--from A --to B` | `jj diff` takes the two ends as flags                            |
+
+### 6.2 Flags that do not survive the rename
+
+| Git                   | `jj`                      | Note                                                       |
+| --------------------- | ------------------------- | ---------------------------------------------------------- |
+| `log --oneline`       | `log --no-graph`          | one revision per line                                      |
+| `log -6`, `-n 6`      | `log --limit 6`           |                                                            |
+| `log` (bare)          | `log -r '::@'`            | bare `jj log` shows `revsets.log`, not the ancestry of `@` |
+| `log --all`           | `log -r 'all()'`          |                                                            |
+| `diff` (one rev)      | `diff --from <rev>`       | `jj diff -r <rev>` also exists but means "vs its parent"   |
+| `diff A B`            | `diff --from A --to B`    |                                                            |
+| `diff --staged`       | _none_                    | no index to diff against                                   |
+| `status --porcelain`  | _none_                    | no porcelain mode; translation withheld                    |
+| `push --force`        | dropped                   | `jj git push` is already force-with-lease                  |
+| `push <remote> <bm>`  | `--remote`, `--bookmark`  |                                                            |
+| `fetch <remote>`      | `fetch --remote <remote>` |                                                            |
+| `restore --source`    | `restore --from`          |                                                            |
+| `reset --soft`        | `squash --from`           | "uncommit, keep the changes"                               |
+| `checkout -- <paths>` | `restore <paths>`         |                                                            |
+| `-C <dir>`            | `-R <dir>`                | and the subcommand is translated too                       |
+
+### 6.3 Why it is all-or-nothing for mutating verbs
+
+`git log --since=2d` translating to `jj log -r ::@` is acceptable: the model gets
+broader output than it asked for, sees that, and narrows. `git commit --amend`
+translating to `jj commit` is not acceptable: the model is told its command was
+understood when what it actually asked for — rewording the current change — was
+silently dropped, and it will now create a new change instead.
+
+So a mutating verb translates only when **every** argument is accounted for, and
+otherwise returns `undefined`, which sends the catalogue wording from
+[25](25-prompt-copy.md) §2.1 instead. Read-only verbs are best-effort by design
+(§6.2's "dropped" rows). The `translate.ts` coverage test enumerates every verb
+the catalogue refuses and requires each one to be either translated or named in
+an explicit "cannot be translated, and here is why" list — so a new catalogue row
+cannot silently have no translation.
+
+### 6.4 What remains untranslatable
+
+| Gesture         | Why                                                                     |
+| --------------- | ----------------------------------------------------------------------- |
+| `git add`       | no staging area; there is nothing to translate to                       |
+| `git rebase`    | Git's branch model supplies `-s`/`-o`; `jj` needs them named explicitly |
+| `git pull`      | two commands, the second conditional (`jj git fetch`, then `jj rebase`) |
+| `git submodule` | no submodule support                                                    |
+| `git bisect`    | `jj bisect run` requires a `--range` that `git bisect` infers           |
+| `git clean -fd` | no untracked state                                                      |
+| `git lfs`       | no LFS integration                                                      |

@@ -33,6 +33,7 @@ import {
   VERB_ROWS,
 } from "./messages.ts";
 import { type Invocation, isWord, tokenize } from "./parse.ts";
+import { translateEquivalent } from "./translate.ts";
 
 /**
  * Verbs that are read-only in *every* form.
@@ -59,6 +60,14 @@ export interface Refusal {
   readonly message: Message;
   /** True when the command only reads. Drives which config posture applies. */
   readonly readOnly: boolean;
+  /**
+   * The concrete `jj` command for the arguments as typed, when static
+   * analysis found a faithful one (`translate.ts`). Absent means the
+   * catalogue message is the answer.
+   */
+  readonly equivalent?: string;
+  /** The Git arguments as typed, e.g. `log --oneline -6`. Composes the reason. */
+  readonly source?: string;
 }
 
 export type Decision = { readonly kind: "allow" } | Refusal;
@@ -86,6 +95,7 @@ export function classifyGitInvocation(invocation: Invocation): Decision {
   const row = VERB_ROWS.find((candidate) => matchesPrefix(candidate.match, args));
   const verb = args[0] ?? "";
   const rest = args.slice(1);
+  const equivalent = translateEquivalent(verb, rest);
 
   return {
     kind: "refuse",
@@ -93,7 +103,26 @@ export function classifyGitInvocation(invocation: Invocation): Decision {
     classification: row?.classification ?? "deny",
     message: row?.message ?? GENERIC_FALLBACK,
     readOnly: isReadOnly(verb, rest),
+    source: typedCommand(first, args),
+    ...(equivalent === undefined ? {} : { equivalent }),
   };
+}
+
+/**
+ * The Git invocation as the model wrote it, for the composed reason.
+ *
+ * The resolver already hands back the fragment's original text, quotes
+ * and all, which is what the model recognises as its own command:
+ * `git commit -m 'fix the thing'`, not `git commit -m fix the thing`.
+ *
+ * Two things disqualify the raw text: a substitution the resolver had to
+ * replace with a sentinel (`git log $(date)` does not read as the command
+ * that ran), and anything multi-line. Both fall back to the re-joined
+ * argv, which is lossy but honest.
+ */
+function typedCommand(raw: string, args: readonly string[]): string {
+  const clean = !raw.includes("\u0000") && !raw.includes("$(…)") && !raw.includes("\n");
+  return clean && raw.length > 0 ? raw.trim() : `git ${args.join(" ")}`.trim();
 }
 
 /**

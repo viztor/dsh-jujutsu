@@ -55,10 +55,85 @@ describe.skipIf(!HAS_FIXTURES)("the guard refuses Git inside a jj workspace", ()
     expect(decision.reason).toContain("jj commit");
   });
 
+  it("hands back the concrete command, not the shape of one", async () => {
+    // The end-to-end form of the feature: what reaches the model is a command
+    // it can run as typed. `git log --oneline -6` has its flags translated and
+    // its revision default filled in; a reason that said "run jj log" would
+    // leave the model to do the analysis the guard already did.
+    const h = harnessWith({ readOnlyGit: "deny" });
+    const decision = await h.preExecute(bash(h, "git log --oneline -6"));
+    expect(decision.kind).toBe("deny");
+    if (decision.kind !== "deny") return;
+    expect(decision.reason).toBe(
+      "Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph",
+    );
+  });
+
+  it("says `jj`, never `jujutsu`, in every replacement it hands back", async () => {
+    // `jujutsu` is the project; `jj` is the binary. A refusal that names the
+    // project as a command sends the model to `jujutsu log`, which fails with
+    // "command not found" — the same failure mode as the harness's
+    // `unknown tool "jujutsu"`.
+    const h = harnessWith({ readOnlyGit: "deny" });
+    for (const command of [
+      "git log --oneline -6",
+      "git status",
+      "git branch -d feat",
+      "git push origin main",
+      "git checkout -b feat",
+    ]) {
+      const decision = await h.preExecute(bash(h, command));
+      expect(decision.kind, command).toBe("deny");
+      if (decision.kind !== "deny") continue;
+      expect(decision.reason, command).toContain("Run: jj");
+      expect(decision.reason, command).not.toContain("Run: jujutsu");
+    }
+  });
+
+  it("keeps the catalogue reason when nothing can be translated", async () => {
+    // `git add` has no equivalent. The composed path must not fire here, or
+    // the model gets a command that does not exist instead of the explanation
+    // of why there is none.
+    const h = harnessWith();
+    const decision = await h.preExecute(bash(h, "git add src/a.ts"));
+    expect(decision.kind).toBe("deny");
+    if (decision.kind !== "deny") return;
+    expect(decision.reason).toContain("no staging area");
+    expect(decision.reason).not.toContain("Run: jj add");
+  });
+
   it("denies `git push`", async () => {
     const h = harnessWith();
     const decision = await h.preExecute(bash(h, "git push origin main"));
     expect(decision.kind).toBe("deny");
+  });
+
+  it("composes the reason on an ask, not only on a deny", async () => {
+    // This was a real defect, and the tests could not see it: every refusal
+    // test pins `readOnlyGit: "deny"`, so the deny arm was the only one
+    // exercised — while `readOnlyGit: "ask"` is the *shipped default* and its
+    // arm returned the catalogue string. The common path therefore kept
+    // handing the model `Refused: git status describes a Git working tree…`
+    // instead of `Run: jj status`, which is the whole feature missing.
+    const h = harnessWith({ readOnlyGit: "ask" });
+    const decision = await h.preExecute(bash(h, "git log --oneline -6"));
+    expect(decision.kind).toBe("ask");
+    if (decision.kind !== "ask") return;
+    expect(decision.reason).toBe(
+      "Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph",
+    );
+    // The human-facing string stays the family variant: the prompt is about
+    // the consequence, and it is not the channel that teaches the syntax.
+    expect(decision.displayReason?.en).toContain("read-only Git command");
+  });
+
+  it("asks and denies with the same composed reason", async () => {
+    // Two postures, one answer. If these ever diverge, one of them is stale.
+    const asking = harnessWith({ readOnlyGit: "ask" });
+    const denying = harnessWith({ readOnlyGit: "deny" });
+    const asked = await asking.preExecute(bash(asking, "git diff HEAD~1"));
+    const denied = await denying.preExecute(bash(denying, "git diff HEAD~1"));
+    expect((asked as { reason?: string }).reason).toBe((denied as { reason?: string }).reason);
   });
 
   it("asks about read-only Git by default, and denies it when configured", async () => {

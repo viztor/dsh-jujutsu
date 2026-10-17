@@ -120,6 +120,11 @@ function request() {
   return fetch("/api", { timeout: TIMEOUT_MS });
 }
 JS
+# A bookmark on the root commit, for the translation tests that name a
+# revision. Without it `git switch main` and `git checkout main` cannot be
+# run against real `jj`, so those two translations were verified only by
+# shape — and a translation nobody has executed is a claim, not a test.
+jj bookmark create main >/dev/null
 
 # 7. jj-nested — a jj repo inside a subdirectory of another jj repo. The
 #    nearest .jj/ (the inner one) is the workspace root for detection.

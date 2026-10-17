@@ -53,14 +53,26 @@ defaults are chosen to be safe.
 
 ### Refuses Git, and says what to run instead
 
-| You run                  | What happens                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------- |
-| `git status`             | `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
-| `git commit -m "…"`      | `Refused: git commit -m. Run: jj commit -m "<msg>".`                                        |
-| `git rebase -i`          | Refused — it needs a terminal. Suggests `jj rebase`, `jj squash`, `jj absorb`.              |
-| `rm -rf .git`            | Refused, and explains that `jj`'s commit objects live there                                 |
-| `jj status`, `jj log`, … | Run normally                                                                                |
-| `echo "git commit"`      | Runs — it never touched Git                                                                 |
+The refusal is **translated, not templated**: the guard parses the command you
+actually typed and hands back the exact `jj` command it maps to.
+
+| You run                  | What happens                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `git log --oneline -6`   | `Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph`          |
+| `git diff HEAD~1`        | `Refused: git diff HEAD~1. Run: jj diff --from @-`                                |
+| `git push origin main`   | `Refused: git push origin main. Run: jj git push --remote origin --bookmark main` |
+| `git status`             | `Refused: git status. Run: jj status`                                             |
+| `git add src/a.ts`       | Refused with the reason instead of a command: there is no staging area to add to  |
+| `git status --porcelain` | The catalogue wording — flags that change the command are never silently dropped  |
+| `git rebase -i`          | Refused — it needs a terminal. Suggests `jj rebase`, `jj squash`, `jj absorb`     |
+| `rm -rf .git`            | Refused, and explains that `jj`'s commit objects live there                       |
+| `jj status`, `jj log`, … | Run normally                                                                      |
+| `echo "git commit"`      | Runs — it never touched Git                                                       |
+
+Three rules make the translation safe to paste: Git revisions are rewritten into
+revsets (`HEAD~2` → `@--`, because `HEAD` is not a `jj` revset), anything that
+does not map exactly falls back to the catalogue wording rather than a
+half-translated command, and every argument is shell-quoted.
 
 Reads and writes are configured separately. A user who is happy to let the model
 _look_ with Git has not thereby agreed to let it _write_.
@@ -235,7 +247,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **231 tests**, `pnpm run ci` green.
+observed working in a live session. **269 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

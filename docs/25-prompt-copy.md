@@ -205,6 +205,65 @@ alternative; the full `reason` stays attached to the call.
 | Write into `.jj`/`.git`                              | Write inside .jj or .git? This corrupts the state Jujutsu reads. Use jj op restore <opId> instead.                                       | 98    |
 | Low confidence                                       | Run a command whose program cannot be resolved? Approve only if you are sure it does not invoke Git.                                     | 100   |
 
+### 2.4 Composed reasons — the concrete command
+
+§2.1's strings name the replacement for a _shape_ of command. They cannot
+name it for the command actually typed, so a model refused `git log
+--oneline -6` was told `Run: jj log` and left to translate six flags
+itself. `src/translate.ts` performs that translation statically and
+composes the reason:
+
+```text
+Refused: <the invocation as typed>. Run: <the concrete jj command>
+```
+
+Ternary slots, per copy rule 8:
+
+| Slot                        | Source                  | Example                              |
+| --------------------------- | ----------------------- | ------------------------------------ |
+| `<the invocation as typed>` | the resolver's fragment | `git log --oneline -6`               |
+| `<the concrete jj command>` | `translateEquivalent()` | `jj log -r ::@ --limit 6 --no-graph` |
+
+The first slot quotes as the model wrote it — `git commit -m 'fix the thing'`,
+not a re-joined argv — because the model has to recognise the sentence as its
+own command. A command substitution (`git log $(date)`) was expanded before
+analysis, so it falls back to the re-joined argv rather than being played back
+as literal text that never ran.
+
+**§2.1 and §2.2 remain the fallback**, not dead copy: a row's string is
+what the model gets whenever static analysis declines to translate. That
+happens for two reasons, both deliberate (copy rule 6):
+
+- **The gesture has no `jj` command.** `git add`, `git submodule`,
+  `git lfs`, `git clean -fd`. §2.1 already says so.
+- **The arguments do not map exactly.** `git status --porcelain`,
+  `git commit --amend`, `git log HEAD^2`. A translation that dropped or
+  guessed at an argument would be specific _and_ wrong, which is worse
+  than generic and right.
+
+Three properties the composed strings inherit from the transcription, all
+tested in `test/translate.test.ts`:
+
+| Property                                                                       | Why                                                                                                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| ≤240 chars (rule 2), falling back to §2.1 when the composition would exceed it | A truncated command is un-runnable. A long path or message must not push the reason past the harness's cut.   |
+| The command is always `jj`, never `jujutsu`                                    | `jujutsu` is the project, not the binary. `Run: jujutsu log` fails with `command not found`.                  |
+| Revisions are rewritten, never passed through                                  | `HEAD` is not a `jj` revset (`Error: Revision 'HEAD' doesn't exist`, 0.46): `HEAD~2` → `@--`, `HEAD^` → `@-`. |
+
+The same command, both ways:
+
+| The model types        | §2.1–2.2 fallback                                                                         | §2.4 composed                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `git status`           | Refused: git status describes a Git working tree that does not exist here. Run: jj status | Refused: git status. Run: jj status                                             |
+| `git log --oneline -6` | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @ …                   | Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph          |
+| `git diff HEAD~1`      | Refused: git diff. Jujutsu has no staging index. Run: jj diff …                           | Refused: git diff HEAD~1. Run: jj diff --from @-                                |
+| `git push origin main` | Refused: git push. Run: jj git push --bookmark <name>. …                                  | Refused: git push origin main. Run: jj git push --remote origin --bookmark main |
+| `git branch -d feat`   | Refused: git branch -d. Run: jj bookmark delete <name>.                                   | Refused: git branch -d feat. Run: jj bookmark delete feat                       |
+
+`displayReason` (§2.3) is unaffected: a human approving an ask still sees
+the family string, because the prompt is about the consequence, not the
+syntax.
+
 ---
 
 ## 3. Tool descriptions

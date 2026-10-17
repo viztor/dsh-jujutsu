@@ -28,6 +28,14 @@
  *   `reason` as the `display`, so the approval prompt still names the exact `jj`
  *   command. No new string is minted.
  *
+ * **These strings are the fallback, not always the last word.** When
+ * `translate.ts` finds a concrete `jj` command for the arguments as typed, the
+ * guard composes `Refused: git <as typed>. Run: <command>` instead and these
+ * strings are not sent (`docs/25` §2.4). They remain the copy for every
+ * gesture static analysis declines to translate — which is why they must stay
+ * good on their own: a model refused `git add` gets only the string below, and
+ * no command exists to give it instead.
+ *
  * A runtime assertion at the bottom enforces the ≤240-character budget on every
  * `reason` at module load.
  *
