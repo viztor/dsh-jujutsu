@@ -100,25 +100,46 @@ npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu
 bootstrap, and `0.2.0` was the first release published through OIDC — the first
 time this pipeline ran at all. Both publishers are configured.
 
-#### What that means for the token now
+#### The token: keep it or drop it, both work
 
-The bootstrap token was a classic token in `~/.npmrc` with publish rights. npm
-refuses to add a trusted publisher while such a token exists, and reports it as
-`409 Conflict — a trusted publisher configuration that a token could also match
-already exists`. Adding the entries therefore means **removing the token**, and
-that is the state to aim for: with both publishers validated, nothing on this
-machine can publish, and every release goes through the workflow.
+Trusted publishing is **additive**, not a replacement. npm's documentation says a
+configured trusted publisher accepts publishes from the authorised workflow "in
+addition to traditional authentication methods like npm tokens and manual
+publishes" — and this repository demonstrates it: `0.2.0` was published through
+OIDC while the bootstrap token was still sitting in `~/.npmrc`.
 
-Revoke it at <https://www.npmjs.com/settings/viztor/tokens>. The consequence is
-worth stating: local `npm publish` stops working for every package, which is the
-point — the gate still runs locally through `prepublishOnly`, but publishing is
-CI's job.
+So **nothing needs to be revoked.** Keeping the token is a supported
+configuration, and it keeps a local `npm publish` available for the one case CI
+cannot cover: a recovery when the workflow itself is broken.
 
-Once the token is gone, set the package's **Publishing access** (package →
-Settings) to _"Require two-factor authentication and disallow tokens"_. That is
-the setting that makes the state durable rather than a matter of remembering:
-trusted publishers keep working, and a token-based publish becomes impossible
-even if a token is later created by mistake.
+**A wrong diagnosis, recorded because it cost a detour.** Adding the second
+trusted publisher failed with:
+
+```
+409 Conflict — a trusted publisher configuration that a token could also match already exists
+```
+
+That reads like a token conflict, and it was diagnosed as one here first. It was
+not. Both configurations already existed — created three hours earlier, when
+`0.1.0` was bootstrapped — and `npm trust` reports a duplicate with that wording,
+which never says "already exists". The fix was to stop creating them, not to
+revoke anything. The narrow lesson: check whether the thing already exists before
+changing the auth model in response to a `409`.
+
+The real tradeoff, stated plainly:
+
+|                                      | Token kept                       | Token revoked + "disallow tokens" |
+| ------------------------------------ | -------------------------------- | --------------------------------- |
+| OIDC release                         | works                            | works                             |
+| Local `npm publish`                  | works                            | impossible                        |
+| A leaked token can publish           | yes — any version, past the gate | no                                |
+| Recovery when the workflow is broken | a token publish                  | create a token first              |
+
+Keeping it is a reasonable choice for a single-maintainer package. If you later
+want the hardened posture, it is two reversible steps: revoke at
+<https://www.npmjs.com/settings/viztor/tokens>, then set the package's
+**Publishing access** (package → Settings) to _"Require two-factor authentication
+and disallow tokens"_. Order does not matter, and either can be undone.
 
 #### One entry validates at a time, and they expire
 
