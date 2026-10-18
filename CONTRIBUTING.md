@@ -78,8 +78,8 @@ expire, or accidentally commit.
 
 `npm trust` is explicit — _"The package you're configuring must already exist on
 the npm registry"_ — and npmjs.com has no settings page for a name nobody has
-published. `dsh-jujutsu` has never been published, so the bootstrap is one
-token-based publish, once, before any of the above can be configured:
+published. So the bootstrap is one token-based publish, once, before any of the
+above can be configured:
 
 ```bash
 npm login                     # interactive; OIDC cannot bootstrap a new package
@@ -95,6 +95,45 @@ entries from the command line once the package exists:
 npm trust github dsh-jujutsu --file release.yml --repo viztor/dsh-jujutsu --allow-publish
 npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu --allow-publish
 ```
+
+**This has already happened here.** `dsh-jujutsu@0.1.0` was the token-based
+bootstrap, and `0.2.0` was the first release published through OIDC — the first
+time this pipeline ran at all. Both publishers are configured.
+
+#### What that means for the token now
+
+The bootstrap token was a classic token in `~/.npmrc` with publish rights. npm
+refuses to add a trusted publisher while such a token exists, and reports it as
+`409 Conflict — a trusted publisher configuration that a token could also match
+already exists`. Adding the entries therefore means **removing the token**, and
+that is the state to aim for: with both publishers validated, nothing on this
+machine can publish, and every release goes through the workflow.
+
+Revoke it at <https://www.npmjs.com/settings/viztor/tokens>. The consequence is
+worth stating: local `npm publish` stops working for every package, which is the
+point — the gate still runs locally through `prepublishOnly`, but publishing is
+CI's job.
+
+Once the token is gone, set the package's **Publishing access** (package →
+Settings) to _"Require two-factor authentication and disallow tokens"_. That is
+the setting that makes the state durable rather than a matter of remembering:
+trusted publishers keep working, and a token-based publish becomes impossible
+even if a token is later created by mistake.
+
+#### One entry validates at a time, and they expire
+
+A new configuration must complete its first successful publish **within two
+days** or it expires and has to be recreated. Which one gets validated depends
+on which workflow npm sees as the caller:
+
+- A release cut by merging a release-please PR publishes through
+  `workflow_call`, so npm validates **`release-please.yml`**. That is the
+  steady-state path, and it is the one that matters.
+- **`release.yml`** is validated only by a tag push or a manual dispatch with
+  `dry-run: false`. Those are recovery paths, so its entry can sit unvalidated
+  and expire without breaking the normal release. Re-add it when a recovery is
+  actually needed, or validate it deliberately by publishing a version through
+  it.
 
 #### If a publish fails with an auth error
 
@@ -139,6 +178,36 @@ npm — while `ci` was green on every push, because none of that is visible from
 working tree. Publishing from the run that creates the tag removes the dependency
 rather than documenting it, and `scripts/check.ts` now asserts the wiring instead
 of trusting it.
+
+### 3. Dependency graph, for the `dependency-review` gate
+
+**One click, and it is currently missing.** Settings → Code security → **Dependency
+graph** → Enable.
+
+`dependency-review.yml` gates any pull request that touches `package.json`, the
+lockfile or a workflow, and it is the only check in this repository that can see
+what a dependency bump drags in. Without the graph it does not fail quietly — it
+refuses to run:
+
+```
+##[error]Dependency review is not supported on this repository.
+Please ensure that Dependency graph is enabled
+```
+
+Two things follow, and both were observed here:
+
+- **The gate has never passed.** It fails on every PR that touches
+  `package.json` — including the release PR — so it is red on arrival, which is
+  the state this repository has already learned to distrust (`release.yml`'s
+  comment records the same lesson about a CI that is red on every push).
+- **`.github/dependabot.yml` has been inert.** Its npm and github-actions
+  updaters need the same graph. The configuration is careful and complete, and it
+  has never opened a pull request.
+
+The settings API does not help: a `PATCH` with
+`security_and_analysis.dependency_graph` returns `200` and leaves the field
+absent, and `GET /dependency-graph/sbom` returns `404` until the toggle is on.
+This one is a human action.
 
 ## The gate
 
