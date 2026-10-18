@@ -252,26 +252,68 @@ function run(command: string, args: string[], cwd: string): string {
 // So the invariant is about composition rather than about any one step: a
 // workflow that runs the gate runs the same gate, under the same conditions,
 // once, and the stages are in the order that makes each of them meaningful.
+
+/**
+ * The gate's real command line, resolved through any `vp run` indirection.
+ *
+ * `scripts.ci` may be `vp run <task>` rather than the pipeline itself, in
+ * which case the stages that matter are inside `scripts[<task>]`. One level
+ * is looked up and no deeper: an entry point that forwards to another
+ * forward is a gate nobody can read, and failing the checks below is the
+ * right outcome for it.
+ */
+function resolveGate(scripts: Readonly<Record<string, string>>): string {
+  const entry = scripts.ci ?? "";
+  const task = /^vp run ([A-Za-z0-9_-]+)\s*$/.exec(entry)?.[1];
+  if (task === undefined) return entry;
+  return scripts[task] ?? entry;
+}
+
+// --- the gate is one command, and it is the same everywhere ----------------
 {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     scripts?: Record<string, string>;
   };
-  const gate = pkg.scripts?.ci ?? "";
-  // The panel tests read `lib/client.js`, the *built* artifact, so a suite that
-  // ran before the build would test whatever was built last. The comment in
-  // `ci.yml` records why the build is inside the gate at all.
+  // Follow the indirection. `ci` is one entry point and the stages now live in
+  // a `vp run` task, so reading `scripts.ci` alone sees only the command that
+  // starts the gate and cannot check what runs inside it. Resolving the task
+  // the way `vp run` would — by looking up the name it invokes — keeps the
+  // checks below meaningful without hard-coding the shape of the entry point.
+  const gate = resolveGate(pkg.scripts ?? {});
+
   const build = gate.indexOf("pnpm run build");
   const test = gate.indexOf("vp test run");
   check("the gate builds before it tests", build !== -1 && test !== -1 && build < test, gate);
-  // The tarball check is the only one that sees what a consumer receives. As the
-  // tail of `ci` it covers a local run and a release alike; a gate without it
-  // cannot notice the package that installs and does not load.
-  check("the gate ends with the package checks", /&&\s*pnpm run check\s*$/.test(gate), gate);
+  // The tarball check is the only one that sees what a consumer receives. As
+  // the tail of the gate it covers a local run and a release alike; a gate
+  // without it cannot notice the package that installs and does not load.
+  // The name is `package-check` rather than `check`, because `check` is now
+  // `vp check` — the formatter — and a gate that ended in a formatter would
+  // look identical to this regex while testing nothing about the package.
+  check(
+    "the gate ends with the package checks",
+    /&&\s*pnpm run package-check\s*$/.test(gate),
+    gate,
+  );
 
   const workflows = join(ROOT, ".github/workflows");
   const runners = readdirSync(workflows)
     .filter((file) => /\.ya?ml$/.test(file))
-    .filter((file) => readFileSync(join(workflows, file), "utf8").includes("pnpm run ci"));
+    // Matched on a *step*, not on the file's text. The first version of this
+    // filter was `.includes("pnpm run ci")`, which is equally true of a
+    // comment that mentions the gate — and `release-please.yml` does, in a
+    // paragraph explaining what it does not do. The result was two checks
+    // demanding `jj` and `jj-hunk` be installed into a workflow that runs no
+    // tests at all.
+    //
+    // The shape is the one the workflows actually use: `run: pnpm run ci` on
+    // one line. A block form (`run: |` followed by the command) would need a
+    // second pattern, and neither workflow uses one — so if a future one
+    // does, this filter silently stops matching and the "at least one
+    // workflow runs the gate" check below fails for the right reason.
+    .filter((file) =>
+      /^ {6,10}run:\s*pnpm run ci\s*$/m.test(readFileSync(join(workflows, file), "utf8")),
+    );
   // Without this, a renamed gate command would make every assertion below match
   // nothing, and a check that matches nothing passes for the wrong reason.
   check(
