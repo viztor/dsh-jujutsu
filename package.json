@@ -1,6 +1,6 @@
 {
   "name": "dsh-jujutsu",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Refuses Git inside a Jujutsu workspace and hands the model the jj command instead. Eleven jj tools, prompt teaching, and a jj-hunk bridge for the DeepSeek Harness.",
   "keywords": [
     "cordis",
@@ -49,13 +49,15 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vp pack && node scripts/name-client-bundle.ts",
-    "check": "node scripts/check.ts",
-    "ci": "vp check && pnpm run build && vp test run && pnpm run check",
+    "check": "vp check",
+    "package-check": "node scripts/check.ts",
+    "ci": "vp run gate",
     "lint": "vp lint",
     "test": "vp test run",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run ci",
-    "prepare": "pnpm run build"
+    "prepare": "pnpm run build",
+    "gate": "vp check && pnpm run build && vp test run && pnpm run package-check"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4"

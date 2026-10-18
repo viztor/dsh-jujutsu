@@ -195,8 +195,9 @@ The rest of this file is about building and verifying the plugin itself.
 ### Build and test
 
 ```bash
-pnpm run build     # tsc -> lib/   then   vp pack -> lib/client.js
-pnpm run ci        # vp check (format, lint, typecheck), build, suite, package
+pnpm run build           # tsc -> lib/   then   vp pack -> lib/client.js
+pnpm run ci              # vp check, build, suite, package checks — the whole gate
+pnpm run package-check   # just the tarball and release-wiring checks
 ```
 
 **`lib/` is not optional and not committed.** The published entry is emitted

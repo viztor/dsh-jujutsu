@@ -147,9 +147,24 @@ pnpm install
 pnpm run ci
 ```
 
-`ci` is the whole gate in one command: `vp check` for format, lint and typecheck —
-with warnings failing it, so a new warning stops the run instead of accumulating —
-then the build, then the suite, then the package checks.
+`ci` is the whole gate in one command, and everything in it is a Vite+ tool:
+
+| Stage          | Command                  | What it is                                               |
+| -------------- | ------------------------ | -------------------------------------------------------- |
+| format + lint  | `vp check`               | format, lint and typecheck; warnings fail it             |
+| build          | `pnpm run build`         | `tsc` for the host half, `vp pack` for the client bundle |
+| test           | `vp test run`            | Vitest, with the fixtures built by `globalSetup`         |
+| package checks | `pnpm run package-check` | `scripts/check.ts` — the tarball, and the release wiring |
+
+The stages are ordered, not listed: the panel tests read `lib/client.js`, the
+**built** artifact, so a suite that ran before the build would test whatever was
+built last. `ci` is `vp run gate`, and `scripts/check.ts` asserts the gate's
+composition — the build before the tests, the package checks last — so an edit
+that reorders them fails here rather than in a release.
+
+One naming note that bites: `check` is `vp check` (the formatter), and the
+package checks are `package-check`. The two used to share one name, which made
+`pnpm run check` mean different things depending on which file you were reading.
 
 There is deliberately no commit hook. Vite+ can install one (`vp hooks enable`,
 `vp staged`) and a contributor will reach for it, but commits here are `jj commit`,

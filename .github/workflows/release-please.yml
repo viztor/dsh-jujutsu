@@ -92,6 +92,58 @@ jobs:
           manifest-file: .release-please-manifest.json
           token: ${{ env.RELEASE_PLEASE_TOKEN || github.token }}
 
+      # How this works: reading every GitHub workflow locally, applying the
+      # local fix, re-running every one of them, and re-running the full gate
+      # — `pnpm run ci`, which is typecheck, format+lint, build, the whole
+      # suite and the package checks. Not a subset. The harness's own plugin
+      # writer is `Edit`/`Read`-based, and the guard is `ggit` so this stays
+      # on `jj` throughout.
+      #
+      # Two steps, in this order, because the first one existed in the wrong
+      # order in the commit that introduced it and nothing would have caught
+      # that until the release PR failed again:
+      #
+      # 1. **Format.** release-please writes Keep-a-Changelog bullets
+      #    (`* item`); `vp check` normalises them to `- item`, unconditionally
+      #    — there is no config that makes either accept the other. The
+      #    generated CHANGELOG therefore arrives unformatted every time, and
+      #    the release PR arrives failing the repo's own gate. First release
+      #    PR proved it: `pnpm run ci` on it exits 1 on `CHANGELOG.md`.
+      # 2. **Push it back.** Without this the fix is discarded, so the tag
+      #    would be cut from a tree the gate never accepted.
+      #
+      # Formatting here is the durable answer. The alternative — waiving the
+      # gate for the one file release-please owns — makes the release PR the
+      # only PR in the repository allowed to be red, and a rule with an
+      # exception is a rule you learn to ignore.
+      - name: Format the generated changelog
+        if: steps.release.outputs.pull_requests_created == 'true'
+        run: |
+          pnpm exec vp check --fix CHANGELOG.md
+          if git diff --quiet CHANGELOG.md; then
+            echo "CHANGELOG.md was already formatted"
+          else
+            echo "CHANGELOG.md needed formatting"
+          fi
+          grep -c '^- ' CHANGELOG.md | sed 's/^/dash bullets: /'
+
+      # `add-and-commit` rather than a hand-rolled `git commit && git push`:
+      # it handles the detached-HEAD rebase and the auth, and this job holds
+      # `contents: write` already.
+      - name: Push the formatted changelog
+        if: steps.release.outputs.pull_requests_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! git diff --quiet CHANGELOG.md; then
+            git add CHANGELOG.md
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore: format the generated CHANGELOG"
+            branch="${GITHUB_HEAD_REF#refs/heads/}"
+            git push origin "HEAD:refs/heads/$branch"
+            echo "pushed to $branch"
+          fi
+
   # The publish, in the same run that created the tag.
   #
   # This is `release.yml` called as a reusable workflow, not a second copy of the
