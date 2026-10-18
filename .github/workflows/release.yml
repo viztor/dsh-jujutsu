@@ -100,6 +100,8 @@ jobs:
       # OIDC trusted publishing needs this and nothing else: no token is stored
       # in the repository, and provenance is automatic.
       id-token: write
+      # GitHub Packages npm registry (@viztor/dsh-jujutsu)
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -252,6 +254,51 @@ jobs:
           else
             npm publish --provenance --access public --ignore-scripts
           fi
+
+      - name: Attach tarball to GitHub release
+        if: inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          tarball=$(pnpm pack --pack-destination /tmp | tail -n 1)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$tarball" --clobber
+            echo "Attached $tarball to $tag"
+          fi
+
+      - name: Publish to GitHub Packages
+        if: inputs.dry-run != true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          owner="${{ github.repository_owner }}"
+          pkg_name="@$owner/dsh-jujutsu"
+
+          # Temporarily scope the package name for GitHub Packages (@owner/dsh-jujutsu)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = '$pkg_name';
+            pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+          # Write auth token for GitHub Packages into the runner .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> "$HOME/.npmrc"
+          echo "@$owner:registry=https://npm.pkg.github.com" >> "$HOME/.npmrc"
+
+          if npm view "$pkg_name@$version" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "$pkg_name@$version is already on GitHub Packages, skipping"
+          else
+            npm publish --registry=https://npm.pkg.github.com --ignore-scripts
+            echo "Published $pkg_name@$version to GitHub Packages"
+          fi
+
+          # Restore the original package.json
+          git checkout package.json
 
       # The release claim, checked instead of assumed. A successful `npm publish`
       # does not mean the version is readable yet — npm answers "your package is
