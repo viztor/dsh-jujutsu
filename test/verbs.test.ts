@@ -15,12 +15,17 @@
 import { describe, expect, it } from "vitest";
 
 import { ALL_MESSAGES, VERB_ROWS } from "../src/messages.ts";
-import { classifyGitInvocation } from "../src/verbs.ts";
+import { classifyGitInvocation, classifyJjInvocation } from "../src/verbs.ts";
 import { classifyInvocation } from "../src/invocation.ts";
 
 /** Classify a command line the way the guard does. */
 function classify(command: string) {
   return classifyGitInvocation(classifyInvocation(command));
+}
+
+/** Apply the workspace rule to a command line. */
+function workspaceRule(command: string) {
+  return classifyJjInvocation(classifyInvocation(command));
 }
 
 describe("classifyGitInvocation", () => {
@@ -51,6 +56,99 @@ describe("classifyGitInvocation", () => {
     if (read.kind !== "refuse" || write.kind !== "refuse") return;
     expect(read.classification === "special" || read.classification === "deny").toBe(true);
     expect(write.classification).toBe("deny");
+  });
+});
+
+describe("classifyJjInvocation — the workspace rule", () => {
+  it("allows a command that never runs `jj`", () => {
+    for (const command of ["git status", "ls -la", "echo hi", "jj-hunk list"]) {
+      expect(workspaceRule(command), command).toEqual({ kind: "allow" });
+    }
+  });
+
+  it("refuses a subcommand that needs a workspace, and names it", () => {
+    // The name matters: the refusal copy is one sentence for every subcommand,
+    // so the model learns which word was the problem from this field.
+    expect(workspaceRule("jj status")).toEqual({ kind: "refuse", verb: "status" });
+    expect(workspaceRule("jj log -r ::@")).toEqual({ kind: "refuse", verb: "log" });
+    expect(workspaceRule("jj git fetch")).toEqual({ kind: "refuse", verb: "git fetch" });
+  });
+
+  it("allows the commands that answer without a workspace", () => {
+    // Measured on 0.46.0 (`docs/13` §1). Refusing these would be the guard
+    // inventing a limitation `jj` does not have.
+    for (const command of [
+      "jj config list",
+      "jj help",
+      "jj util completion bash",
+      "jj --version",
+      "jj version",
+      "jj",
+    ]) {
+      expect(workspaceRule(command), command).toEqual({ kind: "allow" });
+    }
+  });
+
+  it("allows naming the repository, in all three spellings", () => {
+    // `jj -R ../repo log` works from anywhere, so it satisfies the requirement
+    // it would otherwise fail.
+    for (const command of [
+      "jj -R ../repo log",
+      "jj --repository ../repo log",
+      "jj --repository=../repo log",
+      "jj -R../repo log",
+    ]) {
+      expect(workspaceRule(command), command).toEqual({ kind: "allow" });
+    }
+  });
+
+  it("allows `jj git init` and `jj git clone`, which create the workspace", () => {
+    for (const command of [
+      "jj git init --colocate",
+      "jj git clone https://example.com/repo",
+      "jj -R other git init",
+    ]) {
+      expect(workspaceRule(command), command).toEqual({ kind: "allow" });
+    }
+  });
+
+  it("does not refuse what follows a workspace-creating fragment", () => {
+    // `jj git init --colocate && jj log` is the exact line the refusal copy
+    // recommends; denying its second half would make the advice unusable.
+    expect(workspaceRule("jj git init --colocate && jj log")).toEqual({ kind: "allow" });
+    expect(workspaceRule("jj git clone url && jj status")).toEqual({ kind: "allow" });
+  });
+
+  it("still refuses the first offending fragment, wherever it is", () => {
+    // A later `init` does not excuse an earlier command that needed a workspace.
+    expect(workspaceRule("jj log && jj git init --colocate")).toEqual({
+      kind: "refuse",
+      verb: "log",
+    });
+  });
+
+  it("skips global flags that take a value", () => {
+    // `--config` takes the next word; reading it as the subcommand would name a
+    // config file in the refusal.
+    expect(workspaceRule("jj --config ui.color=always log")).toEqual({
+      kind: "refuse",
+      verb: "log",
+    });
+    expect(workspaceRule("jj --color never status")).toEqual({ kind: "refuse", verb: "status" });
+    expect(workspaceRule("jj --config-toml x log")).toEqual({ kind: "refuse", verb: "log" });
+    expect(workspaceRule("jj --at-operation abc log")).toEqual({ kind: "refuse", verb: "log" });
+  });
+
+  it("recognises the long binary name and a path to either", () => {
+    for (const command of ["jujutsu status", "/usr/local/bin/jj status", "/x/jj.exe status"]) {
+      expect(workspaceRule(command), command).toEqual({ kind: "refuse", verb: "status" });
+    }
+  });
+
+  it("stops at `--`, which cannot introduce a subcommand", () => {
+    // `jj -- status` passes `status` as a path argument to the *op*, whatever
+    // that op is; reading it as a subcommand would be a guess.
+    expect(workspaceRule("jj -- status")).toEqual({ kind: "allow" });
   });
 });
 

@@ -13,25 +13,25 @@ table), [14](14-decision-log.md) R1–R10, [18](18-tool-surface.md) (tools),
 
 These bind every string in this file.
 
-| #   | Rule                                                                                                                                                                                                                                                                |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Name the exact command.** A denial that does not tell the model what to run instead has failed.                                                                                                                                                                   |
-| 2   | **≤240 characters** per message. Every length is stated.                                                                                                                                                                                                            |
-| 3   | **No scolding, no "I'm sorry", no exclamation marks.** It is a tool result, not a conversation.                                                                                                                                                                     |
-| 4   | **Deterministic.** The same command always produces the same string; no timestamps, versions, or hedging.                                                                                                                                                           |
-| 5   | **Never mention the plugin, the user's settings, or "policy".** The model needs the fact and the remedy.                                                                                                                                                            |
-| 6   | **No invented equivalents.** Where a Git gesture has no `jj` command (`git submodule`, `git lfs`, `git clean -fd`), say so plainly and name the outside-the-workspace route.                                                                                        |
-| 7   | **`Refused:` prefix** on hard denies (all verb rows, the fallback, write-protection). The ask-class strings — destructive path, unresolvable path, low confidence — open with the fact instead, because the same string is the `ask` reason before a human answers. |
-| 8   | Dynamic slots in the injected texts are `{{…}}`; per-call values inside messages are `<angle-bracketed>`. Nothing machine-specific is baked in.                                                                                                                     |
+| #   | Rule                                                                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Name the exact command.** A denial that does not tell the model what to run instead has failed.                                                                                                                                                                                                |
+| 2   | **≤240 characters** per message. Every length is stated.                                                                                                                                                                                                                                         |
+| 3   | **No scolding, no "I'm sorry", no exclamation marks.** It is a tool result, not a conversation.                                                                                                                                                                                                  |
+| 4   | **Deterministic.** The same command always produces the same string; no timestamps, versions, or hedging.                                                                                                                                                                                        |
+| 5   | **Never mention the plugin, the user's settings, or "policy".** The model needs the fact and the remedy.                                                                                                                                                                                         |
+| 6   | **No invented equivalents.** Where a Git gesture has no `jj` command (`git submodule`, `git lfs`, `git clean -fd`), say so plainly and name the route that remains: outside the workspace for `git lfs` and `git clean -fd`, the user for `git submodule`, which jj records but does not manage. |
+| 7   | **`Refused:` prefix** on hard denies (all verb rows, the fallback, write-protection). The ask-class strings — destructive path, unresolvable path, low confidence — open with the fact instead, because the same string is the `ask` reason before a human answers.                              |
+| 8   | Dynamic slots in the injected texts are `{{…}}`; per-call values inside messages are `<angle-bracketed>`. Nothing machine-specific is baked in.                                                                                                                                                  |
 
 ---
 
 ## 1. The two injected texts
 
 Registration shape and ordering come from [22](22-context-injection.md) §5:
-`jujutsu:bash-policy` is a `systemPrompt.section` at `TOOL_BASH` (1000);
-`jujutsu:workspace` is a `systemPrompt.context` at order 130. Both `text`
-functions return `""` outside a `jj` workspace, so the cost is zero elsewhere.
+`jujutsu:bash-policy` is a `systemPrompt.section` at `TOOL_BASH`; both `text`
+functions return `""` outside a `jj` workspace, so the cost is zero elsewhere —
+except under `forceJj`, where the state block is the two lines in §1.2.1 below.
 
 ### 1.1 System section — `jujutsu:bash-policy`
 
@@ -50,6 +50,7 @@ Workspace root: {{root}}
 Layout: {{colocated with Git | native jj, no .git}}
 Working copy @: {{change_id}}
 Hunk selection: {{jj-hunk available | jj-hunk not installed, hunk tools unavailable}}
+Manual: load the jujutsu skill for the verb map and tool details.
 ```
 
 `{{a | b}}` means "substitute one of the alternatives"; the braces are not
@@ -62,6 +63,28 @@ emitted.
 | `{{change_id}}`                                                          | `jj log --no-graph -T 'change_id.short()' -r @` | short change ID, e.g. `nsosovxq`                 |
 | `{{jj-hunk available \| jj-hunk not installed, hunk tools unavailable}}` | `jj-hunk --version` probe                       | pick one; may carry the resolved `~/`-based path |
 
+#### 1.2.1 Under `forceJj`
+
+When the switch is on and there is no workspace, `""` would hide the one fact
+the model needs. The state block is instead:
+
+```text
+Version control: none. {{root}} is not inside a Git or Jujutsu repository.
+Jujutsu is required here: jj commands are refused until a workspace exists. Initialise one with: jj git init --colocate
+```
+
+Inside a plain Git repository it is the same requirement with its own facts, and
+it replaces the "guard is inactive" line — under `forceJj` that claim is false:
+
+```text
+Version control: Git (no Jujutsu workspace here). Git is not guarded; jj is required.
+Repository root: {{root}}
+Jujutsu is required here: jj commands are refused until a workspace exists. Initialise one with: jj git init --colocate
+```
+
+When adoption was probed and refused, the blocker sentence wins and the init
+advice is dropped ([37](37-git-compatible-adoption.md) §4).
+
 ### 1.3 Rendered example
 
 Real output values from a scratch **colocated** workspace (`jj git init`, one
@@ -72,6 +95,7 @@ Workspace root: /tmp/jujutsu-prompt
 Layout: colocated with Git (.git and .jj both present)
 Working copy @: nsosovxq
 Hunk selection: jj-hunk 0.5.1 available
+Manual: load the jujutsu skill for the verb map and tool details.
 ```
 
 ### 1.4 Word count
@@ -82,85 +106,96 @@ with each `{{…}}` group as one word.
 | Text                            | Words  |
 | ------------------------------- | ------ |
 | System section (1.1)            | 68     |
-| Runtime context, template (1.2) | 12     |
-| **Combined template**           | **80** |
-| Runtime context, rendered (1.3) | 21     |
-| Combined rendered               | 89     |
+| Runtime context, template (1.2) | 25     |
+| **Combined template**           | **93** |
+| Runtime context, rendered (1.3) | 34     |
+| Combined rendered               | 102    |
 
-Both figures are under budget. The detail lives in the tool descriptions
-(§3), never here.
+Both figures are under budget. The `forceJj` variants (§1.2.1) are outside it:
+they render only where there is no workspace, and they replace the block rather
+than adding to it. The detail lives in the tool descriptions (§3), never here.
 
 ---
 
 ## 2. Denial message catalogue
 
-50 strings: 43 verb rows from [15](15-verb-mapping.md) §1 (39 DENY + 4
-SPECIAL), the R3–R5 generic fallback, 3 destructive-path strings, 2
+52 strings: 43 verb rows from [15](15-verb-mapping.md) §1 (39 DENY + 4
+SPECIAL), 2 workspace refusals for a forced-Jujutsu directory with no
+workspace, the R3–R5 generic fallback, 3 destructive-path strings, 2
 write-protection strings, and 1 low-confidence string. Lengths exclude the
 surrounding backticks.
 
 Ask/deny posture per [17](17-bypass-and-approval.md): verb rows, the fallback,
 and destructive paths are `ask` under policy `ask` and `deny` with the same
-reason under `never`; write-protection is a hard `deny` in both; low confidence
-asks and is never allowed.
+reason under `never`; write-protection and the two workspace refusals are a
+hard `deny` in both; low confidence asks and is never allowed.
 
 ### 2.1 Verb-mapping denials (43 rows)
 
-| Git command                | Message                                                                                                                                                           | Chars |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| `git status`               | Refused: git status describes a Git working tree that does not exist here. Run: jj status                                                                         | 89    |
-| `git diff`                 | Refused: git diff. Jujutsu has no staging index. Run: jj diff for the working-copy change, or jj diff -r <rev> for another revision.                              | 132   |
-| `git log`                  | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @, or jj log -r 'all()' for everything reachable.                                             | 117   |
-| `git add <path>`           | Refused: git add. Jujutsu has no staging area and tracks new files automatically. Run: jj status or jj diff to see the change.                                    | 126   |
-| `git add -p`               | Refused: git add -p. There is no index to stage into. For hunk selection run: jj-hunk commit --query '<hunkset>' "msg" (split and squash also work).              | 148   |
-| `git commit`               | Refused: git commit. Run: jj commit -m "<msg>". The working copy @ is already a commit; this finalizes it and starts a new empty change on top.                   | 143   |
-| `git commit --amend`       | Refused: git commit --amend; --amend does not exist. Run: jj describe -m "<msg>" to reword, or jj squash to fold edits into the parent.                           | 135   |
-| `git commit -m "msg"`      | Refused: git commit -m. Run: jj commit -m "<msg>".                                                                                                                | 50    |
-| `git branch`               | Refused: git branch. Jujutsu calls branches bookmarks. Run: jj bookmark list (alias jj b l).                                                                      | 92    |
-| `git branch -a`            | Refused: git branch -a. Run: jj bookmark list --all-remotes to include remote-tracking bookmarks.                                                                 | 97    |
-| `git branch <name>`        | Refused: git branch <name>. Run: jj bookmark create <name> -r <rev>.                                                                                              | 68    |
-| `git branch -d <name>`     | Refused: git branch -d. Run: jj bookmark delete <name>.                                                                                                           | 55    |
-| `git checkout -b <name>`   | Refused: git checkout -b. Run: jj new to start a change, then jj bookmark create <name> -r @-. Jujutsu has no branch-switch step.                                 | 129   |
-| `git checkout <branch>`    | Refused: git checkout. Run: jj new <rev> to start a change on top of it, or jj edit <rev> to make it the working copy.                                            | 118   |
-| `git switch <branch>`      | Refused: git switch. Run: jj new <rev> to start a change on top, or jj edit <rev> to make that revision the working copy.                                         | 121   |
-| `git merge <rev>`          | Refused: git merge. Run: jj new @ <rev>. A merge is a change with two parents; conflicts are recorded in-tree, so there is no --continue.                         | 137   |
-| `git rebase`               | Refused: git rebase. Run: jj rebase -s <src> -o <dest> to move a subtree, or jj rebase -b <bookmark> -o <dest> to move a branch.                                  | 128   |
-| `git rebase -i`            | Refused: git rebase -i; it is interactive and cannot run headless. Run: jj rebase -r <rev> -B <rev> to reorder, jj squash to fold, jj absorb to auto-place fixes. | 167   |
-| `git reset --hard`         | Refused: git reset --hard. Discard edits with jj restore <paths>, or drop the current change with jj abandon. Both are reversible with jj undo.                   | 143   |
-| `git reset --soft HEAD~1`  | Refused: git reset --soft. Run: jj squash --from @- to fold the parent diff into the working copy. Jujutsu never rewrites a commit in place.                      | 140   |
-| `git stash`                | Refused: git stash; Jujutsu has no stash. Run: jj new @- to park the current change as a sibling commit; find it later with jj log.                               | 131   |
-| `git stash pop`            | Refused: git stash pop; there is no stash to pop. Re-enter the parked change with jj edit <change-id> (locate it with jj log).                                    | 126   |
-| `git cherry-pick <rev>`    | Refused: git cherry-pick. Run: jj duplicate <rev> -o <dest> to copy that change onto another commit.                                                              | 100   |
-| `git revert <rev>`         | Refused: git revert. Run: jj revert -r <rev> -B @ to insert the inverse of <rev> just before the working copy.                                                    | 110   |
-| `git tag`                  | Refused: git tag. Run: jj tag list, jj tag set <name> -r <rev>, or jj tag delete <name>.                                                                          | 88    |
-| `git push`                 | Refused: git push. Run: jj git push --bookmark <name>. Jujutsu pushes bookmarks explicitly; there is no implicit current-branch push.                             | 133   |
-| `git push --force`         | Refused: git push --force; no force flag is needed. jj git push updates the remote only if it matches what you last fetched.                                      | 124   |
-| `git pull`                 | Refused: git pull; Jujutsu has no pull. Run: jj git fetch, then jj rebase -b <bookmark> -o <remote-bookmark> to integrate.                                        | 122   |
-| `git fetch`                | Refused: git fetch. Run: jj git fetch. The jj prefix matters: jj git fetch is a Jujutsu command and is never refused.                                             | 117   |
-| `git clone <url>`          | Refused: git clone. Run: jj git clone <url> [<dir>]; it creates a colocated repo by default.                                                                      | 92    |
-| `git remote -v`            | Refused: git remote -v. Run: jj git remote list; add one with jj git remote add <name> <url>.                                                                     | 93    |
-| `git remote add <n> <url>` | Refused: git remote add. Run: jj git remote add <name> <url>.                                                                                                     | 61    |
-| `git worktree add <path>`  | Refused: git worktree add. Run: jj workspace add <path>. Workspaces are Jujutsu's native multi-working-copy feature.                                              | 116   |
-| `git bisect`               | Refused: git bisect. Run: jj bisect run <cmd>; it finds the first bad revision automatically.                                                                     | 93    |
-| `git blame <file>`         | Refused: git blame. Run: jj file annotate <path> to show the change that last modified each line.                                                                 | 97    |
-| `git show <rev>`           | Refused: git show. Run: jj show <rev> for the description plus diff.                                                                                              | 68    |
-| `git restore <path>`       | Refused: git restore. Run: jj restore <paths> to restore from the parent, or jj restore --from <rev> <paths>.                                                     | 109   |
-| `git init`                 | Refused: git init. This is already a Jujutsu workspace; there is nothing to initialise. To create a new Jujutsu repo elsewhere, run: jj git init <directory>.     | 157   |
-| `git -C <dir> <sub>`       | Refused: git -C <dir>. Run: jj -R <dir> <sub>, or cd <dir> first.                                                                                                 | 65    |
-| `git submodule`            | Refused: git submodule; Jujutsu has no submodule support. If the task truly needs submodules, use a separate plain Git clone outside this workspace.              | 148   |
-| `git clean -fd`            | Refused: git clean -fd; Jujutsu has no untracked state to clean. Inspect with jj status, then delete the files yourself with rm.                                  | 128   |
-| `git config`               | Refused: git config; Jujutsu reads identity from its own config, not .git/config. Run: jj config set --user user.name "<name>", or jj config list.                | 146   |
-| `git lfs`                  | Refused: git lfs; Jujutsu has no LFS integration and the git binary fronts this subcommand. Fetch LFS objects with a plain Git checkout outside this workspace.   | 159   |
+| Git command                | Message                                                                                                                                                                                                          | Chars |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `git status`               | Refused: git status describes a Git working tree that does not exist here. Run: jj status                                                                                                                        | 89    |
+| `git diff`                 | Refused: git diff. Jujutsu has no staging index. Run: jj diff for the working-copy change, or jj diff -r <rev> for another revision.                                                                             | 132   |
+| `git log`                  | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @, or jj log -r 'all()' for everything reachable.                                                                                            | 117   |
+| `git add <path>`           | Refused: git add. Jujutsu has no staging area and tracks new files automatically. Run: jj status or jj diff to see the change.                                                                                   | 126   |
+| `git add -p`               | Refused: git add -p. There is no index to stage into. For hunk selection run: jj-hunk commit --query '<hunkset>' "msg" (split and squash also work).                                                             | 148   |
+| `git commit`               | Refused: git commit. Run: jj commit -m "<msg>". The working copy @ is already a commit; this finalizes it and starts a new empty change on top.                                                                  | 143   |
+| `git commit --amend`       | Refused: git commit --amend; --amend does not exist. Run: jj describe -m "<msg>" to reword, or jj squash to fold edits into the parent.                                                                          | 135   |
+| `git commit -m "msg"`      | Refused: git commit -m. Run: jj commit -m "<msg>".                                                                                                                                                               | 50    |
+| `git branch`               | Refused: git branch. Jujutsu calls branches bookmarks. Run: jj bookmark list (alias jj b l).                                                                                                                     | 92    |
+| `git branch -a`            | Refused: git branch -a. Run: jj bookmark list --all-remotes to include remote-tracking bookmarks.                                                                                                                | 97    |
+| `git branch <name>`        | Refused: git branch <name>. Run: jj bookmark create <name> -r <rev>.                                                                                                                                             | 68    |
+| `git branch -d <name>`     | Refused: git branch -d. Run: jj bookmark delete <name>.                                                                                                                                                          | 55    |
+| `git checkout -b <name>`   | Refused: git checkout -b. Run: jj new to start a change, then jj bookmark create <name> -r @-. Jujutsu has no branch-switch step.                                                                                | 129   |
+| `git checkout <branch>`    | Refused: git checkout. Run: jj new <rev> to start a change on top of it, or jj edit <rev> to make it the working copy.                                                                                           | 118   |
+| `git switch <branch>`      | Refused: git switch. Run: jj new <rev> to start a change on top, or jj edit <rev> to make that revision the working copy.                                                                                        | 121   |
+| `git merge <rev>`          | Refused: git merge. Run: jj new @ <rev>. A merge is a change with two parents; conflicts are recorded in-tree, so there is no --continue.                                                                        | 137   |
+| `git rebase`               | Refused: git rebase. Run: jj rebase -s <src> -o <dest> to move a subtree, or jj rebase -b <bookmark> -o <dest> to move a branch.                                                                                 | 128   |
+| `git rebase -i`            | Refused: git rebase -i; it is interactive and cannot run headless. Run: jj rebase -r <rev> -B <rev> to reorder, jj squash to fold, jj absorb to auto-place fixes.                                                | 167   |
+| `git reset --hard`         | Refused: git reset --hard. Discard edits with jj restore <paths>, or drop the current change with jj abandon. Both are reversible with jj undo.                                                                  | 143   |
+| `git reset --soft HEAD~1`  | Refused: git reset --soft. Run: jj squash --from @- to fold the parent diff into the working copy. Jujutsu never rewrites a commit in place.                                                                     | 140   |
+| `git stash`                | Refused: git stash; Jujutsu has no stash. Run: jj new @- to park the current change as a sibling commit; find it later with jj log.                                                                              | 131   |
+| `git stash pop`            | Refused: git stash pop; there is no stash to pop. Re-enter the parked change with jj edit <change-id> (locate it with jj log).                                                                                   | 126   |
+| `git cherry-pick <rev>`    | Refused: git cherry-pick. Run: jj duplicate <rev> -o <dest> to copy that change onto another commit.                                                                                                             | 100   |
+| `git revert <rev>`         | Refused: git revert. Run: jj revert -r <rev> -B @ to insert the inverse of <rev> just before the working copy.                                                                                                   | 110   |
+| `git tag`                  | Refused: git tag. Run: jj tag list, jj tag set <name> -r <rev>, or jj tag delete <name>.                                                                                                                         | 88    |
+| `git push`                 | Refused: git push. Run: jj git push --bookmark <name>. Jujutsu pushes bookmarks explicitly; there is no implicit current-branch push.                                                                            | 133   |
+| `git push --force`         | Refused: git push --force; no force flag is needed. jj git push updates the remote only if it matches what you last fetched.                                                                                     | 124   |
+| `git pull`                 | Refused: git pull; Jujutsu has no pull. Run: jj git fetch, then jj rebase -b <bookmark> -o <remote-bookmark> to integrate.                                                                                       | 122   |
+| `git fetch`                | Refused: git fetch. Run: jj git fetch. The jj prefix matters: jj git fetch is a Jujutsu command and is never refused.                                                                                            | 117   |
+| `git clone <url>`          | Refused: git clone. Run: jj git clone <url> [<dir>]; it creates a colocated repo by default.                                                                                                                     | 92    |
+| `git remote -v`            | Refused: git remote -v. Run: jj git remote list; add one with jj git remote add <name> <url>.                                                                                                                    | 93    |
+| `git remote add <n> <url>` | Refused: git remote add. Run: jj git remote add <name> <url>.                                                                                                                                                    | 61    |
+| `git worktree add <path>`  | Refused: git worktree add. Run: jj workspace add <path>. Workspaces are Jujutsu's native multi-working-copy feature.                                                                                             | 116   |
+| `git bisect`               | Refused: git bisect. Run: jj bisect run <cmd>; it finds the first bad revision automatically.                                                                                                                    | 93    |
+| `git blame <file>`         | Refused: git blame. Run: jj file annotate <path> to show the change that last modified each line.                                                                                                                | 97    |
+| `git show <rev>`           | Refused: git show. Run: jj show <rev> for the description plus diff.                                                                                                                                             | 68    |
+| `git restore <path>`       | Refused: git restore. Run: jj restore <paths> to restore from the parent, or jj restore --from <rev> <paths>.                                                                                                    | 109   |
+| `git init`                 | Refused: git init. This is already a Jujutsu workspace; there is nothing to initialise. To create a new Jujutsu repo elsewhere, run: jj git init <directory>.                                                    | 157   |
+| `git -C <dir> <sub>`       | Refused: git -C <dir>. Run: jj -R <dir> <sub>, or cd <dir> first.                                                                                                                                                | 65    |
+| `git submodule`            | Refused: jj does not manage Git submodules, so this git submodule command has no jj equivalent. Submodules already in the repository keep working — jj records them exactly as Git does. Ask the user to run it. | 208   |
+| `git clean -fd`            | Refused: git clean -fd; Jujutsu has no untracked state to clean. Inspect with jj status, then delete the files yourself with rm.                                                                                 | 128   |
+| `git config`               | Refused: git config; Jujutsu reads identity from its own config, not .git/config. Run: jj config set --user user.name "<name>", or jj config list.                                                               | 146   |
+| `git lfs`                  | Refused: git lfs; Jujutsu has no LFS integration and the git binary fronts this subcommand. Fetch LFS objects with a plain Git checkout outside this workspace.                                                  | 159   |
 
 `git init` carries the R7 correction verbatim in substance: it must **not** tell
 the model to run `jj git init` in place, because that exits 1 with
 `Error: The target repo already exists`. It redirects to a new directory.
 
-### 2.2 Fallback, destructive paths, write-protection, low confidence (7 rows)
+Submodules are not the exception they look like. Colocation imports a submodule
+as the gitlink Git stores and leaves the checked-out tree alone — measured
+against `jj` 0.46.0 with an initialised submodule: `git status` stays clean,
+`git submodule status` still works, and the files are untouched. What jj lacks
+is a _submodule command_, and the row says that rather than claiming jj cannot
+live with them.
+
+### 2.2 Fallback, workspace refusals, destructive paths, write-protection, low confidence (9 rows)
 
 | Case                                                                                             | Message                                                                                                                                                                                                                                    | Chars |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
 | R3–R5 generic fallback (bare `git`, `git --version`, unknown subcommand)                         | Refused: this is a Jujutsu workspace and git is not used here. Run: jj help for the command list, or jj log for history with change IDs.                                                                                                   | 136   |
+| `jj` command, no Jujutsu workspace here (forceJj)                                                | Refused: there is no Jujutsu workspace here, so this jj command would fail. Initialise one first with jj git init --colocate, then retry.                                                                                                  | 137   |
+| `jj` command in a Git repo the adoption probe refused (forceJj)                                  | Refused: jj cannot be used in this repository. Adopting it for Jujutsu was refused because jj would corrupt it, so use Git here instead.                                                                                                   | 136   |
 | Destructive verb on exact component `.git` (SPEC §5.7)                                           | Refused: this deletes .git, which is where Jujutsu keeps its commit objects — so it destroys the history, not just the Git plumbing, and jj cannot restore it. If you meant to stop using Git here, run jj git colocation disable instead. | 234   |
 | Destructive verb on exact component `.jj` (SPEC §5.7)                                            | Refused: this deletes .jj, which holds the operation log — the record every jj undo depends on. Without it nothing is recoverable. To get back to a good state use jj op restore <opId> (list them with jj op log).                        | 211   |
 | Destructive verb, path contains an expansion (`"$PWD/.git"`) — ask, never allow                  | Refused: this deletes a computed path that resolves to .git or .jj. It cannot be checked before the command runs, and both are unrecoverable — .git holds Jujutsu's commits, .jj its operation log. Use a literal path if you mean it.     | 230   |
@@ -339,15 +374,15 @@ Every distinct `jj`/`jj-hunk` verb recommended above was run with
 | Aliases `jj st`, `jj b l`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | confirmed                                                                                           |
 | `jj rebase --before` is an undocumented alias of `-B/--insert-before`                                                                                                                                                                                                                                                                                                                                                                                                                                                     | confirmed by execution — it is absent from `jj help rebase`, so the plugin uses the documented `-B` |
 | Commands that had to be **changed** because they do not exist                                                                                                                                                                                                                                                                                                                                                                                                                                                             | **none**                                                                                            |
-| Longest message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | destructive `.git`, **214** chars (limit 240)                                                       |
-| Messages over 240 chars                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **0 of 50**                                                                                         |
+| Longest message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | destructive `.git`, **234** chars (limit 240)                                                       |
+| Messages over 240 chars                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **0 of 52**                                                                                         |
 | Messages containing `!`, "sorry", "policy", "plugin", or a user setting                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **0**                                                                                               |
 
 ### Rows where no good message exists
 
-| Row                  | Judgement                                                                                                                                                                                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `git submodule`      | `jj` has no submodule support (no `submodule` token in `jj --help` or `jj git --help`). The message cannot name a `jj` command; it says so plainly and routes to a plain Git clone outside the workspace. Best available, not a `jj` remedy.                 |
-| `git lfs`            | Same shape: no `jj` LFS integration, and the `git` binary fronts the subcommand so it cannot be allowed through. Routes to a plain Git checkout outside the workspace.                                                                                       |
-| `git clean -fd`      | `jj` has no untracked bucket to sweep (`jj file untrack` requires the path to already match an ignore pattern, so it is not a substitute). The message names `jj status` for inspection and `rm` for the deletion, which is a filesystem act, not a VCS one. |
-| `git -C <dir> <sub>` | `jj -R <dir> <sub>` is the equivalent, but the message cannot know `<sub>`; it names the pattern, which is the most a single deterministic string can do.                                                                                                    |
+| Row                  | Judgement                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `git submodule`      | `jj` has no submodule _command_ (no `submodule` token in `jj --help` or `jj git --help`), so the row can name no `jj` remedy. What it must not do is imply jj cannot live with submodules: colocation imports the gitlink and leaves the checked-out submodule alone, so the row asks the user to run the command. Best available, not a `jj` remedy. |
+| `git lfs`            | Same shape: no `jj` LFS integration, and the `git` binary fronts the subcommand so it cannot be allowed through. Routes to a plain Git checkout outside the workspace.                                                                                                                                                                                |
+| `git clean -fd`      | `jj` has no untracked bucket to sweep (`jj file untrack` requires the path to already match an ignore pattern, so it is not a substitute). The message names `jj status` for inspection and `rm` for the deletion, which is a filesystem act, not a VCS one.                                                                                          |
+| `git -C <dir> <sub>` | `jj -R <dir> <sub>` is the equivalent, but the message cannot know `<sub>`; it names the pattern, which is the most a single deterministic string can do.                                                                                                                                                                                             |

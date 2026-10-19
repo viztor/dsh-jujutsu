@@ -31,6 +31,14 @@ export interface Settings {
   readonly preferJj: boolean;
   /** Adopt plain Git repositories for Jujutsu (`jj git init --colocate`). */
   readonly adoptGitRepos: boolean;
+  /**
+   * Refuse `jj` invocations outside a Jujutsu workspace.
+   *
+   * On, the guard answers with the command that makes the invocation possible
+   * (`jj git init --colocate`) instead of letting `jj` exit with "There is no jj
+   * repo in "." — a call the model cannot learn anything from.
+   */
+  readonly forceJj: boolean;
 }
 
 const READ_ONLY = ["deny", "ask", "allow"] as const;
@@ -71,5 +79,6 @@ export function resolveSettings(raw: unknown): Settings {
     alertUninitialised: boolean(row.alertUninitialised, true),
     preferJj: boolean(row.preferJj, true),
     adoptGitRepos: boolean(row.adoptGitRepos, false),
+    forceJj: boolean(row.forceJj, false),
   };
 }

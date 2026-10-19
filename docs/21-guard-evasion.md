@@ -46,6 +46,19 @@ The guard also only ever sees the **agent's** `bash` calls. A human typing
 `git commit` in the same workspace is untouched — which is the point
 ([12 §A](12-risks-and-open-questions.md)).
 
+**`forceJj` is the same kind of nudge, in the other direction.** It refuses `jj`
+where no workspace exists and names `jj git init --colocate`, so the model gets
+one actionable line instead of jj's own `There is no jj repo in "."`. It is not
+a boundary either: `jj -R /tmp/elsewhere log` is allowed, because naming a
+repository is a legitimate way to reach a workspace elsewhere, and there is no
+bypass policy for the refusal — `bypass: allow` means "run this Git command
+anyway", and this one has no command to run. The guard judges the session root
+(or the tool call's `workdir`, which the harness resolves before the command
+runs), not a `cd` inside the command text, so `cd ../other-jj && jj log` is
+refused even though it would work; `-R` (or `workdir`) is the supported way to
+point at another workspace. It saves a failed call; it does not confine a
+session ([SPEC §5.15](../SPEC.md)).
+
 ## (b) The corpus, with results
 
 ### Method

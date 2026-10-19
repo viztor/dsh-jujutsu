@@ -109,6 +109,134 @@ export function classifyGitInvocation(invocation: Invocation): Decision {
 }
 
 /**
+ * The `jj` subcommands that run without a workspace.
+ *
+ * Determined empirically against `jj` 0.46.0 (`docs/13` §1): `config`, `help`,
+ * `util` and `version` answer outside a repository, and `--version` / `--help` /
+ * bare `jj` never reach a subcommand at all. Everything else this module sees is
+ * treated as needing a workspace, because `jj` itself would fail with
+ * `There is no jj repo in "."`.
+ */
+const JJ_REPO_FREE: ReadonlySet<string> = new Set(["config", "help", "util", "version"]);
+
+/**
+ * Global `jj` flags that take their value as the next word, so the walk below
+ * does not mistake that value for a subcommand.
+ *
+ * `-R`/`--repository` is handled separately: naming a repository is itself a way
+ * to satisfy the workspace requirement (`jj -R ../repo log` works from anywhere).
+ */
+const JJ_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  "--at-operation",
+  "--color",
+  "--config",
+  "--config-toml",
+]);
+
+/** What the workspace rule found. */
+export type JjDecision =
+  | { readonly kind: "allow" }
+  | { readonly kind: "refuse"; readonly verb: string };
+
+/** How one `jj` fragment relates to the workspace rule. */
+interface JjFragment {
+  /** True for `jj git init` / `jj git clone`, which create the workspace. */
+  readonly creates: boolean;
+  /** The subcommand that needs a workspace, when the fragment has one. */
+  readonly verb?: string;
+}
+
+/**
+ * Decide whether a `jj` invocation needs a workspace it does not have.
+ *
+ * Only the first offending fragment is reported: the model corrects the whole
+ * command line, and a second refusal adds nothing.
+ *
+ * A fragment that *creates* a workspace (`jj git init`, `jj git clone`) clears
+ * the rule for later fragments on the same line — `jj git init --colocate && jj
+ * log` works, so refusing it would be wrong — and it is never itself refused,
+ * which is what keeps the refusal message from naming a command the guard then
+ * blocks.
+ *
+ * @param invocation - the parsed invocation. A command that never runs `jj`
+ *   returns `allow`.
+ */
+export function classifyJjInvocation(invocation: Invocation): JjDecision {
+  let creates = false;
+  for (const raw of invocation.jjInvocations) {
+    const argv = tokenize(raw)
+      .filter(isWord)
+      .map((token) => token.value)
+      .filter((value) => value.length > 0);
+    const at = argv.findIndex(isJjProgram);
+    if (at === -1) continue;
+    const fragment = describeJjFragment(argv.slice(at + 1));
+    if (fragment.creates) {
+      creates = true;
+      continue;
+    }
+    if (fragment.verb !== undefined && !creates) {
+      return { kind: "refuse", verb: fragment.verb };
+    }
+  }
+  return { kind: "allow" };
+}
+
+/** Is this argv word the `jj` binary, under either of its names? */
+function isJjProgram(word: string): boolean {
+  const base = (word.replaceAll("\\", "/").split("/").pop() ?? word).replace(/\.exe$/i, "");
+  return base === "jj" || base === "jujutsu";
+}
+
+/**
+ * Classify one `jj` fragment's subcommand.
+ *
+ * The first positional word is the subcommand. Walking to it has to skip the
+ * global flags, and `-R`/`--repository` is special: naming a repository is
+ * itself a way to satisfy the workspace requirement (`jj -R ../repo log` works
+ * from anywhere), so it makes the fragment workspace-free.
+ */
+function describeJjFragment(args: readonly string[]): JjFragment {
+  let i = 0;
+  while (i < args.length) {
+    const value = args[i];
+    if (value === undefined) return { creates: false };
+    // `--` ends the options; nothing after it can name a subcommand.
+    if (value === "--") return { creates: false };
+    if (value === "-R" || value === "--repository") return { creates: false };
+    if ((value.startsWith("-R") && value.length > 2) || value.startsWith("--repository=")) {
+      return { creates: false };
+    }
+    if (JJ_VALUE_FLAGS.has(value)) {
+      i += 2;
+      continue;
+    }
+    if (value.startsWith("-")) {
+      i += 1;
+      continue;
+    }
+    if (JJ_REPO_FREE.has(value)) return { creates: false };
+    if (value !== "git") return { creates: false, verb: value };
+    const sub = nextPositional(args, i + 1);
+    if (sub === undefined) return { creates: false };
+    if (sub === "init" || sub === "clone") return { creates: true };
+    return { creates: false, verb: `git ${sub}` };
+  }
+  return { creates: false };
+}
+
+/** The first word after `from` that is not a flag. */
+function nextPositional(args: readonly string[], from: number): string | undefined {
+  for (let i = from; i < args.length; i += 1) {
+    const value = args[i];
+    if (value === undefined) return undefined;
+    if (value.startsWith("-")) continue;
+    return value;
+  }
+  return undefined;
+}
+
+/**
  * The Git invocation as the model wrote it, for the composed reason.
  *
  * The resolver already hands back the fragment's original text, quotes

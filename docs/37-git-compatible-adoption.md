@@ -41,19 +41,27 @@ tree, which is why a Git user who never learns jj exists is unaffected.
 
 ## 2. The compatibility probe
 
-Seven refusals, in this order. The order matters: a repository with several
+Six refusals, in this order. The order matters: a repository with several
 problems always reports the same one, so the message a user sees does not change
 between sessions.
 
-| Blocker       | Detected by                                                                                                                 | What jj actually does                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `git-file`    | `.git` is a **file** or a **symlink** (via `lstat`)                                                                         | A `.git` file (linked worktree, submodule checkout) makes `jj git init --colocate` print `Initialized a new colocated jj repo inside a Git worktree` and create a **second, unrelated repository**. A `.git` symlink is quieter and worse: two directories share one Git directory, each gets its own jj workspace, and a commit from one deletes the other's files from the shared repository. |
-| `sparse`      | `.git/info/sparse-checkout`, or `core.sparseCheckout[Cone] = true`                                                          | **Corrupt.** jj does not know about the sparse cone, so every path outside it reads as deleted. `jj status` shows `D dirB/b.txt`, one commit removes those files from the shared history, and `git sparse-checkout disable` does not bring them back.                                                                                                                                           |
-| `shallow`     | `.git/shallow`                                                                                                              | Imports the truncated history. After colocating a `--depth 1` clone, jj's view of `main` is the single imported commit, with no ancestry to rewrite.                                                                                                                                                                                                                                            |
-| `submodules`  | `.gitmodules`, or `.git/modules`                                                                                            | Prints `ignoring git submodule at "<path>"`. The gitlink and `.gitmodules` survive in commits, so history is intact — but jj never materialises or updates the submodule working copy, and an agent told "jj is available" operates on a tree that is missing it.                                                                                                                               |
-| `lfs`         | `[filter "lfs"]` in `.git/config`, `.git/lfs`, or `filter=lfs` in `.gitattributes` / `.git/info/attributes`                 | **Corrupt.** jj does not run the smudge filter. The commit holds the LFS pointer; the worktree holds the smudged bytes; they differ, so `jj status` reports `M big.bin` immediately after colocation and a commit writes the raw bytes over the pointer. Every other clone then gets a broken object.                                                                                           |
-| `filters`     | any other `[filter "…"]` in `.git/config`, `core.autocrlf = true\|input`, or a `core.attributesFile` that declares a filter | **Corrupt, and worse than LFS.** The root cause is not LFS — jj runs no filters at all. A custom filter is how git-crypt and git-secret work, so the worktree holds the _decrypted_ file and jj commits **plaintext over the encrypted blob**: a secret-exposure incident. `core.autocrlf` commits CRLF over the LF-normalised blob.                                                            |
-| `in-progress` | `MERGE_HEAD`, `rebase-merge`, `rebase-apply`, `sequencer`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`                  | Adopting mid-operation bakes a half-finished state into the import, and the user's next `git` command fights it. `sequencer/` is included because a multi-commit cherry-pick resolved with `git commit` rather than `--continue` leaves a pending pick with no `CHERRY_PICK_HEAD`.                                                                                                              |
+| Blocker       | Detected by                                                                                                                 | What jj actually does                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `git-file`    | `.git` is a **file** or a **symlink** (via `lstat`)                                                                         | A `.git` file (linked worktree, or adopting _inside_ a submodule checkout) makes `jj git init --colocate` print `Initialized a new colocated jj repo inside a Git worktree` and create a **second, unrelated repository**. A `.git` symlink is quieter and worse: two directories share one Git directory, each gets its own jj workspace, and a commit from one deletes the other's files from the shared repository. |
+| `sparse`      | `.git/info/sparse-checkout`, or `core.sparseCheckout[Cone] = true`                                                          | **Corrupt.** jj does not know about the sparse cone, so every path outside it reads as deleted. `jj status` shows `D dirB/b.txt`, one commit removes those files from the shared history, and `git sparse-checkout disable` does not bring them back.                                                                                                                                                                  |
+| `shallow`     | `.git/shallow`                                                                                                              | Imports the truncated history. After colocating a `--depth 1` clone, jj's view of `main` is the single imported commit, with no ancestry to rewrite.                                                                                                                                                                                                                                                                   |
+| `lfs`         | `[filter "lfs"]` in `.git/config`, `.git/lfs`, or `filter=lfs` in `.gitattributes` / `.git/info/attributes`                 | **Corrupt.** jj does not run the smudge filter. The commit holds the LFS pointer; the worktree holds the smudged bytes; they differ, so `jj status` reports `M big.bin` immediately after colocation and a commit writes the raw bytes over the pointer. Every other clone then gets a broken object.                                                                                                                  |
+| `filters`     | any other `[filter "…"]` in `.git/config`, `core.autocrlf = true\|input`, or a `core.attributesFile` that declares a filter | **Corrupt, and worse than LFS.** The root cause is not LFS — jj runs no filters at all. A custom filter is how git-crypt and git-secret work, so the worktree holds the _decrypted_ file and jj commits **plaintext over the encrypted blob**: a secret-exposure incident. `core.autocrlf` commits CRLF over the LF-normalised blob.                                                                                   |
+| `in-progress` | `MERGE_HEAD`, `rebase-merge`, `rebase-apply`, `sequencer`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`                  | Adopting mid-operation bakes a half-finished state into the import, and the user's next `git` command fights it. `sequencer/` is included because a multi-commit cherry-pick resolved with `git commit` rather than `--continue` leaves a pending pick with no `CHERRY_PICK_HEAD`.                                                                                                                                     |
+
+**Submodules are not a blocker**, and the earlier version of this probe was
+wrong to treat them as one. `jj git init --colocate` prints
+`ignoring git submodule at "<path>"`: the gitlink and `.gitmodules` stay in
+commits, so history is intact, and submodule working copies keep being managed
+by Git — jj simply does not update them itself. That is a limitation of the tool,
+not corruption of the repository, so adoption proceeds; a user can still drive jj
+from the superproject. (Adopting _inside_ a submodule checkout is the separate
+`git-file` case above.)
 
 `index.lock` is deliberately **not** a blocker: a stale lock is a common,
 harmless annoyance, and refusing on it would block adoption for a reason the
@@ -109,20 +117,25 @@ import, because exit 0 is not proof that jj can read the result.
 `.dsh-jujutsu.json` ([29](29-state-config-and-sandbox-surfaces.md) §3) gains an
 optional `adopt` boolean:
 
-| Marker               | Effect                                                 |
-| -------------------- | ------------------------------------------------------ |
-| `{"adopt": true}`    | adopt here even when the global setting is off         |
-| `{"adopt": false}`   | do not adopt here, even when the global setting is on  |
-| `{"enabled": false}` | the plugin is off entirely, so adoption is off with it |
-| absent               | follow `adoptGitRepos`                                 |
+| Marker               | Effect                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `{"adopt": true}`    | adopt here even when the global setting is off                                              |
+| `{"adopt": false}`   | do not adopt here, even when the global setting is on                                       |
+| `{"forceJj": true}`  | independent decision — refuse `jj` here until a workspace exists ([SPEC §5.15](../SPEC.md)) |
+| `{"enabled": false}` | the plugin is off entirely, so adoption is off with it                                      |
+| absent               | follow `adoptGitRepos`                                                                      |
 
 The `false` direction is the useful one. The global setting applies to every
 plain Git repository a session opens, and a monorepo or a vendored checkout is
 exactly where that should not happen.
 
+`forceJj` is not an adoption switch: it changes what happens when nothing was
+adopted, and it is honoured in a directory with no repository at all, which
+adoption never is.
+
 ## 5. What the prompt says
 
-Two sentences, in `context.ts`:
+Three sentences, in `context.ts`:
 
 - **Adopted:** the repository is now a Jujutsu workspace, colocated, Git tooling
   still works — and, because other people may use Git here, prefer additive
@@ -131,7 +144,12 @@ Two sentences, in `context.ts`:
   Git user who never opted into jj is downstream of everything the agent does.
 - **Blocked:** jj cannot be used here, with the blocker's sentence. Without it,
   "jj is not available" reads as a missing install and the model has no way to
-  tell the user what to change.
+  tell the user what to change. The blocked sentence wins over `forceJj`: the
+  probe's refusal is a fact, and naming an init it would refuse is a dead end.
+- **Forced (`forceJj`, nothing adopted):** Jujutsu is required here, `jj` is
+  refused until a workspace exists, and the way out is
+  `jj git init --colocate`. It also replaces the "guard is inactive" line,
+  because under `forceJj` that line is false.
 
 ## 6. What this is not
 

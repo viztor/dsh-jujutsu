@@ -32,6 +32,7 @@
  * | `{"enabled": false}` | the plugin is completely off in this subtree |
  * | `{"enabled": true}` | the plugin is on, overriding an ancestor's `false` |
  * | `{"adopt": true\|false}` | overrides the global `adoptGitRepos` setting here; alone it also means "the plugin is on" |
+ * | `{"forceJj": true\|false}` | overrides the global `forceJj` setting here; alone it also means "the plugin is on" |
  * | absent | automatic — the plugin follows `.jj` presence |
  *
  * `true` matters because it is what makes a subtree exemption possible: disable
@@ -75,6 +76,15 @@ export interface Marker {
    * on everywhere.
    */
   readonly adopt?: boolean;
+  /**
+   * Overrides the global `forceJj` setting for this project.
+   *
+   * The setting is a preference about *this* checkout at least as often as it is
+   * about the user: someone who works in Jujutsu everywhere wants `jj` refused
+   * outside a workspace, and a single vendored Git subdirectory is where that
+   * gets in the way. Both directions are therefore useful here.
+   */
+  readonly forceJj?: boolean;
   /** The directory holding the marker. */
   readonly dir: string;
 }
@@ -170,13 +180,16 @@ async function readMarker(ctx: Context, dir: string): Promise<Marker | undefined
     // here, and adopt".
     const enabled = (parsed as { enabled?: unknown }).enabled;
     const adopt = (parsed as { adopt?: unknown }).adopt;
+    const forceJj = (parsed as { forceJj?: unknown }).forceJj;
     const hasEnabled = typeof enabled === "boolean";
     const hasAdopt = typeof adopt === "boolean";
-    if (!hasEnabled && !hasAdopt) return undefined;
+    const hasForceJj = typeof forceJj === "boolean";
+    if (!hasEnabled && !hasAdopt && !hasForceJj) return undefined;
 
     return {
       enabled: hasEnabled ? enabled : true,
       ...(hasAdopt ? { adopt } : {}),
+      ...(hasForceJj ? { forceJj } : {}),
       dir,
     };
   } catch {

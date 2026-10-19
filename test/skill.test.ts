@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveSettings } from "../src/settings.ts";
-import { applySkill } from "../src/skill.ts";
+import { applySkill, SKILL_CONTENT, SKILL_DESCRIPTION } from "../src/skill.ts";
 import { fakeHarness } from "./helpers.ts";
 
 describe("the jj manual is a skill", () => {
@@ -56,5 +56,28 @@ describe("the jj manual is a skill", () => {
     const harness = fakeHarness({ skills: false });
     expect(() => applySkill(harness.ctx, resolveSettings({ teachSkill: true }))).not.toThrow();
     expect(harness.skills).toEqual([]);
+  });
+
+  it("stays a card, and sends the model to the binary for the rest", () => {
+    // The body is paid for whenever it loads, so it must not grow back into a
+    // manual: `jj help` is local, free and always matches the installed version.
+    // Anything that can be discovered by running it does not belong here.
+    expect(SKILL_CONTENT).toContain("jj help <subcommand>");
+    // ~670 words today. The bound is headroom for a better sentence or two, not
+    // room for the docs/15 verb catalogue to be pasted back in.
+    const words = SKILL_CONTENT.split(/\s+/).filter(Boolean).length;
+    expect(words).toBeLessThan(800);
+  });
+
+  it("keeps the catalog line at or under the break-even length", () => {
+    // `docs/32` §Q3: moving 38 words out of the injection saves ~57 tokens, and
+    // the catalog line costs roughly one token per four characters. Break-even
+    // is 214 characters, so a description that grows past it makes the split a
+    // net cost — the opposite of its stated justification.
+    expect(SKILL_DESCRIPTION.length).toBeLessThanOrEqual(214);
+    // It is a routing rule: the Git verbs a user says must survive every trim.
+    for (const verb of ["commit", "branch", "rebase", "undo", "push"]) {
+      expect(SKILL_DESCRIPTION).toContain(verb);
+    }
   });
 });

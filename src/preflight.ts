@@ -33,7 +33,7 @@ import type { Context } from "@deepseek-ai/cordis";
 
 import { adoptRepo } from "./adopt.ts";
 import { detect, invalidateDetection } from "./detect.ts";
-import { markerFor } from "./marker.ts";
+import { type Marker, markerFor } from "./marker.ts";
 import type { Settings } from "./settings.ts";
 import { runJj } from "./shell.ts";
 import { setWorkspaceState } from "./state.ts";
@@ -54,6 +54,12 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
       if (typeof sessionId !== "string" || typeof cwd !== "string") return;
 
       const workspace = await detect(ctx, cwd);
+      const marker = await markerFor(ctx, cwd);
+      // `{"enabled": false}` turns the whole plugin off for this subtree, so it
+      // turns this preference off too: the prompt must not tell the model about a
+      // refusal the guard will not make.
+      const forceJj =
+        !(marker !== undefined && !marker.enabled) && (marker?.forceJj ?? settings.forceJj);
 
       if (workspace.kind === "none") {
         // A plain Git repository can be handed to Jujutsu, but only when the
@@ -61,7 +67,7 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
         // branch in preflight that WRITES to the user's repository, which is why
         // it is gated on an explicit setting (or a per-project marker) and why
         // `adoptRepo` refuses rather than throws.
-        if (workspace.vcs === "git" && (await wantsAdoption(ctx, settings, cwd))) {
+        if (workspace.vcs === "git" && wantsAdoption(marker, settings)) {
           const adoption = await adoptRepo(ctx, settings, workspace.vcsRoot);
           if (adoption.ok) {
             // Detection cached "plain git" a moment ago; the import just changed
@@ -90,6 +96,7 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
               blocker: adoption.blocker,
               evidence: adoption.evidence,
             },
+            forceJj,
           });
           return;
         }
@@ -102,6 +109,7 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
         setWorkspaceState(sessionId, {
           vcs: workspace.vcs,
           root: workspace.vcsRoot === "" ? cwd : workspace.vcsRoot,
+          forceJj,
         });
         return;
       }
@@ -130,8 +138,7 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
  * wins over both, because creating `.jj` is the most invasive thing this plugin
  * does and a project that turned the plugin off has not consented to it.
  */
-async function wantsAdoption(ctx: Context, settings: Settings, cwd: string): Promise<boolean> {
-  const marker = await markerFor(ctx, cwd);
+function wantsAdoption(marker: Marker | undefined, settings: Settings): boolean {
   if (marker !== undefined && !marker.enabled) return false;
   return marker?.adopt ?? settings.adoptGitRepos;
 }

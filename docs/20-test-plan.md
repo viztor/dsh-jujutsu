@@ -106,6 +106,10 @@ Under the default `bypass: 'ask'` every `deny` below becomes
 
 ### AC1 — In a non-`jj` repo the plugin is invisible
 
+Under the default settings, including `forceJj: false`. The opt-in is a separate
+contract and has its own cases in `test/guard.test.ts` (refused where a workspace
+is missing, allowed for init/clone/config/help/version/`-R`).
+
 | Field                      | Value                                                                                                                                                                                                                                                                                                                              |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Fixture                    | `plain-git`, `not-a-repo`                                                                                                                                                                                                                                                                                                          |

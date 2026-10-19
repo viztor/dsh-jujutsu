@@ -177,14 +177,38 @@ export const Config = z.object({
    * It is refused outright for repositories `jj` cannot represent faithfully.
    * The dangerous one is LFS: `jj` does not run Git's smudge filter, so it sees
    * a smudged file as modified and would commit the raw bytes over the pointer.
-   * Submodules, shallow clones, linked worktrees and half-finished Git
-   * operations are refused too. See `src/adopt.ts` and `docs/37`.
+   * Shallow clones, linked worktrees and half-finished Git operations are
+   * refused too. Submodules are **not** on that list: `jj` records the gitlink
+   * Git stores and leaves the checked-out submodule alone, and updating it stays
+   * `git submodule update`'s job. A repository that uses them survives adoption
+   * intact. See `src/adopt.ts` and `docs/37`.
    */
   adoptGitRepos: z
     .boolean()
     .default(false)
     .description(
-      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS or any content filter, a sparse checkout, submodules, a shallow clone, a linked worktree or symlinked .git, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
+      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS or any content filter, a sparse checkout, a shallow clone, a linked worktree or symlinked .git, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces, unless Force Jujutsu is on.",
+    )
+    .volatile(),
+
+  /**
+   * Refuse `jj` where there is no workspace.
+   *
+   * Most `jj` subcommands exit with `There is no jj repo in "."` when there is no
+   * workspace, and that error tells the model nothing it can act on. On, the
+   * guard answers first and names the command that creates the workspace — the
+   * same one call, spent on an instruction instead of a dead end. Off by
+   * default: a user who never asked for Jujutsu should not have `jj` refused in
+   * directories this plugin knows nothing about.
+   *
+   * The per-project marker can override it in either direction, because the
+   * preference belongs to the checkout at least as often as to the user.
+   */
+  forceJj: z
+    .boolean()
+    .default(false)
+    .description(
+      "Refuse jj commands outside a Jujutsu workspace, with a message naming jj git init --colocate. jj cannot run most commands without a workspace, so the refusal costs one call instead of a failed call; off leaves jj to fail with its own error. Only jj invocations are affected; Git commands keep their own settings.",
     )
     .volatile(),
 });

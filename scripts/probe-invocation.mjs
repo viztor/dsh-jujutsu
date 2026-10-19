@@ -42,6 +42,8 @@
  *     programs:       string[]   resolved program basenames, in first-seen order
  *     gitInvocations: string[]   raw command text of each fragment whose head
  *                                program resolves to `git`
+ *     jjInvocations:  string[]   raw command text of each fragment whose head
+ *                                program resolves to `jj` (or `jujutsu`)
  *     confidence:     'high' | 'low'   'low' iff something was unresolvable
  *     notes:          string[]   'unresolved: …' lowers confidence;
  *                                'info: …' and 'recursed: …' do not
@@ -652,6 +654,10 @@ function record(state, prog, raw, isGit) {
     .replace(new RegExp(FUNC_SENTINEL, "g"), "function")
     .trim();
   if (isGit && !state.gitInvocations.includes(shown)) state.gitInvocations.push(shown);
+  // `jujutsu` is the long name of the same binary; both resolve to the same CLI.
+  if ((prog === "jj" || prog === "jujutsu") && !state.jjInvocations.includes(shown)) {
+    state.jjInvocations.push(shown);
+  }
 }
 
 function analyzeFragment(frag, state, depth) {
@@ -895,23 +901,31 @@ function analyze(text, state, depth) {
 /**
  * Classify a command string.
  * @param {string} command
- * @returns {{programs: string[], gitInvocations: string[], confidence: 'high'|'low', notes: string[]}}
+ * @returns {{programs: string[], gitInvocations: string[], jjInvocations: string[], confidence: 'high'|'low', notes: string[]}}
  */
 export function classifyInvocation(command) {
   const state = {
     programs: [],
     gitInvocations: [],
+    jjInvocations: [],
     notes: [],
     low: false,
     functionDefs: new Set(),
   };
   if (typeof command !== "string" || command.trim() === "") {
-    return { programs: [], gitInvocations: [], confidence: "high", notes: ["info: empty command"] };
+    return {
+      programs: [],
+      gitInvocations: [],
+      jjInvocations: [],
+      confidence: "high",
+      notes: ["info: empty command"],
+    };
   }
   analyze(command, state, 0);
   return {
     programs: state.programs,
     gitInvocations: state.gitInvocations,
+    jjInvocations: state.jjInvocations,
     confidence: state.low ? "low" : "high",
     notes: [...new Set(state.notes)],
   };

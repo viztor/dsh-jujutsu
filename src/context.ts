@@ -12,15 +12,21 @@
  * | Content | Home | Cost |
  * |---|---|---|
  * | the **rule** ("Git is intercepted; use `jj`") | `section` at `TOOL_BASH` | every assembly — it must be there *before* the first Git command |
- * | the **state** (root, layout, `@`, `jj-hunk`) | `context` at order 130 | every assembly — it changes |
+ * | the **state** (root, layout, `@`, `jj-hunk`, the manual's name) | `context` at order 130 | every assembly — it changes |
  * | the **manual** (how to drive `jj`) | a `jujutsu` skill | one catalog line; the body loads on demand |
  *
- * **The skill split is not a token saving.** Measured: the real injection is 89
- * words ≈ 138 tokens, of which only 38 words are movable, against a catalog line
- * costing 30–77 — a net −26 tokens at best and **+20** with a long description.
- * It ships because a skill lets the manual be *complete* instead of capped at 38
- * words. Keep the skill description under ~35 words or the split costs more than
- * it saves (`docs/32-probe-results-teaching.md` §Q3).
+ * **The skill split is not a token saving.** Measured before the pointer line:
+ * the real injection was 89 words ≈ 138 tokens, of which 38 words were movable,
+ * against a catalog line costing 30–77 — a net −26 tokens at best and **+20**
+ * with a long description. It ships because a skill lets the manual be
+ * *complete* instead of capped at 38 words, while the pointer line (13 words)
+ * makes the card discoverable without paying for its body. The card itself was
+ * cut to ~670 words by deferring flags and syntax to `jj help`, which is local,
+ * free and always matches the installed binary; only what `jj help` cannot
+ * answer (the Git-intent map, the eleven tools, hunk selection) stayed. Keep the
+ * skill description at or under the 214-character break-even from
+ * `docs/32-probe-results-teaching.md` §Q3, or the split costs more than it
+ * saves; it is 206 characters today.
  *
  * Order `130` is the next free slot: `CONTEXT_ORDERS` holds only 110
  * (`SANDBOX_POLICY`), 115 (`APPROVAL_POLICY`) and 120 (`SUBAGENT_DELEGATION`).
@@ -94,7 +100,11 @@ function stateOf(context: unknown) {
 }
 
 /**
- * The state block, or `''` outside a `jj` workspace.
+ * The state block, or `''` outside a `jj` workspace when `forceJj` is off.
+ *
+ * With `forceJj` on, a directory that has no workspace still gets a two-line
+ * block naming the refusal and `jj git init --colocate` — the refusal must be
+ * legible before the model trips over it.
  *
  * Shape from `docs/25-prompt-copy.md` §1.2; the `{{a | b}}` alternatives are
  * resolved here rather than emitted.
@@ -106,6 +116,15 @@ function renderState(context: unknown, settings: Settings): string {
   // No version control at all. Say so, and say what to do about it — the
   // plugin is otherwise silent here, and silence reads as "nothing to report".
   if (state.vcs === "none") {
+    // `forceJj` changes the advice from "offer to initialise" to "initialise
+    // first, jj will be refused until you do". Saying nothing about the refusal
+    // would let the model discover it by trying a command.
+    if (state.forceJj) {
+      return [
+        `Version control: none. ${state.root} is not inside a Git or Jujutsu repository.`,
+        "Jujutsu is required here: jj commands are refused until a workspace exists. Initialise one with: jj git init --colocate",
+      ].join("\n");
+    }
     if (!settings.alertUninitialised) return "";
     const init = settings.preferJj
       ? "jj git init  (creates a colocated repo; Git tooling still works)"
@@ -116,12 +135,16 @@ function renderState(context: unknown, settings: Settings): string {
     ].join("\n");
   }
 
-  // A plain Git repo. The guard is deliberately inactive — the plugin only
-  // governs `jj` workspaces — so the prompt says what is true rather than
-  // implying a policy that is not in force.
+  // A plain Git repo. Without `forceJj` the guard is deliberately inactive —
+  // the plugin only governs `jj` workspaces — so the prompt says what is true
+  // rather than implying a policy that is not in force. Under `forceJj` the jj
+  // guard *is* active here, and the old "guard is inactive" line would
+  // contradict the sentence that follows it.
   if (state.vcs === "git") {
     const lines = [
-      `Version control: Git (no Jujutsu here). The jj guard is inactive in this directory.`,
+      state.forceJj
+        ? "Version control: Git (no Jujutsu workspace here). Git is not guarded; jj is required."
+        : "Version control: Git (no Jujutsu here). The jj guard is inactive in this directory.",
       `Repository root: ${state.root}`,
     ];
     // Adoption was attempted and refused. Say so, and say why: "jj is not
@@ -131,6 +154,12 @@ function renderState(context: unknown, settings: Settings): string {
     if (state.adoption?.status === "blocked") {
       lines.push(
         `Jujutsu cannot be used here: ${blockerText(state.adoption.blocker ?? "git-file")}.`,
+      );
+    } else if (state.forceJj) {
+      // The guard will refuse `jj` here, and the model has to know that before
+      // it tries one — this is the line that turns a refusal into an instruction.
+      lines.push(
+        "Jujutsu is required here: jj commands are refused until a workspace exists. Initialise one with: jj git init --colocate",
       );
     }
     return lines.join("\n");
@@ -149,6 +178,10 @@ function renderState(context: unknown, settings: Settings): string {
     `Layout: ${layout}`,
     `Working copy @: ${state.changeId ?? "unknown"}`,
     `Hunk selection: ${hunk}`,
+    // The card itself is loaded on demand; this line is the only thing that
+    // tells the model it exists. Without it, a cold start has to discover the
+    // skill catalog entry by accident, or reinvent the verb map.
+    "Manual: load the jujutsu skill for the verb map and tool details.",
   ];
   // Adopted this session: say so, and name the one rule that follows from it.
   // The repository may have Git users who never agreed to Jujutsu, so history

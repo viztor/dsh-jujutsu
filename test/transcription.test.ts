@@ -30,6 +30,8 @@ import {
   DESTRUCTIVE,
   DISPLAY_REASONS,
   GENERIC_FALLBACK,
+  JJ_ADOPTION_REFUSED,
+  JJ_NO_WORKSPACE,
   LOW_CONFIDENCE,
   VERB_ROWS,
   WRITE_PROTECTION,
@@ -93,6 +95,8 @@ function entries(): Entry[] {
       reason: row.message.reason,
     })),
     { label: "GENERIC_FALLBACK", reason: GENERIC_FALLBACK.reason },
+    { label: "JJ_NO_WORKSPACE", reason: JJ_NO_WORKSPACE.reason },
+    { label: "JJ_ADOPTION_REFUSED", reason: JJ_ADOPTION_REFUSED.reason },
     ...Object.entries(DESTRUCTIVE).map(([key, message]) => ({
       label: `DESTRUCTIVE.${key}`,
       reason: message.reason,
@@ -127,12 +131,12 @@ const NOT_VERBATIM: ReadonlySet<string> = new Set([]);
 
 describe("the denial copy is the document's copy", () => {
   it("parses the catalogue it claims to parse", () => {
-    // §2 states its own inventory: "43 rows" in §2.1, 7 in §2.2, 11
+    // §2 states its own inventory: "43 rows" in §2.1, 9 in §2.2, 11
     // displayReason variants in §2.3. A reworded heading would empty a slice and
     // let every check below pass on nothing, which is the failure mode of a
     // parsing test.
     expect(countedRows(verbCopy)).toBe(43);
-    expect(countedRows(specialCopy)).toBe(7);
+    expect(countedRows(specialCopy)).toBe(9);
     expect(countedRows(displayCopy)).toBe(11);
   });
 

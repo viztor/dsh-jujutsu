@@ -31,6 +31,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -103,7 +104,7 @@ const LFS_ATTRIBUTES = "*.bin filter=lfs diff=lfs merge=lfs -text\n";
  *
  * `init-failed` is allowed in the blocker position because `adoptRepo` can fail
  * for an environmental reason as well as a repository one; the probe tests still
- * assert the exact five, so widening the helper does not weaken them.
+ * assert the exact blockers, so widening the helper does not weaken them.
  */
 type Refusal =
   | {
@@ -146,31 +147,24 @@ describe("the compatibility probe", () => {
     expect(bad.evidence).toContain("shallow");
   });
 
-  it("refuses a repo with submodules, which jj would silently never update", async () => {
-    // jj prints `ignoring git submodule at "<path>"` and keeps the gitlink in
-    // commits; a clone through jj then never materialises the submodule.
-    const root = gitDirAt("submodules-file");
+  it("accepts a repo with submodules, which jj records as Git does", async () => {
+    // Measured against jj 0.46.0: colocation imports the gitlink (mode 160000),
+    // leaves the checked-out submodule alone, and `git status` stays clean. jj
+    // does not *update* submodules, but refusing adoption over a command it
+    // lacks would keep jj out of repositories it handles correctly — the
+    // submodule is the user's to update, not a corruption risk.
+    const declared = gitDirAt("submodules-file");
     writeFileSync(
-      join(root, ".gitmodules"),
+      join(declared, ".gitmodules"),
       '[submodule "vendor"]\n\tpath = vendor\n\turl = https://example.invalid/vendor\n',
     );
+    expect(await probeAdoption(fakeHarness().ctx, declared)).toEqual({ ok: true });
 
-    const { ctx } = fakeHarness();
-    const bad = refusal(await probeAdoption(ctx, root));
-    expect(bad.blocker).toBe("submodules");
-    expect(bad.evidence).toContain("gitmodules");
-  });
-
-  it("refuses a repo with a `.git/modules` directory, the same feature by another shape", async () => {
-    // A checkout whose `.gitmodules` was deleted still carries the submodule
-    // data. Checking only the tracked file would adopt it.
-    const root = gitDirAt("submodules-dir");
-    mkdirSync(join(root, ".git/modules/vendor"), { recursive: true });
-
-    const { ctx } = fakeHarness();
-    const bad = refusal(await probeAdoption(ctx, root));
-    expect(bad.blocker).toBe("submodules");
-    expect(bad.evidence).toContain("modules");
+    // `.git/modules` without `.gitmodules` is the same feature in the other
+    // shape: the tracked file was deleted while the submodule repositories remain.
+    const stored = gitDirAt("submodules-dir");
+    mkdirSync(join(stored, ".git/modules/vendor"), { recursive: true });
+    expect(await probeAdoption(fakeHarness().ctx, stored)).toEqual({ ok: true });
   });
 
   it("refuses a Git LFS repo, which jj would corrupt on the next commit", async () => {
@@ -239,20 +233,16 @@ describe("the compatibility probe", () => {
   });
 
   it("reports the first blocker in the documented order", async () => {
-    // The order is the message's stability: a repo that is both shallow and
-    // submoduled must always name the same one, or the prompt's advice changes
+    // The order is the message's stability: a repo that is both sparse and
+    // shallow must always name the same one, or the prompt's advice changes
     // between sessions for no reason.
     const { ctx } = fakeHarness();
 
-    const shallowAndSubmodules = gitDirAt("order-shallow");
-    writeFileSync(join(shallowAndSubmodules, ".git/shallow"), "0000\n");
-    writeFileSync(join(shallowAndSubmodules, ".gitmodules"), '[submodule "x"]\n');
-    expect(refusal(await probeAdoption(ctx, shallowAndSubmodules)).blocker).toBe("shallow");
-
-    const submodulesAndLfs = gitDirAt("order-submodules");
-    writeFileSync(join(submodulesAndLfs, ".gitmodules"), '[submodule "x"]\n');
-    writeFileSync(join(submodulesAndLfs, ".gitattributes"), LFS_ATTRIBUTES);
-    expect(refusal(await probeAdoption(ctx, submodulesAndLfs)).blocker).toBe("submodules");
+    const sparseAndShallow = gitDirAt("order-sparse");
+    mkdirSync(join(sparseAndShallow, ".git/info"), { recursive: true });
+    writeFileSync(join(sparseAndShallow, ".git/info/sparse-checkout"), "src/\n");
+    writeFileSync(join(sparseAndShallow, ".git/shallow"), "0000\n");
+    expect(refusal(await probeAdoption(ctx, sparseAndShallow)).blocker).toBe("sparse");
 
     const lfsAndMerge = gitDirAt("order-lfs");
     writeFileSync(join(lfsAndMerge, ".gitattributes"), LFS_ATTRIBUTES);
@@ -413,17 +403,29 @@ describe.skipIf(!HAS_JJ || !HAS_GIT)("adoption runs real jj", () => {
     expect(existsSync(join(root, ".jj"))).toBe(false);
   });
 
-  it("refuses a repo with submodules and leaves it untouched", async () => {
-    const root = adoptable("blocked-submodules");
-    writeFileSync(
-      join(root, ".gitmodules"),
-      '[submodule "vendor"]\n\tpath = vendor\n\turl = https://example.invalid/vendor\n',
-    );
+  it("adopts a repo with a real submodule and leaves it working", async () => {
+    // The end-to-end version of the probe's acceptance: a genuine submodule from
+    // a local origin survives colocation with its gitlink, its working file and
+    // its `git status` intact — the case that used to be refused.
+    const origin = caseDir("sub-origin");
+    gitInit(origin);
+    writeFileSync(join(origin, "a.txt"), "sub content\n");
+    git(origin, ["add", "a.txt"]);
+    git(origin, ["commit", "-m", "sub base"]);
+
+    const root = adoptable("submodule-parent");
+    git(root, ["-c", "protocol.file.allow=always", "submodule", "add", origin, "sub"]);
+    git(root, ["commit", "-m", "add submodule"]);
 
     const h = harnessAt();
-    const bad = refusal(await adoptRepo(h.ctx, resolveSettings({ adoptGitRepos: true }), root));
-    expect(bad.blocker).toBe("submodules");
-    expect(existsSync(join(root, ".jj"))).toBe(false);
+    expect(await adoptRepo(h.ctx, resolveSettings({ adoptGitRepos: true }), root)).toEqual({
+      ok: true,
+    });
+
+    expect(existsSync(join(root, ".jj"))).toBe(true);
+    expect(readFileSync(join(root, "sub/a.txt"), "utf8")).toBe("sub content\n");
+    expect(git(root, ["ls-tree", "HEAD", "sub"])).toContain("160000");
+    expect(git(root, ["status", "--porcelain"])).toBe("");
   });
 });
 
@@ -431,13 +433,12 @@ describe("the one-sentence explanation", () => {
   it("names the feature for every blocker, and for a failed init", () => {
     // This text goes into the prompt, where a sentence that says "not supported"
     // without naming *what* is not supported gives the model nothing to tell the
-    // user. `init-failed` is separate from the five blockers: it is not a
+    // user. `init-failed` is separate from the repository blockers: it is not a
     // property of the repository but a failure to run `jj` at all.
     const expected: readonly (readonly [AdoptBlocker | "init-failed", RegExp])[] = [
       ["git-file", /worktree|submodule|symlink/i],
       ["sparse", /sparse/i],
       ["shallow", /shallow/i],
-      ["submodules", /submodule/i],
       ["lfs", /lfs/i],
       ["filters", /filter|autocrlf/i],
       ["in-progress", /merge|rebase|cherry|revert|bisect|progress/i],

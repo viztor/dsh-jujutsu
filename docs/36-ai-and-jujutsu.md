@@ -20,11 +20,11 @@ measurement are marked in §7.
 Three surfaces, split by _when they must be true_
 ([28](28-teaching-and-interaction-surfaces.md) §1.5):
 
-| Content                                                  | Home                        | Cost                                            |
-| -------------------------------------------------------- | --------------------------- | ----------------------------------------------- |
-| the **rule** — Git is intercepted, use `jj`              | `systemPrompt.section`      | every assembly, before the first Git command    |
-| the **state** — root, layout, `@`, `jj-hunk`             | `systemPrompt.context`      | every assembly; re-emitted only when it changes |
-| the **manual** — model, ids, bookmarks, op log, verb map | the `jujutsu` runtime skill | one catalog line; the body loads on demand      |
+| Content                                                         | Home                        | Cost                                            |
+| --------------------------------------------------------------- | --------------------------- | ----------------------------------------------- |
+| the **rule** — Git is intercepted, use `jj`                     | `systemPrompt.section`      | every assembly, before the first Git command    |
+| the **state** — root, layout, `@`, `jj-hunk`, the manual's name | `systemPrompt.context`      | every assembly; re-emitted only when it changes |
+| the **manual** — model, ids, bookmarks, op log, verb map        | the `jujutsu` runtime skill | one catalog line; the body loads on demand      |
 
 The manual is now real code, not a promise. `src/skill.ts` exports
 `applySkill(ctx, settings)`, which registers through
@@ -38,14 +38,27 @@ The split is justified by **depth, not tokens**. [32](32-probe-results-teaching.
 §Q3 measured the shipped injection at 89 words ≈ 138 tokens, of which 38 words
 are manual: the catalog line buys back roughly 26 tokens with a short
 description, and _costs_ about 20 with a long one. What the skill buys is a body
-that can be complete — it is paid only in the sessions that load it.
+that is paid only in the sessions that load it — and, because it is not in the
+~200-word prompt budget, room to be _useful_ rather than terse.
+
+**The body is a card, not the manual.** `jj help <subcommand>` and
+`jj help -k <topic>` are local, free, and always match the installed binary, so
+copying flags into the skill pays twice and drifts on the next upgrade. The card
+therefore keeps only what the binary cannot answer — the Git-to-`jj` intent map,
+the plugin's own eleven tools, and the hunk query language — names `jj help` as
+the source of truth for the rest, and measures ~670 words instead of ~1,185
+(`test/skill.test.ts` caps it at 800 so it cannot grow back). A skill nobody
+notices is a file nobody reads, so the state block carries one pointer line
+(`Manual: load the jujutsu skill for the verb map and tool details.`, 13 words);
+that is the whole per-request cost of discoverability.
 
 Two design rules follow, and both are in the code:
 
 - **The description is a routing rule.** It is the only signal in
   `<available_skills>` ([28](28-teaching-and-interaction-surfaces.md) §1.3), so
   it names Git and the verbs a user says (`commit`, `branch`, `rebase`, `undo`,
-  `push`), and it stays around 35 words.
+  `push`), and it stays under the 214-character break-even from
+  [32 §Q3](32-probe-results-teaching.md) — 206 characters / 33 words today.
 - **Registration is global and shadowable.** A repository plugin is a
   host-plane row, so the entry lands in the registry's global layer; a project
   skill of the same name in a nearer layer wins, which is the right default

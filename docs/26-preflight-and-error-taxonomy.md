@@ -512,11 +512,25 @@ the model**, so `reason` must be self-contained and must name the `jj`
 replacement command. Full text and the verb table: [15](15-verb-mapping.md),
 [17](17-bypass-and-approval.md), [21](21-guard-evasion.md).
 
-| code (`info.code`)         | Trigger                                                                        | Posture                                                     |
-| -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `GUARD_GIT_DENIED`         | a resolved program basename of exactly `git` inside a `jj` workspace           | **closed** (deny) by default, `ask` under the bypass policy |
-| `GUARD_JJ_INTERNALS_WRITE` | `read`/`write`/`edit` targeting `.jj/**` or `.git/**`                          | reads **open**, writes **closed**                           |
-| `GUARD_REPO_STORE_DELETE`  | destructive verb whose resolved path names the exact component `.git` or `.jj` | `ask` when a human is present, `deny` under `never`         |
+| code (`info.code`)         | Trigger                                                                          | Posture                                                     |
+| -------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `GUARD_GIT_DENIED`         | a resolved program basename of exactly `git` inside a `jj` workspace             | **closed** (deny) by default, `ask` under the bypass policy |
+| `GUARD_JJ_INTERNALS_WRITE` | `read`/`write`/`edit` targeting `.jj/**` or `.git/**`                            | reads **open**, writes **closed**                           |
+| `GUARD_REPO_STORE_DELETE`  | destructive verb whose resolved path names the exact component `.git` or `.jj`   | `ask` when a human is present, `deny` under `never`         |
+| `GUARD_JJ_NO_WORKSPACE`    | a `jj` command that needs a workspace, in a directory with none, under `forceJj` | **closed**, always — no bypass applies                      |
+
+`GUARD_JJ_NO_WORKSPACE` is the one refusal that fires _before_ the command would
+have failed: without a workspace, most `jj` subcommands exit with
+`There is no jj repo in "."`, which tells the model nothing it can act on. The
+reason names `jj git init --colocate` instead. It is in the same family as the
+Git refusal — a redirection, not a permission — but it is **not** answerable by
+the bypass: `bypass: allow` means "run this Git command anyway", and there is no
+command here to run. Commands that do not need a workspace are never refused
+(`jj git init`, `jj git clone`, `jj config`, `jj help`, `jj util`, `jj version`,
+`--version`, bare `jj`, every `-R <path>`), and where adoption was already
+refused the code stays `GUARD_JJ_NO_WORKSPACE` but the copy says "use Git
+here instead" — naming an init the probe would reject would be a dead end. See
+[§5.15](../SPEC.md) and [37](37-git-compatible-adoption.md).
 
 **The guard must never produce any other error.** Every internal failure inside
 the listener — a throwing detector, an unreadable `.jj`, an unresolved root —

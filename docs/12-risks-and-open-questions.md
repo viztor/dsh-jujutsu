@@ -122,7 +122,8 @@ is unrecoverable in a way that corrupting `.git` is not.
 Acceptance criteria do not exist yet. A defensible first set:
 
 1. In a non-`jj` repo, the plugin is **invisible** — no denial, no added
-   context, no measurable latency.
+   context, no measurable latency. (Under the default `forceJj: false`; the
+   opt-in turns that repo into a guarded one on purpose.)
 2. In a `jj` repo, `git commit` / `git checkout -b` / `git branch` are denied
    with a correct, actionable `jj` replacement.
 3. `jj git export` and `jj git push` still work.

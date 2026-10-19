@@ -27,8 +27,9 @@ and uses `jj` instead — and it is _told_ why, rather than just being blocked.
   change IDs survive rewrites.
 - **A settings panel**, on the plugin's own page.
 
-The plugin is invisible outside a Jujutsu workspace. In a plain Git repo it does
-nothing at all.
+The plugin is invisible outside a Jujutsu workspace, unless you turn on _Force
+Jujutsu_ (then it refuses `jj` there and names the init command). In a plain Git
+repo it otherwise does nothing at all.
 
 ## Install
 
@@ -105,8 +106,10 @@ Git repos_ and the first session in a Git repo that has no `.jj` runs
 `jj git init --colocate`: the history is imported and the agent gets jj, while
 Git tooling keeps working because `.git` is untouched. It is refused outright
 for repositories jj cannot represent — LFS (where jj would commit raw bytes over
-the pointer), submodules, shallow clones, linked worktrees, and a Git operation
-in progress. See [docs/37](docs/37-git-compatible-adoption.md).
+the pointer), sparse checkouts, shallow clones, linked worktrees, and a Git
+operation in progress. Submodules are **not** a blocker: jj records the gitlink
+and leaves the submodule to Git, so you can keep using jj in the superproject.
+See [docs/37](docs/37-git-compatible-adoption.md).
 
 Depth is deferred rather than paid for. The rule and the workspace state ride the
 system prompt because they must be in force before the model's first Git command;
@@ -131,6 +134,7 @@ Open **Plugins → Jujutsu**. Most settings are on that page:
 | Explain Jujutsu in the prompt   | on      | Off means the guard still refuses Git but the model is not told why                |
 | Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                         |
 | Use Jujutsu in Git repos        | off     | Adopt a plain Git repo by creating `.jj` beside `.git`                             |
+| Force Jujutsu                   | off     | Refuse `jj` outside a workspace, naming `jj git init --colocate`                   |
 
 ### Advanced: where the binaries are found
 
@@ -154,7 +158,10 @@ Drop a `.dsh-jujutsu.json` in the project root:
 
 The **nearest** marker walking up from the working directory wins, so you can
 disable a monorepo and re-enable one vendored `jj` repo inside it with
-`{"enabled": true}`.
+`{"enabled": true}`. The same file takes the two opt-ins per project —
+`{"adopt": true}` / `{"adopt": false}` for adoption and
+`{"forceJj": true}` / `{"forceJj": false}` for forcing Jujutsu — and
+`{"enabled": false}` vetoes both.
 
 The file is yours to place — add it to `.gitignore` if the switch should stay
 local, or commit it to share the behaviour with your team. A malformed marker is
@@ -169,7 +176,10 @@ or _Writing Git_ to `allow`, or add a `.dsh-jujutsu.json` with
 **Nothing happens at all.** The plugin only acts inside a Jujutsu workspace —
 a directory with a `.jj` directory, in it or any parent. Check with
 `jj status`; if that says _"There is no jj repo in '.'"_, the plugin is correctly
-inactive. `jj git init` creates one (colocated by default).
+inactive. `jj git init` creates one (colocated by default). If you want the
+plugin to take over such a directory anyway, turn on _Force Jujutsu_: `jj`
+commands are then refused with the initialisation command instead of failing on
+their own.
 
 **The hunk tools say unavailable.** `jj-hunk` is not installed or not on `PATH`.
 Set _jj-hunk executable_ to an absolute path, or install it:
@@ -257,7 +267,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **300 tests**, `pnpm run ci` green.
+observed working in a live session. **336 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

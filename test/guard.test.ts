@@ -7,12 +7,17 @@
  * detection inside the guard is exercised for real rather than stubbed.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apply } from "../src/index.ts";
 import { forget } from "../src/bypass.ts";
 import { invalidateDetection } from "../src/detect.ts";
-import { invalidateMarkers } from "../src/marker.ts";
+import { MARKER_FILE, invalidateMarkers } from "../src/marker.ts";
+import { clearWorkspaceState, setWorkspaceState } from "../src/state.ts";
 import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
 /** A `bash` call in the colocated fixture. */
@@ -35,10 +40,13 @@ function harnessWith(config: Record<string, unknown> = {}, policy?: "ask" | "nev
 
 beforeEach(() => {
   forget();
-  // `marker.test.ts` writes a `/tmp/.dsh-jujutsu.json` to prove the switch
+  // `forceJj` reads the session state's adoption verdict, and a test that
+  // records one would otherwise leak into the next.
+  clearWorkspaceState();
+  // `marker.test.ts` writes a marker under its own temp root to prove the switch
   // reaches the guard. Its cache entry outlives the file by the TTL, and the
   // fixtures live under `/tmp`, so without this the guard tests below would run
-  // with the plugin switched off.
+  // with plugin settings read from a stale entry.
   invalidateMarkers();
   // Detection caches per root in a module-level Map. Without this, the
   // fail-open test would read a cache entry populated by an earlier test and
@@ -452,5 +460,163 @@ describe("a denial carries a durable code", () => {
     const decision = await harness.preExecute(bashAt("git status"));
     expect(decision).toMatchObject({ kind: "deny" });
     expect((decision as { reason: string }).reason).not.toContain("GUARD_");
+  });
+});
+
+/**
+ * Force Jujutsu, end to end through the guard.
+ *
+ * The switch exists because a session that has decided "use jj here" should not
+ * spend a turn discovering that `jj` has no workspace: `jj log` outside a
+ * repository exits with `There is no jj repo in "."`, which is true, unhelpful,
+ * and costs a model turn to read and another to work around. Refusing it with
+ * the initialisation command turns that into one step.
+ *
+ * The three edges that matter: the switch is off by default (the plugin must
+ * stay invisible in unrelated directories), the commands that genuinely work
+ * without a workspace are never refused, and a repository the adoption probe
+ * rejected is sent back to Git rather than told to initialise.
+ */
+describe.skipIf(!HAS_FIXTURES)("the guard refuses jj where Jujutsu is required", () => {
+  const TMP: string[] = [];
+  afterAll(() => {
+    for (const root of TMP) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** A directory unique to this process, so marker writes cannot race a peer. */
+  function tempDir(): string {
+    const root = mkdtempSync(join(tmpdir(), "dsh-jujutsu-force-"));
+    TMP.push(root);
+    return root;
+  }
+
+  function at(harness: ReturnType<typeof fakeHarness>, command: string, cwd: string) {
+    return harness.session("s1", cwd).exec("bash", { command, description: "test" });
+  }
+
+  it("changes nothing when the switch is off", async () => {
+    const h = harnessWith();
+    for (const cwd of [`${FIXTURES}/not-a-repo`, `${FIXTURES}/plain-git`]) {
+      const decision = await h.preExecute(at(h, "jj log", cwd));
+      expect(decision.kind, cwd).toBe("allow");
+    }
+  });
+
+  it("refuses a workspace command, and names the one that creates it", async () => {
+    const h = harnessWith({ forceJj: true });
+    const decision = await h.preExecute(at(h, "jj log", `${FIXTURES}/not-a-repo`));
+    expect(decision).toMatchObject({
+      kind: "deny",
+      info: { name: "dsh-jujutsu", code: "GUARD_JJ_NO_WORKSPACE" },
+    });
+    if (decision.kind !== "deny") return;
+    expect(decision.reason).toContain("jj git init --colocate");
+    // The copy states the correction, not just the prohibition.
+    expect(decision.reason).toContain("no Jujutsu workspace");
+  });
+
+  it("never refuses a command that answers without a workspace", async () => {
+    // These are the escape hatches the refusal must leave open: creating the
+    // workspace (`init`/`clone`), inspection that works outside a repository,
+    // and the global `-R` / `--` forms that point at one elsewhere. A guard that
+    // refused `jj git init` would make forceJj a dead end.
+    const h = harnessWith({ forceJj: true });
+    const cwd = `${FIXTURES}/not-a-repo`;
+    for (const command of [
+      "jj git init --colocate",
+      "jj git clone https://example.invalid/repo dest",
+      "jj config list",
+      "jj help",
+      "jj util completion bash",
+      "jj version",
+      "jj --version",
+      "jj",
+      "jj -R /tmp/elsewhere log",
+      "jj -- status",
+    ]) {
+      const decision = await h.preExecute(at(h, command, cwd));
+      expect(decision.kind, command).toBe("allow");
+    }
+  });
+
+  it("recognises the alias and an absolute path", async () => {
+    // `jujutsu` is the project name, but users and scripts do invoke it; a
+    // refusal that only matched the `jj` spelling would let half the calls
+    // through to fail on their own.
+    const h = harnessWith({ forceJj: true });
+    for (const command of ["jujutsu status", "/usr/local/bin/jj log"]) {
+      const decision = await h.preExecute(at(h, command, `${FIXTURES}/not-a-repo`));
+      expect(decision.kind, command).toBe("deny");
+    }
+  });
+
+  it("does not touch a jj workspace", async () => {
+    // Inside a workspace the ordinary Git rule applies; `forceJj` only fills the
+    // gap where the plugin used to be silent.
+    const h = harnessWith({ forceJj: true });
+    const decision = await h.preExecute(bash(h, "jj log"));
+    expect(decision.kind).toBe("allow");
+  });
+
+  it("sends the model back to Git where the adoption probe refused", async () => {
+    // `jj git init` in an LFS or sparse checkout is the corruption the probe
+    // exists to prevent; suggesting it would turn a refusal into an instruction
+    // to damage the repository.
+    const h = harnessWith({ forceJj: true });
+    setWorkspaceState("s1", {
+      vcs: "git",
+      root: `${FIXTURES}/plain-git`,
+      adoption: { status: "blocked", blocker: "lfs", evidence: "filter=lfs" },
+    });
+    const decision = await h.preExecute(at(h, "jj log", `${FIXTURES}/plain-git`));
+    expect(decision.kind).toBe("deny");
+    if (decision.kind !== "deny") return;
+    expect(decision.reason).toContain("use Git here instead");
+    expect(decision.reason).not.toContain("jj git init");
+  });
+
+  it("honours a project marker in both directions", async () => {
+    // Per project, not just per profile: a monorepo can force Jujutsu in one
+    // subdirectory and leave the rest alone.
+    const forced = tempDir();
+    writeFileSync(join(forced, MARKER_FILE), '{"forceJj": true}');
+    const h = harnessWith();
+    invalidateMarkers();
+    expect((await h.preExecute(at(h, "jj log", forced))).kind).toBe("deny");
+
+    const relaxed = tempDir();
+    writeFileSync(join(relaxed, MARKER_FILE), '{"forceJj": false}');
+    const strict = harnessWith({ forceJj: true });
+    invalidateMarkers();
+    expect((await strict.preExecute(at(strict, "jj log", relaxed))).kind).toBe("allow");
+  });
+
+  it("lets a marker disable the plugin, and forceJj with it", async () => {
+    // `{"enabled": false}` is the veto over everything, including a global
+    // `forceJj: true`. Anything else makes the opt-out conditional in a way its
+    // documentation does not say.
+    const root = tempDir();
+    writeFileSync(join(root, MARKER_FILE), '{"enabled": false, "forceJj": true}');
+    const h = harnessWith({ forceJj: true });
+    invalidateMarkers();
+    expect((await h.preExecute(at(h, "jj log", root))).kind).toBe("allow");
+  });
+
+  it("cannot be bypassed with an approval", async () => {
+    // `bypass: 'allow'` answers "run this refused Git command anyway". It has
+    // nothing to say about a `jj` call that would fail: there is no command to
+    // run, so there is nothing for the user to approve.
+    const h = harnessWith({ forceJj: true, bypass: "allow" });
+    const decision = await h.preExecute(at(h, "jj status", `${FIXTURES}/not-a-repo`));
+    expect(decision.kind).toBe("deny");
+  });
+
+  it("leaves jj-hunk alone", async () => {
+    // `jj-hunk` is a separate binary whose read-only listing works outside a
+    // workspace; matching it as `jj` would be a false refusal.
+    const h = harnessWith({ forceJj: true });
+    expect((await h.preExecute(at(h, "jj-hunk list", `${FIXTURES}/not-a-repo`))).kind).toBe(
+      "allow",
+    );
   });
 });

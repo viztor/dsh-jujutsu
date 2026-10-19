@@ -162,11 +162,22 @@ the body is paid **only in the sessions that needed it**, where a system-prompt
 section is paid in every session, including the ones that never touch a hunk.
 
 **The description is the trigger, not a summary.** Because it is the only
-routing signal, it must name Git explicitly. Budget the ~500 chars deliberately:
-it should read like a routing rule (`...when a Git command is refused, when the
-user says "commit", "branch", "rebase", or "undo"...`), not like a table of
-contents. A 40-word description is ~40 words against ~200 — the win is real but
-it is ~5×, not ∞.
+routing signal, it must name Git explicitly. It ships at **206 characters /
+33 words**, under the 214-character break-even [32](32-probe-results-teaching.md)
+§Q3 measured — below that line the catalog entry costs no more than the
+injection it replaced, above it the split is a net cost. Read it as a routing
+rule (`...when a Git command is refused, when the user says "commit", "branch",
+"rebase", or "undo"...`), not as a table of contents.
+
+**The body is a card, not the manual.** A skill body can be long, but length is
+still paid whenever it loads, and `jj help <subcommand>` / `jj help -k <topic>`
+are local, free and version-matched. So the card keeps only what the binary
+cannot answer — the Git-to-`jj` intent map, the plugin's eleven tools, the hunk
+query language — and names `jj help` as the source of truth for flags, syntax and
+edge cases. It measured 1,185 words when written and ~670 after the trim, with a
+test ceiling of 800 so it cannot regrow. Because a skill nobody notices is a file
+nobody reads, the runtime state carries one pointer line (13 words) naming it;
+that line is the only manual cost paid on every assembly.
 
 **Concrete change to `SPEC.md`:**
 

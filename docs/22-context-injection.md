@@ -134,7 +134,9 @@ prompt. A plugin does not contribute schemas directly.
 
 ## 5. The design for `dsh-jujutsu`
 
-Two contributions, both conditional, both silent outside a `jj` workspace.
+Two contributions, both conditional. The rule is silent outside a `jj`
+workspace; the state block is silent too unless `forceJj` has made that absence
+the point ([SPEC §5.15](../SPEC.md)).
 
 ### 5.1 The rule — a system section
 
@@ -181,7 +183,9 @@ restated where the model attends to it rather than buried in a long system
 prompt.
 
 **Cost is zero outside a `jj` workspace** — the provider returns `""` and the
-contribution disappears.
+contribution disappears. The one exception is `forceJj`: there the block is two
+lines naming the refusal, paid deliberately because that switch exists to make
+the absence visible.
 
 ### 5.3 The tools
 

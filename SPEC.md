@@ -53,8 +53,10 @@ tool to disable, and nothing in DSH knows what `jj` is.
   rewrite `~/.config/jj/config.toml`.
 - Any UI beyond the plugin's own settings panel. The panel configures this
   plugin; it does not surface repository state.
-- Enforcing anything outside a `jj` workspace. The plugin must be **invisible**
-  everywhere else.
+- Enforcing anything outside a `jj` workspace. By default the plugin must be
+  **invisible** everywhere else; the one exception is the explicit `forceJj`
+  opt-in (§5.15), which exists precisely because a user can decide that the
+  invisibility is the problem.
 
 ## 3. Package shape
 
@@ -474,11 +476,11 @@ The current design pays ~200 words of `jj` prose on **every** prompt assembly.
 [28](docs/28-teaching-and-interaction-surfaces.md) §1 shows the harness has a
 better structure:
 
-| Content                                         | Home                                              | Cost                                                                                    |
-| ----------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| the **rule** ("Git is intercepted; use `jj`")   | `ctx.systemPrompt.section`                        | every assembly — it must be there before the first Git command                          |
-| the **state** (root, `@`, conflicts, `jj-hunk`) | `ctx.systemPrompt.context`                        | every assembly — it changes                                                             |
-| the **manual** (how to drive `jj`)              | a `jujutsu` **skill** via `ctx.skills.register()` | one catalog line, republished after compaction; the body loads only when the model asks |
+| Content                                                            | Home                                              | Cost                                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| the **rule** ("Git is intercepted; use `jj`")                      | `ctx.systemPrompt.section`                        | every assembly — it must be there before the first Git command                          |
+| the **state** (root, `@`, conflicts, `jj-hunk`, the manual's name) | `ctx.systemPrompt.context`                        | every assembly — it changes                                                             |
+| the **manual** (how to drive `jj`)                                 | a `jujutsu` **skill** via `ctx.skills.register()` | one catalog line, republished after compaction; the body loads only when the model asks |
 
 The skill catalog is published as a durable user message at `agent/pre-step`,
 digest-gated so it is published once and then only on change, one line per skill — **and republished after compaction**
@@ -501,11 +503,24 @@ only the manual moves.
 | the catalog line that replaces it   | 30–77                                                    |
 | **net**                             | **−26 with a short description, +20 with a 40-word one** |
 
+(The 89-word figure predates the pointer line; the state block is 102 words
+today, +13.)
+
 Break-even is a description of ~35 words. So the split is **token-neutral**, and
-the honest reason to ship it is different: a skill lets the manual be
-**complete** — the operation log, change IDs, the conflict model, the full verb
-table — instead of capped at 38 words, at zero cost in the sessions that never
-load it.
+the honest reason to ship it is different: a skill lets the body be as thorough
+as it proves useful — the operation log, change IDs, the conflict model, the
+Git-to-`jj` table — instead of capped at 38 words, at zero cost in the sessions
+that never load it.
+
+**The body is a card, not the manual.** `jj help <subcommand>` and
+`jj help -k <topic>` are local, free, and always match the installed binary, so
+flags copied into the skill pay twice and drift on the next upgrade. The card
+keeps only what the binary cannot answer — the intent map, the plugin's eleven
+tools, the hunk query language — points at `jj help` for the rest, and measures
+~670 words instead of ~1,185 (`test/skill.test.ts` caps it at 800). A skill the
+model never notices is one it never loads, so the state block carries one
+pointer line (13 words) naming it; that is the per-request price of
+discoverability, and it is the only part of the manual paid every assembly.
 
 Two consequences:
 
@@ -567,6 +582,11 @@ because a subagent's `git commit` must not throw.
 plugin for that subtree; `{"enabled": true}` re-enables it below such a marker.
 The nearest marker wins. Absent marker means automatic activation on `.jj`.
 
+The same file carries the two opt-in behaviours, each independently overridable
+in both directions: `{"adopt": true|false}` (§5.14) and `{"forceJj": true|false}`
+(§5.15). `{"enabled": false}` vetoes both — a project that turned the plugin off
+has not consented to a repository write or a refusal.
+
 The harness has no project-scoped plugin config and `jj`'s per-repo config lives
 outside the workspace, so this is the plugin's own convention — see
 [docs/29](docs/29-state-config-and-sandbox-surfaces.md) §3 for the evidence. A
@@ -612,15 +632,53 @@ Three decisions, each of which could have gone the other way:
   before anything is written. It refuses LFS and every other content filter
   (jj runs no filters, so a git-crypt repository would be committed as
   plaintext over the encrypted blob), sparse checkouts (jj reads paths outside
-  the cone as deleted and commits the deletion), submodules, shallow clones,
-  linked worktrees and symlinked `.git` (where `jj git init` creates a second,
-  unrelated repository) and half-finished Git operations.
+  the cone as deleted and commits the deletion), shallow clones, linked
+  worktrees and symlinked `.git` (where `jj git init` creates a second,
+  unrelated repository) and half-finished Git operations. **Submodules do not
+  block adoption** — `jj git init --colocate` leaves them to Git, and jj works
+  beside them in practice.
 - **Refusals are reported, not silent.** The session state carries the blocker
   and `context.ts` renders one sentence naming it. A refusal that said only "jj
   is not available" would read as a missing install.
 
 A project can override the setting with `{"adopt": true|false}` in
 `.dsh-jujutsu.json` (§5.12).
+
+### 5.15 Forcing Jujutsu outside a workspace
+
+`forceJj` (off by default) turns the plugin from silent into active in a
+directory with no Jujutsu workspace: a `jj` invocation that needs one is refused
+with the command that creates it, instead of being allowed to fail with `There
+is no jj repo in "."`. The setting is global; `{"forceJj": true|false}` in a
+project marker overrides it in either direction, and `{"enabled": false}` vetoes
+it.
+
+Off by default because the plugin's invisibility outside a workspace is a
+feature: a user who never asked for Jujutsu should not find `jj` refused in an
+unrelated directory. On, it fires before the binary does, so the model spends one
+call on an instruction instead of two on an error and a recovery.
+
+The refusal is deliberately narrow:
+
+- **Only `jj` invocations.** Git keeps its own settings (`guard`, `readOnlyGit`,
+  `bypass`); `jj-hunk` is a different binary and is untouched.
+- **Only commands that need a workspace.** `jj git init --colocate`,
+  `jj git clone`, `jj config`, `jj help`, `jj util`, `jj version`, `--version`,
+  bare `jj`, and every `-R <path>` form are allowed — a guard that refused
+  `jj git init` would be a dead end. The classification lives in
+  `src/verbs.ts#classifyJjInvocation`.
+- **Not where adoption was refused.** If the preflight recorded an adoption
+  `blocked` (LFS, sparse checkout, shallow clone, …), `jj git init` is the
+  corruption the probe exists to prevent; the refusal says "use Git here
+  instead" rather than naming an initialisation that would damage the
+  repository.
+- **Not bypassable.** `bypass: "allow"` answers "run this refused Git command
+  anyway" — there is no command to run here, so there is nothing to approve.
+
+**When it is off, the plugin is invisible.** With no workspace and no
+`forceJj`, nothing is recorded and both the guard and the prompt stay out of the
+way. **When it is on, the git→jj refusals stay exactly as they were** — the mode
+changes only what happens with no workspace to guard.
 
 ## 6. Config schema
 
@@ -652,9 +710,12 @@ export const Config = z.object({
   // §5.14 — adopt a plain Git repository by running jj git init --colocate.
   // Off by default: it is the only setting that makes the plugin write to the
   // user's repository, and the compatibility probe refuses the shapes jj cannot
-  // represent (LFS, submodules, shallow clones, linked worktrees, in-progress
-  // Git operations).
+  // represent (LFS, sparse checkouts, shallow clones, linked worktrees,
+  // in-progress Git operations). Submodules are not a blocker.
   adoptGitRepos: z.boolean().default(false).volatile(),
+  // §5.15 — refuse jj outside a workspace instead of letting it fail. Off by
+  // default: the plugin stays invisible in directories it was never asked about.
+  forceJj: z.boolean().default(false).volatile(),
 });
 ```
 
@@ -666,23 +727,27 @@ code change. No secrets, so no `.role('secret')` and no credential fields.
 [17](docs/17-bypass-and-approval.md); `hunkInstall` and `jjHunkPath` in
 [19](docs/19-jj-hunk-provisioning.md); `teachSkill` in
 [28](docs/28-teaching-and-interaction-surfaces.md); `adoptGitRepos` in
-[37](docs/37-git-compatible-adoption.md).
+[37](docs/37-git-compatible-adoption.md); `forceJj` in §5.15 and
+[docs/26](docs/26-preflight-and-error-taxonomy.md).
 
 ## 7. Behaviour matrix
 
-| Workspace              | `bash` command                 | Result                               |
-| ---------------------- | ------------------------------ | ------------------------------------ |
-| none                   | anything                       | `next()` — invisible                 |
-| `jj` (colocated)       | `jj new`                       | allow                                |
-| `jj` (colocated)       | `jj git push`                  | allow — carve-out                    |
-| `jj` (colocated)       | `git commit`                   | **deny** with `jj commit` / `jj new` |
-| `jj` (colocated)       | `git status`                   | **deny** with `jj status` (D2)       |
-| `jj` (colocated)       | `pnpm build`                   | allow                                |
-| `jj` (`--no-colocate`) | `git status`                   | **deny** — no `.git` exists          |
-| `jj`                   | `jj-hunk split …`              | allow (bridge, or via bash)          |
-| `jj` (colocated)       | `write` → `.jj/working_copy/…` | **deny** — points at `jj op restore` |
-| `jj` (colocated)       | `write` → `.git/HEAD`          | **deny**                             |
-| `jj` (colocated)       | `read` → `.jj/repo/…`          | allow                                |
+| Workspace              | `bash` command                 | Result                                 |
+| ---------------------- | ------------------------------ | -------------------------------------- |
+| none                   | anything                       | `next()` — invisible                   |
+| none, `forceJj`        | `jj log`                       | **deny** with `jj git init --colocate` |
+| none, `forceJj`        | `jj git init --colocate`       | allow — the way out                    |
+| none, adoption blocked | `jj log`                       | **deny** — "use Git here instead"      |
+| `jj` (colocated)       | `jj new`                       | allow                                  |
+| `jj` (colocated)       | `jj git push`                  | allow — carve-out                      |
+| `jj` (colocated)       | `git commit`                   | **deny** with `jj commit` / `jj new`   |
+| `jj` (colocated)       | `git status`                   | **deny** with `jj status` (D2)         |
+| `jj` (colocated)       | `pnpm build`                   | allow                                  |
+| `jj` (`--no-colocate`) | `git status`                   | **deny** — no `.git` exists            |
+| `jj`                   | `jj-hunk split …`              | allow (bridge, or via bash)            |
+| `jj` (colocated)       | `write` → `.jj/working_copy/…` | **deny** — points at `jj op restore`   |
+| `jj` (colocated)       | `write` → `.git/HEAD`          | **deny**                               |
+| `jj` (colocated)       | `read` → `.jj/repo/…`          | allow                                  |
 
 ## 8. Failure modes
 

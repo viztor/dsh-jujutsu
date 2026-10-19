@@ -109,6 +109,78 @@ describe.skipIf(!HAS_FIXTURES)("a directory with no jj records what does govern"
   });
 });
 
+/**
+ * `forceJj` is resolved once, here, and recorded on the state the prompt reads.
+ *
+ * The guard resolves the same question again per call (the marker can change
+ * between sessions), but the prompt cannot: it has to know at assembly time
+ * whether the refusal is in force, or it will describe a policy that does not
+ * apply. Both resolutions must agree, which is what these tests pin down — the
+ * setting, both marker directions, and the `{"enabled": false}` veto.
+ */
+describe.skipIf(!HAS_FIXTURES)("forceJj is recorded on the state", () => {
+  const ROOTS: string[] = [];
+
+  afterAll(() => {
+    for (const root of ROOTS) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** A marker directory that is not inside any repository. */
+  function markerDir(body: string): string {
+    const root = mkdtempSync(join(tmpdir(), "dsh-jujutsu-preflight-force-"));
+    ROOTS.push(root);
+    writeFileSync(join(root, ".dsh-jujutsu.json"), body);
+    return root;
+  }
+
+  function harnessWithPreflight(config: Record<string, unknown>) {
+    const h = fakeHarness();
+    apply(h.ctx, { guard: "deny", ...config });
+    return h;
+  }
+
+  it("takes the setting when there is no marker", async () => {
+    const h = fakeHarness();
+    apply(h.ctx, { guard: "deny", forceJj: true });
+    const state = await preflight(h, `${FIXTURES}/not-a-repo`);
+    expect(state?.vcs).toBe("none");
+    expect(state?.forceJj).toBe(true);
+  });
+
+  it("defaults to off", async () => {
+    const h = fakeHarness();
+    apply(h.ctx, { guard: "deny" });
+    const state = await preflight(h, `${FIXTURES}/not-a-repo`);
+    expect(state?.forceJj).toBe(false);
+  });
+
+  it("lets the marker turn it on and off", async () => {
+    const forced = markerDir('{"forceJj": true}');
+    const off = harnessWithPreflight({ forceJj: false });
+    expect((await preflight(off, forced))?.forceJj).toBe(true);
+
+    const relaxed = markerDir('{"forceJj": false}');
+    const on = harnessWithPreflight({ forceJj: true });
+    expect((await preflight(on, relaxed))?.forceJj).toBe(false);
+  });
+
+  it("lets a disabled project veto a global forceJj", async () => {
+    const root = markerDir('{"enabled": false, "forceJj": true}');
+    const h = harnessWithPreflight({ forceJj: true });
+    expect((await preflight(h, root))?.forceJj).toBe(false);
+  });
+
+  it("records it for a plain Git repository too", async () => {
+    // The branch that matters for the guard: with `adoptGitRepos` off, a plain
+    // Git checkout is still "no workspace", so the prompt needs the same fact.
+    const h = fakeHarness();
+    apply(h.ctx, { guard: "deny", forceJj: true, adoptGitRepos: false });
+    const state = await preflight(h, `${FIXTURES}/plain-git`);
+    expect(state?.vcs).toBe("git");
+    expect(state?.forceJj).toBe(true);
+  });
+});
+
 describe.skipIf(!HAS_FIXTURES)("a broken preflight costs nothing", () => {
   it("records no state and does not throw when the session is malformed", async () => {
     // `agent/created` is awaited by the harness, so a throw here would cost the
@@ -251,7 +323,10 @@ describe.skipIf(!HAS_JJ)("adopting a plain Git repo", () => {
     expect(state?.vcs).toBe("git");
   });
 
-  it("refuses a repo with submodules and records why", async () => {
+  it("adopts a repo with submodules, which jj records rather than corrupts", async () => {
+    // The submodule used to be a blocker. It is not one: colocation imports the
+    // gitlink and leaves the checked-out submodule alone, and jj's missing
+    // submodule commands are a gap in jj, not a danger to the repository.
     const root = gitRepo();
     writeFileSync(join(root, ".gitmodules"), '[submodule "s"]\n\tpath = s\n\turl = ../s\n');
     const h = fakeHarness();
@@ -260,9 +335,8 @@ describe.skipIf(!HAS_JJ)("adopting a plain Git repo", () => {
 
     const state = await preflight(h, root);
 
-    expect(existsSync(join(root, ".jj"))).toBe(false);
-    expect(state?.vcs).toBe("git");
-    expect(state?.adoption?.status).toBe("blocked");
-    expect(state?.adoption?.blocker).toBe("submodules");
+    expect(existsSync(join(root, ".jj"))).toBe(true);
+    expect(state?.vcs).toBe("jj");
+    expect(state?.adoption?.status).toBe("adopted");
   });
 });

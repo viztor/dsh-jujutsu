@@ -44,8 +44,13 @@
  *   every path outside it reads as deleted. `jj status` shows `D dirB/b.txt` and
  *   one commit removes those files from the shared history; disabling sparse
  *   checkout afterwards does not bring them back.
- * - **Submodules.** jj prints `ignoring git submodule at "<path>"`. The gitlink
- *   survives in commits, but jj never materialises or updates the submodule.
+ * - **Submodules — safe, and deliberately not a blocker.** jj imports a submodule
+ *   as the gitlink Git stores (mode `160000`), leaves the checked-out submodule
+ *   directory alone, and `git status` in the colocated repository stays clean.
+ *   Verified on `jj` 0.46.0 against a repository with an initialised submodule.
+ *   jj does not *update* submodules, so `git submodule update` remains the tool
+ *   for that; that is a missing feature, not a corruption, and refusing adoption
+ *   for it would keep jj out of repositories it handles correctly.
  * - **A shallow clone.** jj imports the truncated history and has no ancestry to
  *   rewrite.
  * - **A linked worktree or a symlinked `.git`.** A `.git` *file* means
@@ -87,14 +92,7 @@ import { runJj } from "./shell.ts";
  * and `context.ts` renders {@link blockerText} from them, so renaming one is a
  * behaviour change rather than a refactor.
  */
-export type AdoptBlocker =
-  | "git-file"
-  | "sparse"
-  | "shallow"
-  | "submodules"
-  | "lfs"
-  | "filters"
-  | "in-progress";
+export type AdoptBlocker = "git-file" | "sparse" | "shallow" | "lfs" | "filters" | "in-progress";
 
 /**
  * Everything that can stop an adoption, including the one that is not a
@@ -103,7 +101,7 @@ export type AdoptBlocker =
  * Kept separate from {@link AdoptBlocker} on purpose. A blocker is a fact about
  * the repository that a user could resolve and retry; `init-failed` is an
  * environment failure, and conflating the two would let a transient error be
- * reported as "this repository uses submodules".
+ * reported as "this repository uses Git LFS".
  */
 export type AdoptFailure = AdoptBlocker | "init-failed";
 
@@ -146,8 +144,6 @@ export function blockerText(blocker: AdoptFailure): string {
       return "this repository uses a sparse checkout, and jj would read every path outside the cone as deleted and remove it from the history";
     case "shallow":
       return "this is a shallow clone, and jj would import a history with no ancestry to work from";
-    case "submodules":
-      return "this repository uses Git submodules, which jj records but never checks out or updates";
     case "lfs":
       return "this repository uses Git LFS, and jj does not run Git's smudge filter, so it would commit the raw file over the LFS pointer";
     case "filters":
@@ -219,16 +215,12 @@ export async function probeAdoption(ctx: Context, root: string): Promise<AdoptPr
     return { ok: false, blocker: "shallow", evidence: `${root}/.git/shallow exists` };
   }
 
-  // `.gitmodules` is the declared list; `.git/modules` is where the submodule
-  // repositories are stored. Either alone is enough: a repository whose
-  // `.gitmodules` was deleted but whose modules are still present has the same
-  // problem.
-  if (await exists(ctx, `${root}/.gitmodules`)) {
-    return { ok: false, blocker: "submodules", evidence: `${root}/.gitmodules exists` };
-  }
-  if ((await typeOf(ctx, `${root}/.git/modules`)) === "directory") {
-    return { ok: false, blocker: "submodules", evidence: `${root}/.git/modules exists` };
-  }
+  // Submodules are deliberately **not** checked. jj imports the gitlink Git
+  // stores and leaves the checked-out submodule alone, so a repository that uses
+  // them survives adoption intact; refusing it would take jj away from exactly
+  // the repositories its Git compatibility exists for. What jj does not do is
+  // update submodules, and `git submodule update` still does that in the
+  // colocated repository.
 
   // LFS first, then every other filter, because LFS deserves its own sentence.
   // `git lfs install` writes `[filter "lfs"]` into `.git/config` and LFS cannot

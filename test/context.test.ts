@@ -16,11 +16,9 @@ import { resolveSettings } from "../src/settings.ts";
 import { clearWorkspaceState, setWorkspaceState } from "../src/state.ts";
 import { fakeHarness } from "./helpers.ts";
 
-const SETTINGS = resolveSettings({});
-
-function harnessWithContext() {
+function harnessWithContext(overrides: Parameters<typeof resolveSettings>[0] = {}) {
   const harness = fakeHarness();
-  applyContext(harness.ctx, SETTINGS);
+  applyContext(harness.ctx, resolveSettings(overrides));
   return harness;
 }
 
@@ -97,6 +95,9 @@ describe("the state", () => {
     expect(text).toContain("colocated with Git");
     expect(text).toContain("nsosovxq");
     expect(text).toContain("jj-hunk available");
+    // The card is loaded on demand, so the state block has to say it exists;
+    // otherwise a cold start never discovers the verb map.
+    expect(text).toContain("Manual: load the jujutsu skill");
   });
 
   it("distinguishes a native workspace", () => {
@@ -117,9 +118,9 @@ describe("the state", () => {
 
 describe("the budget", () => {
   it("keeps the rule under the documented word count", () => {
-    // docs/25 §1.4: the section is 68 words and the rendered context 21, against
-    // a combined ~200-word budget. A future edit that doubles the rule would
-    // otherwise ship silently.
+    // docs/25 §1.4: the section is 68 words and the rendered context 34 (the
+    // pointer line included), against a combined ~200-word budget. A future edit
+    // that doubles the rule would otherwise ship silently.
     const h = harnessWithContext();
     setWorkspaceState("s1", {
       vcs: "jj",
@@ -192,6 +193,58 @@ describe("a plain Git repository", () => {
     setWorkspaceState("s1", { vcs: "git", root: "/repo" });
     const section = h.prompt.sections.find((s) => s.name === "jujutsu:bash-policy");
     expect(section?.text(forSession("s1"))).toBe("");
+  });
+});
+
+describe("when Jujutsu is forced", () => {
+  it("tells the model to initialise, even when the general alert is off", () => {
+    // `alertUninitialised` is advice; `forceJj` is a refusal the model will run
+    // into. Suppressing the line would make the first jj call the discovery
+    // mechanism, which is exactly what the switch exists to prevent.
+    const h = harnessWithContext({ forceJj: true, alertUninitialised: false });
+    setWorkspaceState("s1", { vcs: "none", root: "/work", forceJj: true });
+    const text = h.prompt.contexts
+      .find((c) => c.name === "jujutsu:workspace")
+      ?.text(forSession("s1"));
+    expect(text).toContain("jj commands are refused until a workspace exists");
+    expect(text).toContain("jj git init --colocate");
+  });
+
+  it("states the same requirement inside a plain Git repository", () => {
+    const h = harnessWithContext({ forceJj: true });
+    setWorkspaceState("s1", { vcs: "git", root: "/repo", forceJj: true });
+    const text =
+      h.prompt.contexts.find((c) => c.name === "jujutsu:workspace")?.text(forSession("s1")) ?? "";
+    expect(text).toContain("Version control: Git");
+    expect(text).toContain("jj commands are refused until a workspace exists");
+    // The pre-force copy said "the jj guard is inactive", which the next line
+    // would contradict: under forceJj the guard is exactly what refuses jj.
+    expect(text).not.toContain("guard is inactive");
+  });
+
+  it("does not advise an init the adoption probe refused", () => {
+    // Telling the model to run `jj git init` in a repository jj would corrupt is
+    // worse than saying nothing: it turns a refusal into a destructive
+    // instruction. The blocker wins over the force switch.
+    const h = harnessWithContext({ forceJj: true });
+    setWorkspaceState("s1", {
+      vcs: "git",
+      root: "/repo",
+      forceJj: true,
+      adoption: { status: "blocked", blocker: "lfs", evidence: "filter=lfs" },
+    });
+    const text =
+      h.prompt.contexts.find((c) => c.name === "jujutsu:workspace")?.text(forSession("s1")) ?? "";
+    expect(text).toContain("Jujutsu cannot be used here");
+    expect(text).not.toContain("Initialise one with");
+  });
+
+  it("says nothing about refusal when the switch is off", () => {
+    const h = harnessWithContext();
+    setWorkspaceState("s1", { vcs: "none", root: "/work" });
+    const text =
+      h.prompt.contexts.find((c) => c.name === "jujutsu:workspace")?.text(forSession("s1")) ?? "";
+    expect(text).not.toContain("refused until a workspace exists");
   });
 });
 

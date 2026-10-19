@@ -411,7 +411,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     classification: "special",
     message: {
       reason:
-        "Refused: git submodule; Jujutsu has no submodule support. If the task truly needs submodules, use a separate plain Git clone outside this workspace.",
+        "Refused: jj does not manage Git submodules, so this git submodule command has no jj equivalent. Submodules already in the repository keep working — jj records them exactly as Git does. Ask the user to run it.",
       /* display falls back to reason */
     },
   },
@@ -560,6 +560,29 @@ export const LOW_CONFIDENCE: Message = {
 };
 
 /**
+ * `docs/25` §2.2, the workspace rule: most `jj` subcommands need a workspace, and
+ * outside one they exit with `There is no jj repo in "."`. When the user forced
+ * Jujutsu, the guard refuses the call *before* it runs, so the model is told what
+ * to do instead of spending a call on an error it cannot act on.
+ */
+export const JJ_NO_WORKSPACE: Message = {
+  reason:
+    "Refused: there is no Jujutsu workspace here, so this jj command would fail. Initialise one first with jj git init --colocate, then retry.",
+  /* display falls back to reason */
+};
+
+/**
+ * The same rule in a plain Git repository the adoption probe refused. Naming
+ * `jj git init` here would be worse than useless — running it is exactly what the
+ * probe exists to prevent — so the message sends the model back to Git.
+ */
+export const JJ_ADOPTION_REFUSED: Message = {
+  reason:
+    "Refused: jj cannot be used in this repository. Adopting it for Jujutsu was refused because jj would corrupt it, so use Git here instead.",
+  /* display falls back to reason */
+};
+
+/**
  * Verbs that are read-only *in their listing form only* (`docs/14` §R6). The
  * always-read-only verbs — `status`, `log`, `diff`, `show`, `blame`,
  * `rev-parse`, `describe` — are deliberately absent: they have no mutating form
@@ -595,10 +618,12 @@ export const ALL_MESSAGES: readonly Message[] = [
   ...Object.values(DESTRUCTIVE),
   ...Object.values(WRITE_PROTECTION),
   LOW_CONFIDENCE,
+  JJ_NO_WORKSPACE,
+  JJ_ADOPTION_REFUSED,
 ];
 
 // Copy rule 2: every reason is ≤240 chars. Asserted at load so a future edit
-// cannot silently break the budget. `docs/25` §5 states the longest is 214.
+// cannot silently break the budget. `docs/25` §5 states the longest is 234.
 for (const message of ALL_MESSAGES) {
   if (message.reason.length > MAX_REASON_CHARS) {
     throw new Error(

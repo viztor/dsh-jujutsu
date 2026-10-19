@@ -298,7 +298,10 @@ const STRINGS: Record<string, Record<string, string>> = {
       "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Off suggests plain git init. Only used when “Mention missing version control” is on.",
     adoptGitReposLabel: "Use Jujutsu in Git repos",
     adoptGitReposHint:
-      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS or any content filter, a sparse checkout, submodules, a shallow clone, a linked worktree or symlinked .git, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
+      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS or any content filter, a sparse checkout, a shallow clone, a linked worktree or symlinked .git, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces, unless Force Jujutsu is on.",
+    forceJjLabel: "Force Jujutsu",
+    forceJjHint:
+      "Refuse jj commands outside a Jujutsu workspace, with a message naming jj git init --colocate. jj cannot run most commands without a workspace, so the refusal costs one call instead of a failed call; off leaves jj to fail with its own error. Only jj invocations are affected; Git commands keep their own settings.",
     injectContextLabel: "Explain Jujutsu in the prompt",
     injectContextHint:
       "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",
@@ -342,7 +345,10 @@ const STRINGS: Record<string, Record<string, string>> = {
       "初始化时建议哪一种：jj git init（共置仓库，Git 工具链仍可用）或普通 git init。仅在开启「提示缺少版本控制」时生效。",
     adoptGitReposLabel: "在 Git 仓库中使用 Jujutsu",
     adoptGitReposHint:
-      "在 .git 旁创建 .jj 来接管普通 Git 仓库，让模型可以在这里使用 jj，Git 工具链仍然可用。使用 LFS、子模块、浅克隆、链接工作树，或正在进行的 Git 操作时会被拒绝。关闭后插件在 Jujutsu 工作区之外保持静默。",
+      "在 .git 旁创建 .jj 来接管普通 Git 仓库，让模型可以在这里使用 jj，Git 工具链仍然可用。使用 LFS 或任何内容过滤、稀疏检出、浅克隆、链接工作树或符号链接的 .git，或正在进行的 Git 操作时会被拒绝。关闭后插件在 Jujutsu 工作区之外保持静默，除非开启「强制使用 Jujutsu」。",
+    forceJjLabel: "强制使用 Jujutsu",
+    forceJjHint:
+      "当目录中没有 Jujutsu 工作区时拒绝 jj 命令，并在拒绝信息中给出 jj git init --colocate。jj 在缺少工作区时大多无法运行，因此拒绝只花一次调用；关闭后由 jj 自行报错。仅影响 jj 命令，Git 命令仍遵循各自的设置。",
     injectContextLabel: "在提示中说明 Jujutsu",
     injectContextHint:
       "在系统提示中告知模型此处的版本控制是 Jujutsu。关闭后拦截仍会拒绝 Git，但模型不会知道原因。",
@@ -396,6 +402,7 @@ const FIELDS: Record<string, FieldMeta> = {
     labelKey: "adoptGitReposLabel",
     hintKey: "adoptGitReposHint",
   },
+  forceJj: { kind: "boolean", labelKey: "forceJjLabel", hintKey: "forceJjHint" },
   injectContext: { kind: "boolean", labelKey: "injectContextLabel", hintKey: "injectContextHint" },
   teachSkill: { kind: "boolean", labelKey: "teachSkillLabel", hintKey: "teachSkillHint" },
 };
@@ -433,7 +440,7 @@ const GROUPS: readonly GroupMeta[] = [
   {
     id: "init",
     titleKey: "groupInit",
-    fields: ["alertUninitialised", "preferJj", "adoptGitRepos"],
+    fields: ["alertUninitialised", "preferJj", "adoptGitRepos", "forceJj"],
   },
   {
     id: "prompt",

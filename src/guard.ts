@@ -33,8 +33,9 @@ import { classifyInvocation } from "./parse.ts";
 import { type DestructiveTarget, destructiveTargetsVcs } from "./paths.ts";
 import { refusalReason } from "./translate.ts";
 import type { Settings } from "./settings.ts";
-import { DESTRUCTIVE, WRITE_PROTECTION } from "./messages.ts";
-import { type Refusal, classifyGitInvocation } from "./verbs.ts";
+import { JJ_ADOPTION_REFUSED, JJ_NO_WORKSPACE, DESTRUCTIVE, WRITE_PROTECTION } from "./messages.ts";
+import { workspaceState } from "./state.ts";
+import { type Refusal, classifyGitInvocation, classifyJjInvocation } from "./verbs.ts";
 
 /**
  * The guard's own error codes, carried on a `deny` as `info.code`.
@@ -53,6 +54,7 @@ export const GUARD_CODES = {
   gitDenied: "GUARD_GIT_DENIED",
   internalsWrite: "GUARD_JJ_INTERNALS_WRITE",
   repoStoreDelete: "GUARD_REPO_STORE_DELETE",
+  jjWithoutWorkspace: "GUARD_JJ_NO_WORKSPACE",
 } as const;
 
 /** Tools whose `file_path` argument is checked against `.jj` and `.git`. */
@@ -153,10 +155,24 @@ async function decide(
   }
 
   // 2b. Decide whether we are even in a `jj` workspace. Outside one, the plugin
-  //     must be invisible. `{"enabled": true}` does not conjure a workspace; it
-  //     only stops an ancestor's `false` from silencing a real one.
+  //     must be invisible — unless the user forced Jujutsu (`forceJj`), in which
+  //     case `jj` is refused before it can fail with `There is no jj repo in "."`
+  //     and the refusal names the command that creates the workspace.
   const workspace = await detect(ctx, root);
-  if (workspace.kind === "none") return next();
+  if (workspace.kind === "none") {
+    if (!(marker?.forceJj ?? settings.forceJj)) return next();
+    const invocation = classifyInvocation(command);
+    const refusal = classifyJjInvocation(invocation);
+    if (refusal.kind === "allow") return next();
+    // A repository the adoption probe refused is not one where `jj git init` is
+    // the answer; the message sends the model back to Git instead.
+    const refused = adoptionRefused(exec);
+    return {
+      kind: "deny",
+      reason: (refused ? JJ_ADOPTION_REFUSED : JJ_NO_WORKSPACE).reason,
+      info: { name: "dsh-jujutsu", code: GUARD_CODES.jjWithoutWorkspace },
+    };
+  }
 
   // 2c. Classify. A `jj git init` or `jj workspace add` may have just changed
   //     the layout, so the cache is dropped before the next call is judged.
@@ -167,6 +183,20 @@ async function decide(
   return decision.kind === "allow"
     ? next()
     : gate(ctx, exec, decision, settings, GUARD_CODES.gitDenied);
+}
+
+/**
+ * Did adoption fail in this session?
+ *
+ * Only preflight knows: the probe runs once, at `agent/created`, and its refusal
+ * is recorded in the session state. When it did, `jj` is not merely missing a
+ * workspace — `jj git init` here is the corruption the probe exists to prevent,
+ * so the refusal must not suggest it.
+ */
+function adoptionRefused(exec: ToolExecution): boolean {
+  const sessionId = exec.agent?.session.id;
+  if (sessionId === undefined) return false;
+  return workspaceState(sessionId)?.adoption?.status === "blocked";
 }
 
 /**

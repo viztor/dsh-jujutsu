@@ -329,7 +329,8 @@ describe("coverage against the catalogue", () => {
     add: "there is no staging area to add to; jj tracks files automatically",
     rebase: "the source and destination are implied by Git's branch model, which jj does not have",
     pull: "two commands with a conditional second one (jj git fetch, then jj rebase)",
-    submodule: "jj has no submodule support",
+    submodule:
+      "no jj submodule command exists to translate to; checked-out submodules keep working",
     bisect: "jj bisect run takes a required --range that git bisect infers",
     clean: "jj has no untracked state to clean",
     lfs: "jj has no LFS integration",

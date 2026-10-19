@@ -89,4 +89,38 @@ describe("the rules that carry the most weight", () => {
       expect(classifyInvocation(command).gitInvocations, command).toEqual([]);
     }
   });
+
+  it("records which fragments run `jj`, the way it records Git", () => {
+    // The workspace rule is a decision about `jj`, and `gitInvocations` cannot
+    // answer it: the guard's Git rule resolves `jj git push` to jj on purpose.
+    // `jjInvocations` is the list the rule walks, so it has to survive wrappers,
+    // absolute paths and the long binary name — the three shapes the Git list
+    // already handles.
+    expect(classifyInvocation("jj log").jjInvocations).toEqual(["jj log"]);
+    expect(classifyInvocation("jujutsu status").jjInvocations).toEqual(["jujutsu status"]);
+    expect(classifyInvocation("/usr/local/bin/jj log").jjInvocations).toEqual([
+      "/usr/local/bin/jj log",
+    ]);
+    expect(classifyInvocation("env FOO=1 jj log").jjInvocations).toEqual(["env FOO=1 jj log"]);
+  });
+
+  it("keeps each `jj` fragment, so a rule can walk the whole line", () => {
+    // `jj git init --colocate && jj log` is one command; a list that collapsed
+    // it to a single string could not tell the guard that the first fragment
+    // creates the workspace the second one needs.
+    expect(classifyInvocation("jj log && jj git push").jjInvocations).toEqual([
+      "jj log",
+      "jj git push",
+    ]);
+    expect(classifyInvocation("jj git init --colocate && jj log").jjInvocations).toEqual([
+      "jj git init --colocate",
+      "jj log",
+    ]);
+  });
+
+  it("does not record `jj` when it is only mentioned or renamed", () => {
+    for (const command of ['echo "jj log"', "jj-hunk list", "git commit -m 'jj log'"]) {
+      expect(classifyInvocation(command).jjInvocations, command).toEqual([]);
+    }
+  });
 });

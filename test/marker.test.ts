@@ -78,6 +78,44 @@ describe.skipIf(!HAS_FIXTURES)("finding the marker", () => {
     expect(marker?.dir).toBe(ROOT);
   });
 
+  it("reads a force-Jujutsu opt-in, and a project-level opt-out of it", async () => {
+    // `enabled` and `forceJj` are independent switches: a project can enable the
+    // plugin without requiring jj (the default), or require jj without changing
+    // anything else. Folding the two together would make `forceJj` impossible to
+    // state in a repo that never opted into the plugin globally.
+    const { ctx } = fakeHarness();
+    writeMarker(ROOT, '{"forceJj": true}');
+    let marker = await markerFor(ctx, ROOT);
+    expect(marker?.forceJj).toBe(true);
+    expect(marker?.enabled).toBe(true);
+
+    invalidateMarkers();
+    writeMarker(ROOT, '{"forceJj": false}');
+    marker = await markerFor(ctx, ROOT);
+    expect(marker?.forceJj).toBe(false);
+  });
+
+  it("lets the nearest marker win for forceJj too", async () => {
+    const { ctx } = fakeHarness();
+    writeMarker(ROOT, '{"forceJj": true}');
+    writeMarker(`${ROOT}/vendored`, '{"forceJj": false}');
+    expect((await markerFor(ctx, `${ROOT}/vendored`))?.forceJj).toBe(false);
+    invalidateMarkers();
+    expect((await markerFor(ctx, ROOT))?.forceJj).toBe(true);
+  });
+
+  it("rejects a malformed forceJj rather than guessing", async () => {
+    // `"true"` is the mistake a hand-edited JSON file makes. The whole marker is
+    // treated as absent, which leaves the shipped default (`forceJj: false`) in
+    // force — fail open on protection, exactly like `enabled`.
+    const { ctx } = fakeHarness();
+    for (const body of ['{"forceJj": "true"}', '{"forceJj": 1}', '{"forceJj": null}']) {
+      invalidateMarkers();
+      writeMarker(ROOT, body);
+      expect(await markerFor(ctx, ROOT), body).toBeUndefined();
+    }
+  });
+
   it("walks up to find one", async () => {
     const { ctx } = fakeHarness();
     writeMarker(ROOT, '{"enabled": false}');

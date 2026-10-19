@@ -52,6 +52,15 @@ export interface WorkspaceState {
   readonly jjHunk?: boolean;
   /** Present only when this session adopted a Git repo, or tried to. */
   readonly adoption?: AdoptionState;
+  /**
+   * Whether `jj` is refused outside a Jujutsu workspace here.
+   *
+   * The effective value of the global setting overridden by the project marker.
+   * Recorded because the prompt is the only place the model is told *why* a `jj`
+   * command will be refused before it tries one, and because the guard learns the
+   * same answer from the same two sources.
+   */
+  readonly forceJj?: boolean;
 }
 
 /** session id → state. Sessions are few and long-lived, so a plain Map is right. */

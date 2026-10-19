@@ -14,6 +14,12 @@ if the catalog description is written as long as 28 proposes.
 Citations are package-relative. `dsh-web-app/cordis.patch.yml` etc. are the
 installed composition rows, not the source tree.
 
+**Since this probe**, the shipped state block gained a one-line pointer to the
+manual (`Manual: load the jujutsu skill …`, 13 words), which brings it to **102
+words ≈ 158 tokens**. The 89-word / 138-token figures below are what this
+document measured at the time and are kept as measured; the arithmetic that
+justifies the split is unaffected.
+
 ---
 
 ## 0. Answers at a glance

@@ -48,7 +48,7 @@ block · **SPECIAL** = needs different treatment, see footnote.
 | `git remote -v`                                                             | `jj git remote list`                                         | DENY           | Refused `git remote -v`: run `jj git remote list`; add one with `jj git remote add <name> <url>`.                                                                                                |
 | `git remote add <n> <url>`                                                  | `jj git remote add <n> <url>`                                | DENY           | Refused `git remote add`: run `jj git remote add <name> <url>`.                                                                                                                                  |
 | `git worktree add <path>`                                                   | `jj workspace add <path>`                                    | DENY           | Refused `git worktree add`: run `jj workspace add <path>`. Workspaces are Jujutsu's native multi-working-copy feature.                                                                           |
-| `git submodule …`                                                           | none                                                         | SPECIAL        | Refused `git submodule`: Jujutsu has no submodule support. If the task truly needs submodules, do it in a separate plain Git clone, not in this workspace.                                       |
+| `git submodule …`                                                           | none                                                         | SPECIAL        | Refused `git submodule`: jj has no submodule _command_, but submodules already in the repository keep working — jj records them exactly as Git does. Ask the user to run it.                     |
 | `git bisect …`                                                              | `jj bisect run`                                              | DENY           | Refused `git bisect`: run `jj bisect run <cmd>` — it finds the first bad revision automatically.                                                                                                 |
 | `git blame <file>`                                                          | `jj file annotate <path>`                                    | DENY           | Refused `git blame`: run `jj file annotate <path>` to show the change that last modified each line.                                                                                              |
 | `git show <rev>`                                                            | `jj show <rev>`                                              | DENY           | Refused `git show`: run `jj show <rev>` for the description plus diff.                                                                                                                           |
@@ -65,9 +65,12 @@ block · **SPECIAL** = needs different treatment, see footnote.
 **SPECIAL footnotes**
 
 - **`git submodule`** — there is no `submodule` token anywhere in `jj --help` or
-  `jj git --help` (verified by grep; both returned nothing). Denying is correct;
-  the "instead" clause cannot name a jj command, so it redirects to a plain Git
-  clone. This is the one gesture where jj genuinely cannot do the job.
+  `jj git --help` (verified by grep; both returned nothing), so no `jj` replacement
+  exists to name. But “no submodule subcommand” is not “no submodule support”:
+  colocation imports the gitlink and leaves the checked-out submodule alone
+  (measured against jj 0.46.0 — `git status` stays clean, `git submodule status`
+  still works, the files are untouched). The refusal therefore asks the user to
+  run the command instead of implying jj cannot coexist with submodules.
 - **`git clean -fd`** — jj snapshots every non-ignored file, so files are either
   tracked or ignored; there is no third "untracked" bucket for `clean` to sweep.
   `jj file untrack <path>` exists but requires the path to already match an
@@ -436,7 +439,7 @@ cannot silently have no translation.
 | `git add`       | no staging area; there is nothing to translate to                       |
 | `git rebase`    | Git's branch model supplies `-s`/`-o`; `jj` needs them named explicitly |
 | `git pull`      | two commands, the second conditional (`jj git fetch`, then `jj rebase`) |
-| `git submodule` | no submodule support                                                    |
+| `git submodule` | no `jj` submodule command; submodules themselves are unaffected         |
 | `git bisect`    | `jj bisect run` requires a `--range` that `git bisect` infers           |
 | `git clean -fd` | no untracked state                                                      |
 | `git lfs`       | no LFS integration                                                      |

@@ -582,6 +582,11 @@ directory level, holding `{"enabled": true|false}`.
 - The **nearest** marker walking up from the effective directory wins, so a
   subtree can override its ancestor — disable a monorepo once, re-enable one
   vendored `jj` repo inside it with `{"enabled": true}`.
+- The same file carries the two opt-in decisions, each a boolean override of a
+  global setting: `{"adopt": true|false}` (adopt a plain Git repo,
+  [37](37-git-compatible-adoption.md) §4) and `{"forceJj": true|false}` (refuse
+  `jj` outside a workspace, [SPEC §5.15](../SPEC.md)). They are independent:
+  a marker can force Jujutsu without enabling adoption.
 - No marker means automatic: the plugin follows `.jj` presence, as before.
 - It is **JSON**, not TOML. `jj` uses TOML and this file sits beside it, so TOML
   would be the neighbourly choice — but there is no TOML parser in this plugin's
@@ -708,11 +713,11 @@ theme token, so the shell follows light/dark and any restyle.
 
 ### Fields the panel groups
 
-| Group                       | Fields                                             |
-| --------------------------- | -------------------------------------------------- |
-| Guard                       | `guard`, `readOnlyGit`, `bypass`, `rememberBypass` |
-| When there is no repository | `alertUninitialised`, `preferJj`                   |
-| Teaching                    | `injectContext`, `teachSkill`                      |
+| Group                       | Fields                                                       |
+| --------------------------- | ------------------------------------------------------------ |
+| Guard                       | `guard`, `readOnlyGit`, `bypass`, `rememberBypass`           |
+| When there is no repository | `alertUninitialised`, `preferJj`, `adoptGitRepos`, `forceJj` |
+| Teaching                    | `injectContext`, `teachSkill`                                |
 
 **There is no master switch, and that is a decision rather than an omission.**
 The Plugins page already gives every row an enable toggle, and disabling the row

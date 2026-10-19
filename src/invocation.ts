@@ -34,6 +34,15 @@ export interface Invocation {
   readonly programs: readonly string[];
   /** The subset that is the `git` program. Empty means "not a Git invocation". */
   readonly gitInvocations: readonly string[];
+  /**
+   * The subset that is the `jj` program, or its `jujutsu` alias.
+   *
+   * Added for the workspace rule in `docs/25` §2.2: most `jj` subcommands need
+   * a workspace, and outside one they exit with `There is no jj repo in "."`.
+   * The guard has to know which fragments invoke `jj` *and* nothing else was
+   * added to the resolver's decision — this is a record, not a rule.
+   */
+  readonly jjInvocations: readonly string[];
   /** `low` when the resolver had to guess; policy treats that as a question, not an allow. */
   readonly confidence: "high" | "low";
   /** Why the resolver is unsure, for the log and for tests. */
@@ -85,6 +94,8 @@ export interface Invocation {
  *     programs:       string[]   resolved program basenames, in first-seen order
  *     gitInvocations: string[]   raw command text of each fragment whose head
  *                                program resolves to `git`
+ *     jjInvocations:  string[]   raw command text of each fragment whose head
+ *                                program resolves to `jj` (or `jujutsu`)
  *     confidence:     'high' | 'low'   'low' iff something was unresolvable
  *     notes:          string[]   'unresolved: …' lowers confidence;
  *                                'info: …' and 'recursed: …' do not
@@ -304,6 +315,7 @@ export interface Fragment {
 export interface AnalyzerState {
   programs: string[];
   gitInvocations: string[];
+  jjInvocations: string[];
   notes: string[];
   low: boolean;
   functionDefs: Set<string>;
@@ -771,6 +783,10 @@ function record(state: AnalyzerState, prog: string, raw: string, isGit: boolean)
     .replace(new RegExp(FUNC_SENTINEL, "g"), "function")
     .trim();
   if (isGit && !state.gitInvocations.includes(shown)) state.gitInvocations.push(shown);
+  // `jujutsu` is the long name of the same binary; both resolve to the same CLI.
+  if ((prog === "jj" || prog === "jujutsu") && !state.jjInvocations.includes(shown)) {
+    state.jjInvocations.push(shown);
+  }
 }
 
 function analyzeFragment(frag: Fragment, state: AnalyzerState, depth: number) {
@@ -1019,24 +1035,32 @@ function analyze(text: string, state: AnalyzerState, depth: number) {
  * Classify one command string.
  *
  * @param command - the raw `bash` command text.
- * @returns every program the command resolves to, the `git` subset, a
+ * @returns every program the command resolves to, the `git` and `jj` subsets, a
  *   confidence, and why the resolver is unsure.
  */
 export function classifyInvocation(command: string): Invocation {
   const state: AnalyzerState = {
     programs: [],
     gitInvocations: [],
+    jjInvocations: [],
     notes: [],
     low: false,
     functionDefs: new Set(),
   };
   if (typeof command !== "string" || command.trim() === "") {
-    return { programs: [], gitInvocations: [], confidence: "high", notes: ["info: empty command"] };
+    return {
+      programs: [],
+      gitInvocations: [],
+      jjInvocations: [],
+      confidence: "high",
+      notes: ["info: empty command"],
+    };
   }
   analyze(command, state, 0);
   return {
     programs: state.programs,
     gitInvocations: state.gitInvocations,
+    jjInvocations: state.jjInvocations,
     confidence: state.low ? "low" : "high",
     notes: [...new Set(state.notes)],
   };
