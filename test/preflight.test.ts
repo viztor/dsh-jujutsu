@@ -14,13 +14,18 @@
  * say something instead of going silent.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { invalidateDetection } from "../src/detect.ts";
 import { apply } from "../src/index.ts";
 import { invalidateMarkers } from "../src/marker.ts";
 import { clearWorkspaceState, workspaceState } from "../src/state.ts";
-import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
+import { FIXTURES, fakeHarness, HAS_FIXTURES, HAS_JJ, realShell } from "./helpers.ts";
 
 /**
  * The registered `agent/created` handler.
@@ -113,5 +118,139 @@ describe.skipIf(!HAS_FIXTURES)("a broken preflight costs nothing", () => {
     apply(h.ctx, { guard: "deny" });
     await expect(createdHandler(h)({ agent: {} })).resolves.toBeUndefined();
     expect(workspaceState("s1")).toBeUndefined();
+  });
+});
+
+/**
+ * Adoption, end to end: the branch of preflight that writes to the repository.
+ *
+ * The probe and `adoptRepo` have their own tests in `adopt.test.ts`; what is
+ * only testable here is the wiring between them and the state the prompt reads
+ * — that a successful import flips the session to `jj`, that the detection cache
+ * is dropped rather than answering "plain git" for the rest of the session, and
+ * that a refusal leaves the repository alone and records why.
+ *
+ * These use their own repositories rather than the shared fixtures: adoption
+ * writes `.jj`, and a fixture that grows a workspace is one every other test in
+ * the suite would then see.
+ */
+describe.skipIf(!HAS_JJ)("adopting a plain Git repo", () => {
+  const ROOTS: string[] = [];
+
+  afterAll(() => {
+    for (const root of ROOTS) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** A real Git repo with one commit, and its own jj identity config. */
+  function gitRepo(): string {
+    const root = mkdtempSync(join(tmpdir(), "dsh-jujutsu-adopt-"));
+    ROOTS.push(root);
+    writeFileSync(
+      join(root, "id.toml"),
+      '[user]\nname = "Adopt"\nemail = "adopt@example.invalid"\n',
+    );
+    const env = { ...process.env, JJ_CONFIG: `/dev/null:${root}/id.toml` };
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env });
+    writeFileSync(join(root, "a.txt"), "one\n");
+    execFileSync("git", ["add", "."], { cwd: root, env });
+    execFileSync("git", ["commit", "-qm", "first"], { cwd: root, env });
+    return root;
+  }
+
+  it("creates .jj, and the session is recorded as a colocated workspace", async () => {
+    const root = gitRepo();
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    apply(h.ctx, { guard: "deny", adoptGitRepos: true });
+
+    const state = await preflight(h, root);
+
+    expect(existsSync(join(root, ".jj"))).toBe(true);
+    expect(state?.vcs).toBe("jj");
+    expect(state?.kind).toBe("jj-colocated");
+    expect(state?.adoption?.status).toBe("adopted");
+  });
+
+  it("makes the guard active: Git is refused in the same session", async () => {
+    // The point of the feature. Creating `.jj` is only useful if the guard then
+    // treats the repository as a workspace — which it will only do if the
+    // detection cache that said "plain git" moments earlier was dropped. A
+    // preflight that adopted without invalidating would leave the guard inert
+    // for the rest of the session, and every test above would still pass.
+    const root = gitRepo();
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    // `readOnlyGit: "deny"` as well as `bypass`: the shipped default for
+    // read-only Git is `ask`, so a bare `git status` would come back as a
+    // prompt and the assertion below would be testing the posture rather than
+    // whether the guard is awake at all.
+    apply(h.ctx, { guard: "deny", readOnlyGit: "deny", bypass: "deny", adoptGitRepos: true });
+
+    await preflight(h, root);
+    const decision = await h.preExecute(
+      h.session("s1", root).exec("bash", { command: "git status", description: "test" }),
+    );
+
+    expect(decision.kind).toBe("deny");
+  });
+
+  it("leaves the repository alone when the setting is off", async () => {
+    // The default has to be inert: a plugin that creates .jj in a repository
+    // nobody asked it to touch is the failure this setting exists to prevent.
+    const root = gitRepo();
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    apply(h.ctx, { guard: "deny" });
+
+    const state = await preflight(h, root);
+
+    expect(existsSync(join(root, ".jj"))).toBe(false);
+    expect(state?.vcs).toBe("git");
+    expect(state?.adoption).toBeUndefined();
+  });
+
+  it("adopts when the project marker opts in and the setting is off", async () => {
+    // The per-project switch has to work in the direction that makes it useful:
+    // one repository opted in without turning the setting on everywhere.
+    const root = gitRepo();
+    writeFileSync(join(root, ".dsh-jujutsu.json"), JSON.stringify({ enabled: true, adopt: true }));
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    apply(h.ctx, { guard: "deny" });
+
+    const state = await preflight(h, root);
+
+    expect(existsSync(join(root, ".jj"))).toBe(true);
+    expect(state?.adoption?.status).toBe("adopted");
+  });
+
+  it("refuses to adopt when the project marker opts out and the setting is on", async () => {
+    // And in the direction that makes it safe: a monorepo or a vendored
+    // checkout that must not grow a .jj because the setting is global.
+    const root = gitRepo();
+    writeFileSync(join(root, ".dsh-jujutsu.json"), JSON.stringify({ enabled: true, adopt: false }));
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    apply(h.ctx, { guard: "deny", adoptGitRepos: true });
+
+    const state = await preflight(h, root);
+
+    expect(existsSync(join(root, ".jj"))).toBe(false);
+    expect(state?.vcs).toBe("git");
+  });
+
+  it("refuses a repo with submodules and records why", async () => {
+    const root = gitRepo();
+    writeFileSync(join(root, ".gitmodules"), '[submodule "s"]\n\tpath = s\n\turl = ../s\n');
+    const h = fakeHarness();
+    realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
+    apply(h.ctx, { guard: "deny", adoptGitRepos: true });
+
+    const state = await preflight(h, root);
+
+    expect(existsSync(join(root, ".jj"))).toBe(false);
+    expect(state?.vcs).toBe("git");
+    expect(state?.adoption?.status).toBe("blocked");
+    expect(state?.adoption?.blocker).toBe("submodules");
   });
 });

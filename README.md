@@ -100,6 +100,14 @@ In a directory with **no** version control, the plugin says so — so the agent
 can offer to initialise one, suggesting `jj git init` (colocated, so Git tooling
 still works).
 
+**Plain Git repositories can be adopted, deliberately.** Turn on _Use Jujutsu in
+Git repos_ and the first session in a Git repo that has no `.jj` runs
+`jj git init --colocate`: the history is imported and the agent gets jj, while
+Git tooling keeps working because `.git` is untouched. It is refused outright
+for repositories jj cannot represent — LFS (where jj would commit raw bytes over
+the pointer), submodules, shallow clones, linked worktrees, and a Git operation
+in progress. See [docs/37](docs/37-git-compatible-adoption.md).
+
 Depth is deferred rather than paid for. The rule and the workspace state ride the
 system prompt because they must be in force before the model's first Git command;
 the **manual** — the working-copy model, the Git→`jj` verb map, what each of the
@@ -122,6 +130,7 @@ Open **Plugins → Jujutsu**. Most settings are on that page:
 | Prefer Jujutsu                  | on      | Suggest `jj git init` rather than `git init`                                       |
 | Explain Jujutsu in the prompt   | on      | Off means the guard still refuses Git but the model is not told why                |
 | Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                         |
+| Use Jujutsu in Git repos        | off     | Adopt a plain Git repo by creating `.jj` beside `.git`                             |
 
 ### Advanced: where the binaries are found
 
@@ -248,7 +257,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **269 tests**, `pnpm run ci` green.
+observed working in a live session. **291 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

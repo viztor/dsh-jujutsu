@@ -50,6 +50,7 @@ verbatim and deliberate.
 | [34](34-probe-plan.md)                           | **Probe plan**                              | —             | What is still open, the one throwaway plugin that closes five of them, and what is needed to run it.                     |
 | [35](35-probe-results-live.md)                   | **Probe results — live session**            | —             | The probe was built, installed, exercised and removed. Twelve of fourteen questions are now closed.                      |
 | [36](36-ai-and-jujutsu.md)                       | **How an AI should work with Jujutsu**      | —             | Why the seam is native tools plus a guard, not MCP; what the `jujutsu` skill carries and what stays in the prompt.       |
+| [37](37-git-compatible-adoption.md)              | **Git-compatible adoption**                 | —             | Taking over a plain Git repo with `jj git init --colocate`, and the five repository shapes it must refuse.               |
 
 The build specification is [`SPEC.md`](../SPEC.md).
 

@@ -31,6 +31,7 @@
  * |---|---|
  * | `{"enabled": false}` | the plugin is completely off in this subtree |
  * | `{"enabled": true}` | the plugin is on, overriding an ancestor's `false` |
+ * | `{"adopt": true\|false}` | overrides the global `adoptGitRepos` setting here |
  * | absent | automatic — the plugin follows `.jj` presence |
  *
  * `true` matters because it is what makes a subtree exemption possible: disable
@@ -64,6 +65,16 @@ const MAX_DEPTH = 64;
 export interface Marker {
   /** `true` forces the plugin on, `false` forces it off. */
   readonly enabled: boolean;
+  /**
+   * Overrides the global `adoptGitRepos` setting for this project.
+   *
+   * `false` is the useful direction: the global setting makes the plugin write
+   * `.jj` into every plain Git repository a session opens, and a monorepo or a
+   * vendored checkout is exactly where that should not happen. `true` is the
+   * other direction, so a single project can opt in without turning the setting
+   * on everywhere.
+   */
+  readonly adopt?: boolean;
   /** The directory holding the marker. */
   readonly dir: string;
 }
@@ -152,7 +163,11 @@ async function readMarker(ctx: Context, dir: string): Promise<Marker | undefined
     if (typeof parsed !== "object" || parsed === null) return undefined;
     const enabled = (parsed as { enabled?: unknown }).enabled;
     if (typeof enabled !== "boolean") return undefined;
-    return { enabled, dir };
+    // `adopt` is optional and independently typed: a marker with only
+    // `{"enabled": true}` still means "follow the global adoption setting", and
+    // a non-boolean `adopt` is ignored rather than failing the whole marker.
+    const adopt = (parsed as { adopt?: unknown }).adopt;
+    return typeof adopt === "boolean" ? { enabled, adopt, dir } : { enabled, dir };
   } catch {
     return undefined;
   }

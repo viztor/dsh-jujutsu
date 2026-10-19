@@ -281,7 +281,12 @@ function resolveGate(scripts: Readonly<Record<string, string>>): string {
   // checks below meaningful without hard-coding the shape of the entry point.
   const gate = resolveGate(pkg.scripts ?? {});
 
-  const build = gate.indexOf("pnpm run build");
+  // Either runner is accepted: the repository standardized on `vp run <task>`,
+  // and `pnpm run <task>` is the equivalent spelling. Matching both keeps this
+  // check about *composition* — build before test, package checks last — rather
+  // than about which wrapper invokes the task, which is a preference the gate
+  // itself is free to change.
+  const build = /(?:pnpm|vp) run build/.exec(gate)?.index ?? -1;
   const test = gate.indexOf("vp test run");
   check("the gate builds before it tests", build !== -1 && test !== -1 && build < test, gate);
   // The tarball check is the only one that sees what a consumer receives. As
@@ -292,7 +297,7 @@ function resolveGate(scripts: Readonly<Record<string, string>>): string {
   // look identical to this regex while testing nothing about the package.
   check(
     "the gate ends with the package checks",
-    /&&\s*pnpm run package-check\s*$/.test(gate),
+    /&&\s*(?:pnpm|vp) run package-check\s*$/.test(gate),
     gate,
   );
 

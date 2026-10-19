@@ -194,3 +194,43 @@ describe("a plain Git repository", () => {
     expect(section?.text(forSession("s1"))).toBe("");
   });
 });
+
+describe("adoption is reported, not assumed", () => {
+  it("says the repository was adopted, and what follows from it", () => {
+    // The one workflow constraint the plugin can state. A Git user who never
+    // opted into Jujutsu is downstream of everything the agent does, so the
+    // prompt has to name the constraint rather than leave it to inference.
+    const h = harnessWithContext();
+    setWorkspaceState("s1", {
+      vcs: "jj",
+      root: "/r",
+      kind: "jj-colocated",
+      adoption: { status: "adopted" },
+    });
+    const text =
+      h.prompt.contexts.find((c) => c.name === "jujutsu:workspace")?.text(forSession("s1")) ?? "";
+    expect(text).toContain("Adopted:");
+    expect(text).toContain("do not rewrite published history");
+    // The ordinary facts are still there: adoption adds a line, it does not
+    // replace the workspace description.
+    expect(text).toContain("Workspace root: /r");
+  });
+
+  it("says why a plain Git repo could not be adopted", () => {
+    // "jj is not available" on its own reads as a missing install, and the
+    // model would have no way to tell a user what to change.
+    const h = harnessWithContext();
+    setWorkspaceState("s1", {
+      vcs: "git",
+      root: "/r",
+      adoption: { status: "blocked", blocker: "lfs", evidence: "/r/.gitattributes" },
+    });
+    const text =
+      h.prompt.contexts.find((c) => c.name === "jujutsu:workspace")?.text(forSession("s1")) ?? "";
+    expect(text).toContain("cannot be used here");
+    expect(text).toContain("LFS");
+    // The guard is still inactive there, and saying so is what stops the model
+    // assuming a protection that is not in force.
+    expect(text).toContain("guard is inactive");
+  });
+});

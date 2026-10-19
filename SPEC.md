@@ -592,6 +592,33 @@ require a hand-written browser half, and this plugin now has one:
 than duplicating the field list. Marking the fields volatile is still required —
 it is what makes them live-editable and path-addressable.
 
+### 5.14 Adopting a plain Git repository
+
+A Git repository with no `.jj` can be handed to Jujutsu by running
+`jj git init --colocate`, which adds `.jj` beside `.git` and imports the
+history. `.git` is not modified, Git tooling keeps working, and
+`jj git colocation disable` (or deleting `.jj`) undoes it. Full detail:
+[37](docs/37-git-compatible-adoption.md).
+
+Three decisions, each of which could have gone the other way:
+
+- **A setting, not behaviour.** It is the only thing this plugin does that writes
+  to the user's repository, so it is `adoptGitRepos`, default `false`.
+- **A static probe, not a trial run.** `jj git init --colocate` is not
+  idempotent — a second run exits 1 with `The target repo already exists` — and
+  a failed import is not obviously reversible. The probe reads files and refuses
+  before anything is written. It refuses LFS (jj does not run Git's smudge
+  filter, so it would commit raw bytes over the pointer), submodules (jj
+  records but never updates them), shallow clones, linked worktrees (where
+  `jj git init` creates a second, unrelated repository) and half-finished Git
+  operations.
+- **Refusals are reported, not silent.** The session state carries the blocker
+  and `context.ts` renders one sentence naming it. A refusal that said only "jj
+  is not available" would read as a missing install.
+
+A project can override the setting with `{"adopt": true|false}` in
+`.dsh-jujutsu.json` (§5.12).
+
 ## 6. Config schema
 
 ```ts
@@ -619,6 +646,12 @@ export const Config = z.object({
   // §5.9 — teach the manual via a skill rather than the system prompt
   teachSkill: z.boolean().default(true).volatile(),
   injectContext: z.boolean().default(true).volatile(),
+  // §5.14 — adopt a plain Git repository by running jj git init --colocate.
+  // Off by default: it is the only setting that makes the plugin write to the
+  // user's repository, and the compatibility probe refuses the shapes jj cannot
+  // represent (LFS, submodules, shallow clones, linked worktrees, in-progress
+  // Git operations).
+  adoptGitRepos: z.boolean().default(false).volatile(),
 });
 ```
 
@@ -629,7 +662,8 @@ code change. No secrets, so no `.role('secret')` and no credential fields.
 `bypass` and `readOnlyGit` are specified in
 [17](docs/17-bypass-and-approval.md); `hunkInstall` and `jjHunkPath` in
 [19](docs/19-jj-hunk-provisioning.md); `teachSkill` in
-[28](docs/28-teaching-and-interaction-surfaces.md).
+[28](docs/28-teaching-and-interaction-surfaces.md); `adoptGitRepos` in
+[37](docs/37-git-compatible-adoption.md).
 
 ## 7. Behaviour matrix
 

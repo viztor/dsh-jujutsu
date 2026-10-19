@@ -161,4 +161,30 @@ export const Config = z.object({
       "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Off suggests plain git init. Only used when “Mention missing version control” is on.",
     )
     .volatile(),
+
+  /**
+   * Adopt plain Git repositories for Jujutsu.
+   *
+   * Off by default, and the default is the safe one: turning this on makes the
+   * plugin **write to the user's repository** the first time a session opens a
+   * Git repo that has no `.jj`. That is a mutation nobody should get without
+   * asking for it, which is why it is a setting rather than behaviour.
+   *
+   * The write is small and reversible — `jj git init --colocate` adds `.jj`
+   * beside `.git` and imports the history; `.git` is untouched and Git tooling
+   * keeps working. `jj git colocation disable`, or deleting `.jj`, undoes it.
+   *
+   * It is refused outright for repositories `jj` cannot represent faithfully.
+   * The dangerous one is LFS: `jj` does not run Git's smudge filter, so it sees
+   * a smudged file as modified and would commit the raw bytes over the pointer.
+   * Submodules, shallow clones, linked worktrees and half-finished Git
+   * operations are refused too. See `src/adopt.ts` and `docs/37`.
+   */
+  adoptGitRepos: z
+    .boolean()
+    .default(false)
+    .description(
+      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS, submodules, a shallow clone, a linked worktree, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
+    )
+    .volatile(),
 });

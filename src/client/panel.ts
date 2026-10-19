@@ -296,6 +296,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     preferJjLabel: "Prefer Jujutsu",
     preferJjHint:
       "Which to suggest when initialising: jj git init (colocated, Git tooling still works) or plain git init. Off suggests plain git init. Only used when “Mention missing version control” is on.",
+    adoptGitReposLabel: "Use Jujutsu in Git repos",
+    adoptGitReposHint:
+      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS, submodules, a shallow clone, a linked worktree, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
     injectContextLabel: "Explain Jujutsu in the prompt",
     injectContextHint:
       "Tell the model, in its system prompt, that version control here is Jujutsu. Off means the guard still refuses Git but the model is not told why.",
@@ -337,6 +340,9 @@ const STRINGS: Record<string, Record<string, string>> = {
     preferJjLabel: "优先使用 Jujutsu",
     preferJjHint:
       "初始化时建议哪一种：jj git init（共置仓库，Git 工具链仍可用）或普通 git init。仅在开启「提示缺少版本控制」时生效。",
+    adoptGitReposLabel: "在 Git 仓库中使用 Jujutsu",
+    adoptGitReposHint:
+      "在 .git 旁创建 .jj 来接管普通 Git 仓库，让模型可以在这里使用 jj，Git 工具链仍然可用。使用 LFS、子模块、浅克隆、链接工作树，或正在进行的 Git 操作时会被拒绝。关闭后插件在 Jujutsu 工作区之外保持静默。",
     injectContextLabel: "在提示中说明 Jujutsu",
     injectContextHint:
       "在系统提示中告知模型此处的版本控制是 Jujutsu。关闭后拦截仍会拒绝 Git，但模型不会知道原因。",
@@ -385,6 +391,11 @@ const FIELDS: Record<string, FieldMeta> = {
     hintKey: "alertUninitialisedHint",
   },
   preferJj: { kind: "boolean", labelKey: "preferJjLabel", hintKey: "preferJjHint" },
+  adoptGitRepos: {
+    kind: "boolean",
+    labelKey: "adoptGitReposLabel",
+    hintKey: "adoptGitReposHint",
+  },
   injectContext: { kind: "boolean", labelKey: "injectContextLabel", hintKey: "injectContextHint" },
   teachSkill: { kind: "boolean", labelKey: "teachSkillLabel", hintKey: "teachSkillHint" },
 };
@@ -422,7 +433,7 @@ const GROUPS: readonly GroupMeta[] = [
   {
     id: "init",
     titleKey: "groupInit",
-    fields: ["alertUninitialised", "preferJj"],
+    fields: ["alertUninitialised", "preferJj", "adoptGitRepos"],
   },
   {
     id: "prompt",

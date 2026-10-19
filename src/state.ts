@@ -21,7 +21,23 @@
  * @module dsh-jujutsu/state
  */
 
+import type { AdoptFailure } from "./adopt.ts";
 import type { VcsKind, WorkspaceKind } from "./detect.ts";
+
+/**
+ * What happened when the plugin tried to hand a plain Git repo to Jujutsu.
+ *
+ * Recorded per session because it is the one thing the prompt must say that
+ * cannot be re-derived synchronously: whether `.jj` was created a moment ago,
+ * or whether adoption was refused and why. `context.ts` renders from this.
+ */
+export interface AdoptionState {
+  readonly status: "adopted" | "blocked";
+  /** Set only when `status` is `blocked`. */
+  readonly blocker?: AdoptFailure;
+  /** The concrete file or message behind the blocker, for the prompt. */
+  readonly evidence?: string;
+}
 
 export interface WorkspaceState {
   /** What governs the directory: `jj`, plain `git`, or nothing. */
@@ -34,6 +50,8 @@ export interface WorkspaceState {
   readonly changeId?: string;
   /** Whether `jj-hunk` resolved. */
   readonly jjHunk?: boolean;
+  /** Present only when this session adopted a Git repo, or tried to. */
+  readonly adoption?: AdoptionState;
 }
 
 /** session id → state. Sessions are few and long-lived, so a plain Map is right. */

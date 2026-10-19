@@ -19,6 +19,7 @@ Every module below has a real signature and a documented contract. Build order i
 | `paths.ts`       | destructive-path predicate for `.git` / `.jj`           | `SPEC.md` §5.7, `docs/21` §e              |
 | `context.ts`     | `systemPrompt` rule + state                             | `docs/22`, `SPEC.md` §5.9                 |
 | `skill.ts`       | the `jujutsu` manual, as a runtime skill                | `docs/28` §1, `docs/36`                   |
+| `adopt.ts`       | Git-compatibility probe and the colocated `jj git init` | `docs/37`                                 |
 | `preflight.ts`   | the 14 environment checks at `agent/created`            | `docs/26` Part A                          |
 | `hunk.ts`        | the `jj-hunk` bridge                                    | `docs/08`, `docs/24` §3.8                 |
 | `tools.ts`       | the eleven first-class tools                            | `docs/18`, `docs/25` §3                   |
@@ -31,26 +32,27 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 269 tests, `pnpm run ci` green:
+Implemented and tested — 291 tests, `pnpm run ci` green:
 
-| Module          | What works                                                                       |
-| --------------- | -------------------------------------------------------------------------------- |
-| `invocation.ts` | the ported resolver; corpus test passes (64 commands, **0 false positives**)     |
-| `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing                  |
-| `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                       |
-| `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback                |
-| `translate.ts`  | static analysis: argv → the concrete `jj` command, or `undefined`                |
-| `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)              |
-| `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                             |
-| `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read              |
-| `explain.ts`    | the denial's second channel; learns an approval                                  |
-| `bypass.ts`     | the session-scoped remembered grant                                              |
-| `context.ts`    | the rule and the state, empty outside a `jj` workspace                           |
-| `skill.ts`      | the `jujutsu` manual as a runtime skill, registered only when `teachSkill` is on |
-| `preflight.ts`  | gathers detection, `@`, and `jj-hunk` at `agent/created`                         |
-| `shell.ts`      | the `ctx.shell` wrapper and `shellQuote`                                         |
-| `hunk.ts`       | the `jj-hunk` bridge with its pre-checks                                         |
-| `tools.ts`      | the eleven `jj` tools, and `buildToolDefinitions` for testing them               |
+| Module          | What works                                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invocation.ts` | the ported resolver; corpus test passes (64 commands, **0 false positives**)                                                                                     |
+| `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing                                                                                                  |
+| `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                                                                                                       |
+| `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback                                                                                                |
+| `translate.ts`  | static analysis: argv → the concrete `jj` command, or `undefined`                                                                                                |
+| `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)                                                                                              |
+| `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                                                                                                             |
+| `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read                                                                                              |
+| `explain.ts`    | the denial's second channel; learns an approval                                                                                                                  |
+| `bypass.ts`     | the session-scoped remembered grant                                                                                                                              |
+| `context.ts`    | the rule and the state, empty outside a `jj` workspace                                                                                                           |
+| `skill.ts`      | the `jujutsu` manual as a runtime skill, registered only when `teachSkill` is on                                                                                 |
+| `adopt.ts`      | the probe that refuses LFS, submodules, shallow clones, linked worktrees and half-finished Git operations, and the `jj git init --colocate` that adopts the rest |
+| `preflight.ts`  | gathers detection, `@`, and `jj-hunk` at `agent/created`                                                                                                         |
+| `shell.ts`      | the `ctx.shell` wrapper and `shellQuote`                                                                                                                         |
+| `hunk.ts`       | the `jj-hunk` bridge with its pre-checks                                                                                                                         |
+| `tools.ts`      | the eleven `jj` tools, and `buildToolDefinitions` for testing them                                                                                               |
 
 ### Live verification
 

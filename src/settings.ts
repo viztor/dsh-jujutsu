@@ -29,6 +29,8 @@ export interface Settings {
   readonly alertUninitialised: boolean;
   /** Which to suggest when initialising. */
   readonly preferJj: boolean;
+  /** Adopt plain Git repositories for Jujutsu (`jj git init --colocate`). */
+  readonly adoptGitRepos: boolean;
 }
 
 const READ_ONLY = ["deny", "ask", "allow"] as const;
@@ -68,5 +70,6 @@ export function resolveSettings(raw: unknown): Settings {
     injectContext: boolean(row.injectContext, true),
     alertUninitialised: boolean(row.alertUninitialised, true),
     preferJj: boolean(row.preferJj, true),
+    adoptGitRepos: boolean(row.adoptGitRepos, false),
   };
 }

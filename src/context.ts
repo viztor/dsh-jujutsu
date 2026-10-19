@@ -33,6 +33,7 @@
 
 import type { Context } from "@deepseek-ai/cordis";
 
+import { blockerText } from "./adopt.ts";
 import type { Settings } from "./settings.ts";
 import { workspaceState } from "./state.ts";
 
@@ -119,10 +120,20 @@ function renderState(context: unknown, settings: Settings): string {
   // governs `jj` workspaces — so the prompt says what is true rather than
   // implying a policy that is not in force.
   if (state.vcs === "git") {
-    return [
+    const lines = [
       `Version control: Git (no Jujutsu here). The jj guard is inactive in this directory.`,
       `Repository root: ${state.root}`,
-    ].join("\n");
+    ];
+    // Adoption was attempted and refused. Say so, and say why: "jj is not
+    // available here" on its own reads as a missing install, and the model would
+    // have no way to tell a user what to change. The blocker is a fact about the
+    // repository, so it is worth one sentence.
+    if (state.adoption?.status === "blocked") {
+      lines.push(
+        `Jujutsu cannot be used here: ${blockerText(state.adoption.blocker ?? "git-file")}.`,
+      );
+    }
+    return lines.join("\n");
   }
 
   const layout =
@@ -133,10 +144,20 @@ function renderState(context: unknown, settings: Settings): string {
     ? `jj-hunk available (${settings.jjHunkPath})`
     : "jj-hunk not installed, hunk tools unavailable";
 
-  return [
+  const lines = [
     `Workspace root: ${state.root}`,
     `Layout: ${layout}`,
     `Working copy @: ${state.changeId ?? "unknown"}`,
     `Hunk selection: ${hunk}`,
-  ].join("\n");
+  ];
+  // Adopted this session: say so, and name the one rule that follows from it.
+  // The repository may have Git users who never agreed to Jujutsu, so history
+  // that has been pushed is not this agent's to rewrite — that is a workflow
+  // constraint the prompt is the only place to state.
+  if (state.adoption?.status === "adopted") {
+    lines.unshift(
+      "Adopted: this Git repository is now a Jujutsu workspace (colocated; Git tooling still works). Other people may use Git here, so prefer additive operations and do not rewrite published history.",
+    );
+  }
+  return lines.join("\n");
 }

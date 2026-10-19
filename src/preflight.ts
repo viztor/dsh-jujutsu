@@ -31,7 +31,9 @@
 
 import type { Context } from "@deepseek-ai/cordis";
 
-import { detect } from "./detect.ts";
+import { adoptRepo } from "./adopt.ts";
+import { detect, invalidateDetection } from "./detect.ts";
+import { markerFor } from "./marker.ts";
 import type { Settings } from "./settings.ts";
 import { runJj } from "./shell.ts";
 import { setWorkspaceState } from "./state.ts";
@@ -54,6 +56,44 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
       const workspace = await detect(ctx, cwd);
 
       if (workspace.kind === "none") {
+        // A plain Git repository can be handed to Jujutsu, but only when the
+        // user asked for it and only when `jj` can represent it. This is the one
+        // branch in preflight that WRITES to the user's repository, which is why
+        // it is gated on an explicit setting (or a per-project marker) and why
+        // `adoptRepo` refuses rather than throws.
+        if (workspace.vcs === "git" && (await wantsAdoption(ctx, settings, cwd))) {
+          const adoption = await adoptRepo(ctx, settings, workspace.vcsRoot);
+          if (adoption.ok) {
+            // Detection cached "plain git" a moment ago; the import just changed
+            // the answer, and every later read — the guard's included — must see
+            // the workspace rather than the cache.
+            invalidateDetection();
+            const adopted = await detect(ctx, cwd);
+            setWorkspaceState(sessionId, {
+              vcs: "jj",
+              root: adopted.root === "" ? workspace.vcsRoot : adopted.root,
+              kind: adopted.kind === "none" ? "jj-colocated" : adopted.kind,
+              jjHunk: await hasJjHunk(ctx, settings, workspace.vcsRoot),
+              ...(await changeId(ctx, settings, workspace.vcsRoot)),
+              adoption: { status: "adopted" },
+            });
+            return;
+          }
+          // Refused. Say why, and leave the repository exactly as it was: the
+          // guard stays inactive here, because a repo jj cannot represent is one
+          // where the agent must keep using Git.
+          setWorkspaceState(sessionId, {
+            vcs: "git",
+            root: workspace.vcsRoot,
+            adoption: {
+              status: "blocked",
+              blocker: adoption.blocker,
+              evidence: adoption.evidence,
+            },
+          });
+          return;
+        }
+
         // Not a `jj` workspace. Record whatever *does* govern — a plain Git repo
         // or nothing at all — so the prompt can say something useful instead of
         // going silent. This is the case the plugin used to have no opinion
@@ -81,6 +121,19 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
       console.error("[dsh-jujutsu] preflight failed, using per-call fallbacks:", error);
     }
   });
+}
+
+/**
+ * Should this session adopt a plain Git repository?
+ *
+ * The marker wins over the setting, in both directions. `{"enabled": false}`
+ * wins over both, because creating `.jj` is the most invasive thing this plugin
+ * does and a project that turned the plugin off has not consented to it.
+ */
+async function wantsAdoption(ctx: Context, settings: Settings, cwd: string): Promise<boolean> {
+  const marker = await markerFor(ctx, cwd);
+  if (marker !== undefined && !marker.enabled) return false;
+  return marker?.adopt ?? settings.adoptGitRepos;
 }
 
 /**
