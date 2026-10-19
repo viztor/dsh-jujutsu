@@ -153,7 +153,15 @@ describe.skipIf(!HAS_JJ)("adopting a plain Git repo", () => {
     execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root, env });
     writeFileSync(join(root, "a.txt"), "one\n");
     execFileSync("git", ["add", "."], { cwd: root, env });
-    execFileSync("git", ["commit", "-qm", "first"], { cwd: root, env });
+    // `-c user.name` / `-c user.email` rather than the machine's Git config:
+    // a CI runner has no global identity, so a bare `git commit` fails there
+    // while passing on a developer's laptop. Same reason `adopt.test.ts` passes
+    // them on every invocation.
+    execFileSync(
+      "git",
+      ["-c", "user.name=Adopt", "-c", "user.email=adopt@example.invalid", "commit", "-qm", "first"],
+      { cwd: root, env },
+    );
     return root;
   }
 
