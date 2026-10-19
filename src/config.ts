@@ -184,7 +184,7 @@ export const Config = z.object({
     .boolean()
     .default(false)
     .description(
-      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS, submodules, a shallow clone, a linked worktree, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
+      "Use Jujutsu in plain Git repositories: runs jj git init --colocate on the first session in a Git repo that has no .jj. Git tooling keeps working. Refused for repos using LFS or any content filter, a sparse checkout, submodules, a shallow clone, a linked worktree or symlinked .git, or a Git operation in progress. Off leaves the plugin inert outside Jujutsu workspaces.",
     )
     .volatile(),
 });

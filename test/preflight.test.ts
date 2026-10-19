@@ -221,7 +221,11 @@ describe.skipIf(!HAS_JJ)("adopting a plain Git repo", () => {
     // The per-project switch has to work in the direction that makes it useful:
     // one repository opted in without turning the setting on everywhere.
     const root = gitRepo();
-    writeFileSync(join(root, ".dsh-jujutsu.json"), JSON.stringify({ enabled: true, adopt: true }));
+    // `adopt` ALONE, which is what docs/37 §4 documents. Writing
+    // `{enabled: true, adopt: true}` here is what let the bug through: the
+    // marker parser required a boolean `enabled`, so the documented
+    // `{"adopt": true}` was discarded and the opt-in silently did nothing.
+    writeFileSync(join(root, ".dsh-jujutsu.json"), JSON.stringify({ adopt: true }));
     const h = fakeHarness();
     realShell(h.ctx, { JJ_CONFIG: `/dev/null:${root}/id.toml` });
     apply(h.ctx, { guard: "deny" });

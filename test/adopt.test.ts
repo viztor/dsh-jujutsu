@@ -27,7 +27,15 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -426,10 +434,12 @@ describe("the one-sentence explanation", () => {
     // user. `init-failed` is separate from the five blockers: it is not a
     // property of the repository but a failure to run `jj` at all.
     const expected: readonly (readonly [AdoptBlocker | "init-failed", RegExp])[] = [
-      ["git-file", /worktree|submodule/i],
+      ["git-file", /worktree|submodule|symlink/i],
+      ["sparse", /sparse/i],
       ["shallow", /shallow/i],
       ["submodules", /submodule/i],
       ["lfs", /lfs/i],
+      ["filters", /filter|autocrlf/i],
       ["in-progress", /merge|rebase|cherry|revert|bisect|progress/i],
       ["init-failed", /jj|jujutsu|init/i],
     ];
@@ -442,5 +452,156 @@ describe("the one-sentence explanation", () => {
       expect(text, blocker).not.toContain("\n");
       expect(text, blocker).toMatch(names);
     }
+  });
+});
+
+describe("LFS is caught however it was installed", () => {
+  it("refuses when the filter is in .git/config, even with no root .gitattributes", async () => {
+    // The gap the first probe had: `filter=lfs` declared only in a nested
+    // `.gitattributes` is invisible to a root-only read. `git lfs install`
+    // writes `[filter "lfs"]` into `.git/config` and LFS cannot work without
+    // it, so the config is the repo-level answer that a nested file cannot
+    // hide. This repository has no root `.gitattributes` at all.
+    const root = caseDir("lfs-config-only");
+    gitInit(root);
+    writeFileSync(
+      join(root, ".git", "config"),
+      '[core]\n\trepositoryformatversion = 0\n[filter "lfs"]\n\trequired = true\n\tclean = git-lfs clean -- %f\n',
+    );
+    mkdirSync(join(root, "assets"), { recursive: true });
+    writeFileSync(join(root, "assets", ".gitattributes"), "*.bin filter=lfs\n");
+
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("lfs");
+  });
+
+  it("refuses when the filter is declared in .git/info/attributes", async () => {
+    const root = caseDir("lfs-info-attributes");
+    gitInit(root);
+    writeFileSync(join(root, ".git", "info", "attributes"), "*.bin filter=lfs\n");
+
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("lfs");
+  });
+});
+
+describe("the shapes the first probe missed", () => {
+  /** A hand-built repository root: `.git/` as a directory, no git process. */
+  function handBuilt(name: string): string {
+    const root = caseDir(name);
+    mkdirSync(join(root, ".git"), { recursive: true });
+    return root;
+  }
+
+  it("refuses a sparse checkout, which jj would read as mass deletion", async () => {
+    // jj does not know about the sparse cone, so every path outside it looks
+    // deleted: `jj status` shows `D dirB/b.txt` and one commit removes those
+    // files from the shared history. Disabling sparse checkout afterwards does
+    // not bring them back — this is the same danger class as LFS.
+    const root = handBuilt("sparse-file");
+    mkdirSync(join(root, ".git", "info"), { recursive: true });
+    writeFileSync(join(root, ".git", "info", "sparse-checkout"), "dirA/\n");
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("sparse");
+  });
+
+  it("refuses a sparse checkout configured only in .git/config", async () => {
+    const root = handBuilt("sparse-config");
+    writeFileSync(
+      join(root, ".git", "config"),
+      "[core]\n\trepositoryformatversion = 0\n\tsparseCheckout = true\n",
+    );
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("sparse");
+  });
+
+  it("refuses a custom content filter, the git-crypt shape", async () => {
+    // The root cause is not LFS, it is that jj runs no filters at all. With
+    // git-crypt, the worktree is the DECRYPTED file, so jj would commit
+    // plaintext over the encrypted blob — a secret-exposure incident.
+    const root = handBuilt("custom-filter");
+    writeFileSync(
+      join(root, ".git", "config"),
+      '[core]\n\trepositoryformatversion = 0\n[filter "crypt"]\n\tclean = git-crypt clean %f\n\tsmudge = git-crypt smudge %f\n',
+    );
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("filters");
+  });
+
+  it("refuses core.autocrlf, which would commit CRLF over the normalised blob", async () => {
+    const root = handBuilt("autocrlf");
+    writeFileSync(
+      join(root, ".git", "config"),
+      "[core]\n\trepositoryformatversion = 0\n\tautocrlf = true\n",
+    );
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("filters");
+  });
+
+  it("refuses a symlinked .git, where two directories share one repository", async () => {
+    // `stat` follows the link and sees a directory. Two working copies then each
+    // get their own jj workspace over one shared Git directory, and a commit
+    // from one deletes the other's files from the shared repository. Only
+    // `lstat` can tell.
+    const real = caseDir("symlink-real");
+    gitInit(real);
+    writeFileSync(join(real, "a.txt"), "one\n");
+    git(real, ["add", "."]);
+    git(real, ["commit", "-m", "base"]);
+
+    const root = caseDir("symlink-user");
+    symlinkSync(join(real, ".git"), join(root, ".git"));
+
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("git-file");
+  });
+
+  it("refuses a pending multi-commit cherry-pick, which leaves .git/sequencer", async () => {
+    // `git cherry-pick A B` with a conflict, resolved with `git commit` rather
+    // than `--continue`, leaves a pending pick in `sequencer/` and no
+    // `CHERRY_PICK_HEAD`. Checking only the latter says the repository is idle.
+    const root = handBuilt("sequencer");
+    mkdirSync(join(root, ".git", "sequencer"), { recursive: true });
+    writeFileSync(join(root, ".git", "sequencer", "todo"), "pick abc123\n");
+    const { ctx } = fakeHarness();
+    const probe = await probeAdoption(ctx, root);
+    expect(probe.ok).toBe(false);
+    expect(probe.ok === false && probe.blocker).toBe("in-progress");
+  });
+});
+
+describe.skipIf(!HAS_JJ || !HAS_GIT)("a failed import is undone", () => {
+  it("removes the partial .jj when jj cannot import the repository", async () => {
+    // The worst state to leave behind: a `.jj` that does not work. The next
+    // session's detect would see it, the guard would activate, and every jj
+    // command would fail — the repository bricked for the agent while Git keeps
+    // working outside the plugin.
+    //
+    // An unparseable ref makes `jj git init --colocate` fail after it has
+    // created `.jj` (measured on 0.46.0: exit 1, "Failed to import refs").
+    const root = adoptable("broken-ref");
+    writeFileSync(join(root, ".git", "refs", "heads", "main"), "not-a-sha\n");
+
+    const h = fakeHarness();
+    realShell(h.ctx, jjEnv());
+    const result = await adoptRepo(h.ctx, resolveSettings({}), root);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.blocker).toBe("init-failed");
+    expect(existsSync(join(root, ".jj"))).toBe(false);
   });
 });

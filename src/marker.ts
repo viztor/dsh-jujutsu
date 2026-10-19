@@ -31,7 +31,7 @@
  * |---|---|
  * | `{"enabled": false}` | the plugin is completely off in this subtree |
  * | `{"enabled": true}` | the plugin is on, overriding an ancestor's `false` |
- * | `{"adopt": true\|false}` | overrides the global `adoptGitRepos` setting here |
+ * | `{"adopt": true\|false}` | overrides the global `adoptGitRepos` setting here; alone it also means "the plugin is on" |
  * | absent | automatic — the plugin follows `.jj` presence |
  *
  * `true` matters because it is what makes a subtree exemption possible: disable
@@ -161,13 +161,24 @@ async function readMarker(ctx: Context, dir: string): Promise<Marker | undefined
 
     const parsed: unknown = JSON.parse(await fs.readText(target));
     if (typeof parsed !== "object" || parsed === null) return undefined;
+
+    // Either key may stand alone, and a non-boolean value is ignored rather
+    // than failing the whole marker. The `enabled` default matters: a file
+    // written as `{"adopt": true}` was inert while this required `enabled`,
+    // because the whole marker was discarded — so the documented per-project
+    // opt-in silently did nothing. `adopt` alone now means "the plugin is on
+    // here, and adopt".
     const enabled = (parsed as { enabled?: unknown }).enabled;
-    if (typeof enabled !== "boolean") return undefined;
-    // `adopt` is optional and independently typed: a marker with only
-    // `{"enabled": true}` still means "follow the global adoption setting", and
-    // a non-boolean `adopt` is ignored rather than failing the whole marker.
     const adopt = (parsed as { adopt?: unknown }).adopt;
-    return typeof adopt === "boolean" ? { enabled, adopt, dir } : { enabled, dir };
+    const hasEnabled = typeof enabled === "boolean";
+    const hasAdopt = typeof adopt === "boolean";
+    if (!hasEnabled && !hasAdopt) return undefined;
+
+    return {
+      enabled: hasEnabled ? enabled : true,
+      ...(hasAdopt ? { adopt } : {}),
+      dir,
+    };
   } catch {
     return undefined;
   }

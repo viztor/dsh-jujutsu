@@ -18,7 +18,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -282,6 +282,31 @@ export function fakeHarness(
             : stats.isFile()
               ? ("file" as const)
               : ("other" as const),
+        };
+      } catch {
+        return undefined;
+      }
+    },
+    // `lstat`, mirroring `stat` with the one difference that matters: it does
+    // not follow a symlink, so a `.git` symlink reports `symlink` rather than
+    // the directory it points at. `src/adopt.ts` relies on exactly that
+    // distinction, and a double without `lstat` would make every `.git` look
+    // absent — the probe would answer `{ok:true}` for every repository.
+    async lstat(path: string) {
+      try {
+        // Takes a PATH, not a resolved target — that is the real `lstat`
+        // signature (`stat` takes a target, `lstat` resolves its own path), and
+        // the difference is easy to get wrong in a double.
+        const stats = lstatSync(path);
+        return {
+          version: "v1",
+          type: stats.isSymbolicLink()
+            ? ("symlink" as const)
+            : stats.isDirectory()
+              ? ("directory" as const)
+              : stats.isFile()
+                ? ("file" as const)
+                : ("other" as const),
         };
       } catch {
         return undefined;
