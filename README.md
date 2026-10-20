@@ -267,7 +267,7 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 Both documents record what the sweeps did **not** find, and what remains open.
 
 The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **336 tests**, `pnpm run ci` green.
+observed working in a live session. **349 tests**, `pnpm run ci` green.
 
 ### Where this came from
 

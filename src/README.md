@@ -3,36 +3,36 @@
 Every module below has a real signature and a documented contract. Build order is
 `docs/24-implementation-plan.md` §4.
 
-| Module           | Responsibility                                          | Spec                                      |
-| ---------------- | ------------------------------------------------------- | ----------------------------------------- |
-| `index.ts`       | plugin entry: `name`, `inject`, `Config`, `apply()`     | `SPEC.md` §3, `docs/16`                   |
-| `config.ts`      | the `Config` schema — every field `.volatile()`         | `SPEC.md` §6, `docs/29` §2                |
-| `settings.ts`    | narrows a raw row into `Settings`; permissive by design | `docs/24` §3.2                            |
-| `guard-utils.ts` | `isRecord` / `readString`; zero imports                 | —                                         |
-| `detect.ts`      | workspace detection + `effectiveCwd`                    | `SPEC.md` §5.1, `docs/13` §1–2            |
-| `parse.ts`       | the resolver's **typed public surface**                 | `docs/15` §4, `docs/21`                   |
-| `invocation.ts`  | the resolver **engine** — a verbatim port, annotated    | `docs/21`, `scripts/probe-invocation.mjs` |
-| `verbs.ts`       | the Git→`jj` table and classification                   | `docs/15`, `docs/25` §2                   |
-| `translate.ts`   | static analysis: the concrete `jj` command for an argv  | `docs/15` §6, `docs/25` §2.4              |
-| `guard.ts`       | the `tools/pre-execute` listener                        | `SPEC.md` §5.2, `docs/31` Q1              |
-| `explain.ts`     | the denial's second channel via `tools/post-execute`    | `SPEC.md` §5.2                            |
-| `paths.ts`       | destructive-path predicate for `.git` / `.jj`           | `SPEC.md` §5.7, `docs/21` §e              |
-| `context.ts`     | `systemPrompt` rule + state                             | `docs/22`, `SPEC.md` §5.9                 |
-| `skill.ts`       | the `jujutsu` manual, as a runtime skill                | `docs/28` §1, `docs/36`                   |
-| `adopt.ts`       | Git-compatibility probe and the colocated `jj git init` | `docs/37`                                 |
-| `preflight.ts`   | the 14 environment checks at `agent/created`            | `docs/26` Part A                          |
-| `hunk.ts`        | the `jj-hunk` bridge                                    | `docs/08`, `docs/24` §3.8                 |
-| `tools.ts`       | the eleven first-class tools                            | `docs/18`, `docs/25` §3                   |
-| `state.ts`       | the cached per-session workspace state the prompt reads | `docs/22` §2                              |
-| `marker.ts`      | the per-project switch, `.dsh-jujutsu.json`             | `docs/29` §3                              |
-| `shell.ts`       | `ctx.shell` wrapper + `shellQuote`                      | `docs/24` §1, §3.1                        |
-| `errors.ts`      | error codes and `toolError`                             | `docs/26` Part B                          |
+| Module           | Responsibility                                                       | Spec                                      |
+| ---------------- | -------------------------------------------------------------------- | ----------------------------------------- |
+| `index.ts`       | plugin entry: `name`, `inject`, `Config`, `apply()`                  | `SPEC.md` §3, `docs/16`                   |
+| `config.ts`      | the `Config` schema — every field `.volatile()`                      | `SPEC.md` §6, `docs/29` §2                |
+| `settings.ts`    | narrows a raw row into `Settings`; permissive by design              | `docs/24` §3.2                            |
+| `guard-utils.ts` | `isRecord` / `readString`; zero imports                              | —                                         |
+| `detect.ts`      | workspace detection + `effectiveCwd`                                 | `SPEC.md` §5.1, `docs/13` §1–2            |
+| `parse.ts`       | the resolver's **typed public surface**                              | `docs/15` §4, `docs/21`                   |
+| `invocation.ts`  | the resolver **engine** — ported and annotated, plus heredoc masking | `docs/21`, `scripts/probe-invocation.mjs` |
+| `verbs.ts`       | the Git→`jj` table and classification                                | `docs/15`, `docs/25` §2                   |
+| `translate.ts`   | static analysis: the concrete `jj` command for an argv               | `docs/15` §6, `docs/25` §2.4              |
+| `guard.ts`       | the `tools/pre-execute` listener                                     | `SPEC.md` §5.2, `docs/31` Q1              |
+| `explain.ts`     | the denial's second channel via `tools/post-execute`                 | `SPEC.md` §5.2                            |
+| `paths.ts`       | destructive-path predicate for `.git` / `.jj`                        | `SPEC.md` §5.7, `docs/21` §e              |
+| `context.ts`     | `systemPrompt` rule + state                                          | `docs/22`, `SPEC.md` §5.9                 |
+| `skill.ts`       | the `jujutsu` manual, as a runtime skill                             | `docs/28` §1, `docs/36`                   |
+| `adopt.ts`       | Git-compatibility probe and the colocated `jj git init`              | `docs/37`                                 |
+| `preflight.ts`   | the 14 environment checks at `agent/created`                         | `docs/26` Part A                          |
+| `hunk.ts`        | the `jj-hunk` bridge                                                 | `docs/08`, `docs/24` §3.8                 |
+| `tools.ts`       | the eleven first-class tools                                         | `docs/18`, `docs/25` §3                   |
+| `state.ts`       | the cached per-session workspace state the prompt reads              | `docs/22` §2                              |
+| `marker.ts`      | the per-project switch, `.dsh-jujutsu.json`                          | `docs/29` §3                              |
+| `shell.ts`       | `ctx.shell` wrapper + `shellQuote`                                   | `docs/24` §1, §3.1                        |
+| `errors.ts`      | error codes and `toolError`                                          | `docs/26` Part B                          |
 
 ## State
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 336 tests, `pnpm run ci` green:
+Implemented and tested — 349 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -114,11 +114,20 @@ in `docs/35-probe-results-live.md`, and it is the reason that test exists.
 ### The port is annotated now
 
 `invocation.ts` carried `// @ts-nocheck` longer than anything else here, and the
-reason was sound: it is a verbatim port, and annotating it _during_ the port would
-have made a corpus failure impossible to attribute. It was annotated afterwards,
-as its own pass, with the corpus green before and after — **the same 64 commands,
-54 correct, 10 false negatives, 0 false positives, 16 low-confidence**, which is
-the evidence that the pass changed types and not behaviour.
+reason was sound: it is a port, and annotating it _during_ the port would have
+made a corpus failure impossible to attribute. It was annotated afterwards, as its
+own pass, with the corpus green before and after — **the same 64 commands, 54
+correct, 10 false negatives, 0 false positives, 16 low-confidence**, which is the
+evidence that the pass changed types and not behaviour.
+
+It has since gained **one deliberate behavioural addition**: a quoted heredoc
+body (`<<'EOF'`) whose opening line names no stdin executor is blanked before
+analysis, because the shell neither expands nor runs it. `paths.ts` masks the
+same bodies before looking for an operand, so a document that mentions `.git`
+is not a destructive command. The corpus has no heredocs, so those numbers
+still stand; `test/heredoc.test.ts` covers the new behaviour in both
+directions, and the open limits are in
+[`docs/21`](../docs/21-guard-evasion.md).
 
 `pnpm typecheck` is now clean across all twenty modules, with no pragma anywhere
 in `src/`. Three edits were not purely type-level: guards for

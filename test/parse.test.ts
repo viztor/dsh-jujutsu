@@ -1,10 +1,12 @@
 /**
  * The port's regression suite.
  *
- * `src/invocation.ts` is a byte-identical copy of
- * `scripts/probe-invocation.mjs`, whose behaviour is described in
- * `docs/21-guard-evasion.md`. This test exists so that "it is a port, not a
- * rewrite" is a checkable claim rather than a comment.
+ * `src/invocation.ts` is a port of `scripts/probe-invocation.mjs`, whose
+ * behaviour is described in `docs/21-guard-evasion.md`. This test exists so that
+ * "it is a port, not a rewrite" is a checkable claim rather than a comment. The
+ * port's one behavioural addition — masking quoted heredoc bodies — has its own
+ * suite in `test/heredoc.test.ts`, so the numbers here still measure the
+ * prototype's corpus.
  *
  * The numbers below are **deliberately exact**. They are the prototype's
  * measured behaviour, and a change to any of them means the port changed

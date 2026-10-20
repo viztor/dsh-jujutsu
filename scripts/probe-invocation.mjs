@@ -12,6 +12,14 @@
  * deliberately honest about the cases it cannot resolve: whenever it guesses,
  * it lowers `confidence` to `'low'` and says why in `notes`.
  *
+ * **The shipped port diverges here by design.** `src/invocation.ts` masks a
+ * quoted heredoc body whose opening line names no stdin executor before it
+ * analyses anything — prose written through a heredoc is data, and reading it
+ * as commands produced false positives in the live guard. This file stays the
+ * reference implementation of the original rule; the divergence and its
+ * residual limits are recorded in `docs/21-guard-evasion.md` (Verification
+ * status).
+ *
  * ── What it deliberately does NOT attempt ────────────────────────────────────
  *
  *  - No real shell grammar. It does not implement `${x:-y}` word splitting,

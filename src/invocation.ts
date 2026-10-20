@@ -1,9 +1,14 @@
 /**
  * The invocation resolver — the ported engine.
  *
- * This module is a *verbatim* copy of `scripts/probe-invocation.mjs`: 790 lines
- * of dense shell-lexing exercised against a 64-command corpus with **0 false
- * positives** and 10 flagged false negatives (`docs/21-guard-evasion.md`).
+ * This module is a port of `scripts/probe-invocation.mjs`: 790 lines of dense
+ * shell-lexing exercised against a 64-command corpus with **0 false positives**
+ * and 10 flagged false negatives (`docs/21-guard-evasion.md`). The port is not
+ * byte-identical any more: it carries one deliberate behavioural addition, the
+ * masking of quoted heredoc bodies (`maskDataHeredocBodies` below, reused by
+ * `paths.ts`), because a heredoc is where the model puts prose and the
+ * prototype read its Markdown as commands. The corpus has no heredocs, so the
+ * measured numbers stand.
  *
  * **The port carried `// @ts-nocheck` and no longer does.** The order was
  * deliberate: port byte-identical, prove the corpus (see `test/parse.test.ts`),
@@ -50,7 +55,7 @@ export interface Invocation {
 }
 
 /**
- * The invocation resolver — ported verbatim from `scripts/probe-invocation.mjs`.
+ * The invocation resolver — ported from `scripts/probe-invocation.mjs`.
  *
  * The rule, from `docs/15-verb-mapping.md` §4:
  *
@@ -67,9 +72,12 @@ export interface Invocation {
  * ── What it deliberately does NOT attempt ────────────────────────────────────
  *
  *  - No real shell grammar. It does not implement `${x:-y}` word splitting,
- *    arithmetic evaluation, process substitution `<(...)`, heredocs, `<<<`,
- *    `coproc`, or here-strings. A heredoc body is treated as ordinary words,
- *    which can both miss a command and invent one.
+ *    arithmetic evaluation, process substitution `<(...)`, `<<<`, `coproc`, or
+ *    here-strings. Heredocs are modelled only where the difference is safe:
+ *    a *quoted* body (`<<'EOF'`) is blanked before analysis when no shell is
+ *    named on its opening line, because the shell neither expands nor runs it;
+ *    an unquoted body still expands, so its text stays scanned. The residual
+ *    gaps are listed in `docs/21-guard-evasion.md`.
  *  - No expansion. `$g`, `${g}`, `$1`, `$@` are opaque: the parser never
  *    substitutes a value, it only notes that the program is computed at run
  *    time.
@@ -364,6 +372,234 @@ const isAssignment = (v: string) => /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/.t
 /** `git status` → `` `git status` ``, but survives embedded backticks. */
 function code(s: string) {
   return s.includes("`") ? "`` " + s + " ``" : "`" + s + "`";
+}
+
+/* ── heredoc bodies ──────────────────────────────────────────────────────── */
+
+/**
+ * Programs whose stdin is code something will execute. A heredoc fed to one of
+ * these is scanned as shell; every other consumer gets the body as data.
+ *
+ * The list is short on purpose. A name that is *missing* here means the body is
+ * masked, so a missing entry is a false negative; a name that is present but
+ * cannot read stdin as shell is only a false positive. The tradeoff therefore
+ * leans towards listing too much rather than too little: `make -f -` reads a
+ * makefile (whose recipes run shells) and `ssh` runs a remote shell, so both
+ * count as executors.
+ */
+const STDIN_EXECUTORS = new Set([
+  "bash",
+  "sh",
+  "zsh",
+  "dash",
+  "ksh",
+  "ash",
+  "mksh",
+  "csh",
+  "tcsh",
+  "ssh",
+  "make",
+  "source",
+  ".",
+]);
+
+interface HeredocOpener {
+  readonly delimiter: string;
+  readonly quoted: boolean;
+  readonly stripTabs: boolean;
+}
+
+/**
+ * The heredoc introductions on one line, in shell order.
+ *
+ * A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) turns off parameter,
+ * command and arithmetic expansion for the whole body. That is what makes
+ * masking it safe: the body is one opaque argument — usually a commit message,
+ * a Markdown document or a script for an interpreter — and treating its lines
+ * as commands invents Git invocations that were never there.
+ */
+function heredocOpenersOn(line: string): HeredocOpener[] {
+  const openers: HeredocOpener[] = [];
+  let quote: "'" | '"' | undefined;
+  let atWordStart = true;
+  let i = 0;
+  while (i < line.length) {
+    const c = line[i]!;
+    if (quote === "'") {
+      if (c === "'") quote = undefined;
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (c === "\\") {
+        i += 2;
+        continue;
+      }
+      if (c === '"') quote = undefined;
+      i++;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      atWordStart = false;
+      i++;
+      continue;
+    }
+    if (c === "\\") {
+      i += 2;
+      atWordStart = false;
+      continue;
+    }
+    if (c === "#" && atWordStart) break; // comment to end of line
+    if (c === " " || c === "\t") {
+      atWordStart = true;
+      i++;
+      continue;
+    }
+    atWordStart = false;
+    // `<<` but not `<<<` (here-string) and not `< <` (process substitution):
+    // those are lexed as separate characters or a different operator.
+    if (c === "<" && line[i + 1] === "<" && line[i + 2] !== "<") {
+      let j = i + 2;
+      let stripTabs = false;
+      if (line[j] === "-") {
+        stripTabs = true;
+        j++;
+      }
+      while (line[j] === " " || line[j] === "\t") j++;
+      let quoted = false;
+      let delimiter = "";
+      const q = line[j];
+      if (q === "'" || q === '"') {
+        quoted = true;
+        const end = line.indexOf(q, j + 1);
+        delimiter = line.slice(j + 1, end === -1 ? line.length : end);
+        j = end === -1 ? line.length : end + 1;
+      } else {
+        if (q === "\\") {
+          quoted = true;
+          j++;
+        }
+        const word = /^[^\s;|&<>()]+/.exec(line.slice(j));
+        delimiter = word?.[0] ?? "";
+        j += delimiter.length;
+      }
+      if (delimiter) openers.push({ delimiter, quoted, stripTabs });
+      i = j;
+      continue;
+    }
+    i++;
+  }
+  return openers;
+}
+
+/** Whether anything on the line will execute stdin as shell code. */
+function hasStdinExecutor(line: string): boolean {
+  for (const token of tokenize(line)) {
+    if ("op" in token) continue;
+    if (STDIN_EXECUTORS.has(basename(token.value))) return true;
+  }
+  return false;
+}
+
+/**
+ * Blank quoted heredoc bodies, which are data rather than commands.
+ *
+ * Rows are written to the model's prompt, so a heredoc is the normal way to put
+ * Markdown in a message — and Markdown about Git is full of `` `git clone` ``
+ * spans. Because this resolver has no heredoc state, every backtick in that
+ * body used to be read as command substitution and every prose line as a
+ * command, so writing the paragraph was denied as a Git invocation.
+ *
+ * Masking is deliberately narrow, because every widening risks a miss:
+ *
+ * - **Quoted delimiters only.** An unquoted body expands `$(…)` and backticks,
+ *   which really do run, so it stays scanned as it was.
+ * - **No `STDIN_EXECUTORS` on the opening line.** `bash <<'EOF'` is a script,
+ *   `cat <<'EOF' | zsh` pipes data into a shell — both are still analysed. Only
+ *   when no executor is named is the body treated as data.
+ *
+ * The result is returned rather than mutated in place so `paths.ts` can reuse
+ * it: the destructive-path rule has the same heredoc blind spot, and a
+ * documentation paragraph is not a `rm -rf .git` operand.
+ *
+ * This is the one place the port knowingly diverges from
+ * `scripts/probe-invocation.mjs`, and it cannot change the 64-command corpus,
+ * which has no heredocs. The residuals — unquoted bodies, an executor on a
+ * later line of a multi-line pipeline — are listed in `docs/21`.
+ */
+function maskDataHeredocBodies(text: string): {
+  readonly text: string;
+  readonly maskedLines: number;
+} {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  const queue: { readonly opener: HeredocOpener; readonly mask: boolean }[] = [];
+  let current:
+    | { readonly opener: HeredocOpener; readonly mask: boolean; body: string[] }
+    | undefined;
+  let masked = 0;
+
+  const flush = () => {
+    if (current === undefined) return;
+    if (current.mask) {
+      for (let index = 0; index < current.body.length; index++) out.push("");
+      masked += current.body.length;
+    } else {
+      out.push(...current.body);
+    }
+    current = undefined;
+  };
+
+  for (const rawLine of lines) {
+    if (current !== undefined) {
+      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+      const compared = current.opener.stripTabs ? line.replace(/^\t+/, "") : line;
+      if (compared === current.opener.delimiter) {
+        flush();
+        const next = queue.shift();
+        if (next !== undefined) current = { ...next, body: [] };
+        continue;
+      }
+      current.body.push(rawLine);
+      continue;
+    }
+
+    out.push(rawLine);
+    const openers = heredocOpenersOn(rawLine);
+    if (openers.length === 0) continue;
+    // A command line that continues (`… <<'EOF' |`, `… <<'EOF' &&`) can name
+    // its executor on a later physical line. The shell starts the body after
+    // the *logical* line, so masking here could hide `… <<'EOF' |\n  zsh`.
+    const executor = hasStdinExecutor(rawLine) || /[|&;\\]\s*$/.test(rawLine);
+    for (const opener of openers) queue.push({ opener, mask: opener.quoted && !executor });
+    const first = queue.shift();
+    if (first !== undefined) current = { ...first, body: [] };
+  }
+  flush();
+  return { text: out.join("\n"), maskedLines: masked };
+}
+
+/**
+ * The same masking, for a caller that has no `AnalyzerState` to annotate.
+ *
+ * Used by `paths.ts` before the destructive-path scan: `cat <<'EOF'` writing a
+ * paragraph that mentions `rm -rf .git` is prose, while `bash <<'EOF'` with the
+ * same line is a script and stays visible.
+ */
+export function maskHeredocData(command: string): string {
+  return maskDataHeredocBodies(command).text;
+}
+
+/** Mask and record why the body disappeared, for the model-facing notes. */
+function maskQuotedHeredocBodies(text: string, state: AnalyzerState): string {
+  const masked = maskDataHeredocBodies(text);
+  if (masked.maskedLines > 0) {
+    state.notes.push(
+      `info: quoted heredoc body treated as data (${masked.maskedLines} lines) — a shell does not expand or run it`,
+    );
+  }
+  return masked.text;
 }
 
 /* ── tokenizer ───────────────────────────────────────────────────────────── */
@@ -1000,7 +1236,10 @@ function analyze(text: string, state: AnalyzerState, depth: number) {
     return;
   }
 
-  const { text: substituted, bodies } = extractSubstitutions(text);
+  // Heredoc bodies first: a quoted body must not reach the substitution
+  // scanner, whose job would otherwise be to execute every backtick in it.
+  const prepared = maskQuotedHeredocBodies(text, state);
+  const { text: substituted, bodies } = extractSubstitutions(prepared);
   for (const b of bodies) {
     if (b.kind.includes("unterminated")) {
       state.low = true;

@@ -24,7 +24,7 @@
  * @module dsh-jujutsu/paths
  */
 
-import { isOp, isWord, type WordToken, tokenize } from "./parse.ts";
+import { isOp, isWord, maskHeredocData, type WordToken, tokenize } from "./parse.ts";
 
 export type DestructiveTarget = "git" | "jj" | "unresolvable";
 
@@ -54,6 +54,12 @@ const TARGETS: Readonly<Record<string, DestructiveTarget>> = {
  * *high* confidence, because it judges program resolution, not path resolution;
  * this predicate needs its own resolvability notion.
  *
+ * A quoted heredoc body is a string, not a command: `cat <<'EOF'` writing a
+ * paragraph that happens to say `rm -rf .git` destroys nothing. The body is
+ * masked before the scan, with the same narrow rule the invocation resolver
+ * uses — quoted delimiter, no stdin executor on the opening line — so
+ * `bash <<'EOF'` still shows its script.
+ *
  * A definite hit outranks an unresolvable one: `rm -rf .git "$OTHER"` is a
  * refusal about `.git`, not a question.
  *
@@ -63,7 +69,7 @@ const TARGETS: Readonly<Record<string, DestructiveTarget>> = {
 export function destructiveTargetsVcs(command: string): DestructiveTarget | undefined {
   let unresolvable = false;
 
-  for (const segment of segmentsOf(command)) {
+  for (const segment of segmentsOf(maskHeredocData(command))) {
     const head = segment[0]?.value ?? "";
     const isDestructive =
       DESTRUCTIVE_VERBS.has(head) ||

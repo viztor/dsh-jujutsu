@@ -620,3 +620,40 @@ describe.skipIf(!HAS_FIXTURES)("the guard refuses jj where Jujutsu is required",
     );
   });
 });
+
+describe("a quoted heredoc body", () => {
+  // The live failure this rule answers: writing a paragraph of documentation
+  // through a heredoc was refused because the prose mentioned a Git command.
+  it("is allowed when its prose names a Git command", async () => {
+    const h = harnessWith();
+    const command = [
+      "python3 - <<'EOF'",
+      "The docs tell you to run `git clone URL` and then `git status`.",
+      "EOF",
+    ].join("\n");
+    expect((await h.preExecute(bash(h, command))).kind).toBe("allow");
+  });
+
+  it("is allowed when its prose names a destructive path", async () => {
+    const h = harnessWith();
+    const command = [
+      "cat <<'EOF'",
+      "Never run rm -rf .git; the operation store is unrecoverable.",
+      "EOF",
+    ].join("\n");
+    expect((await h.preExecute(bash(h, command))).kind).toBe("allow");
+  });
+
+  it("is still judged when a shell runs it", async () => {
+    const h = harnessWith();
+    // `git status` is read-only, and the shipped `readOnlyGit: 'ask'` posture
+    // makes it a question — the point is that the script is not waved through
+    // as data.
+    expect(
+      (await h.preExecute(bash(h, ["bash <<'EOF'", "git status", "EOF"].join("\n")))).kind,
+    ).toBe("ask");
+    expect(
+      (await h.preExecute(bash(h, ["bash <<'EOF'", "rm -rf .git", "EOF"].join("\n")))).kind,
+    ).toBe("deny");
+  });
+});

@@ -511,7 +511,9 @@ Four things worth noting, all observed rather than assumed:
 - **`jj` is untouched.** The guard is not a blanket block on shell commands.
 - **The destructive-path rule fires on the command string**, before anything runs:
   a command naming a repository-internal directory was refused whole even when
-  that clause was one of several. The rule is fail-closed by design.
+  that clause was one of several. The rule is fail-closed by design. It masks a
+  quoted heredoc body first — a paragraph that mentions `rm -rf .git` is not an
+  operand — but a body a shell runs stays visible.
 - **A read-only Git command is refused too**, because `readOnlyGit` defaults to
   `ask` and this session has no answerer, so the ask fails closed.
 
@@ -519,4 +521,7 @@ That last point is also a small demonstration of the rule's cost: writing _this
 paragraph_ through a shell heredoc was refused, because the text contains the very
 command being described. The guard cannot know a string is prose. The document was
 written with the file tools instead — the honest workaround, not a hole in the
-guard.
+guard. The heredoc shape itself has since been fixed rather than tolerated: a
+quoted body that no shell consumes is reduced to data, so the same paragraph can
+now be written through `cat <<'EOF'` (the incident shape is a guard test in
+`test/guard.test.ts`; [21](21-guard-evasion.md) records what stays unmodelled).

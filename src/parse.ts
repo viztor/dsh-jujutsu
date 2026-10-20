@@ -1,12 +1,14 @@
 /**
  * The invocation resolver: what program does this command actually run?
  *
- * **This is a port, not a rewrite.** The engine lives in `invocation.ts`, which
- * is a byte-identical copy of `scripts/probe-invocation.mjs` — a file exercised
- * against a 64-command corpus with **0 false positives** and 10 flagged false
- * negatives (`docs/21-guard-evasion.md`). Its honesty about its own limits —
- * reporting `confidence: 'low'` instead of guessing — is the part worth
- * preserving, and that corpus is its regression suite.
+ * **This is a port, not a rewrite.** The engine lives in `invocation.ts`, a port
+ * of `scripts/probe-invocation.mjs` — a file exercised against a 64-command
+ * corpus with **0 false positives** and 10 flagged false negatives
+ * (`docs/21-guard-evasion.md`). Its honesty about its own limits — reporting
+ * `confidence: 'low'` instead of guessing — is the part worth preserving, and
+ * that corpus is its regression suite. The port has since gained one deliberate
+ * behavioural addition, the masking of quoted heredoc bodies, which is safe
+ * because a quoted body is data rather than shell code.
  *
  * The rule, from `docs/15-verb-mapping.md` §4:
  *
@@ -26,7 +28,7 @@
 
 import { tokenize as rawTokenize } from "./invocation.ts";
 
-export { classifyInvocation } from "./invocation.ts";
+export { classifyInvocation, maskHeredocData } from "./invocation.ts";
 // Re-exported, not declared: the engine returns this type, so it belongs with the
 // engine. Declaring it here made `invocation.ts` import from its own facade.
 export type { Invocation } from "./invocation.ts";
