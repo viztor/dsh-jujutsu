@@ -6,6 +6,21 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.3.0](https://github.com/viztor/dsh-jujutsu/compare/v0.2.0...v0.3.0) (2026-10-28)
+
+
+### Features
+
+* adopt a plain Git repo for Jujutsu, and refuse the ones jj cannot hold ([ce41b23](https://github.com/viztor/dsh-jujutsu/commit/ce41b2390c1e3fc5af51ed16bf4fe54e89d78f42))
+* force Jujutsu on request, teach it from a skill, and stop refusing submodules ([0699b58](https://github.com/viztor/dsh-jujutsu/commit/0699b5849f069438c817e5b4717a783eb28d5845))
+
+
+### Bug Fixes
+
+* a quoted heredoc body is data, not a Git invocation ([ba928e9](https://github.com/viztor/dsh-jujutsu/commit/ba928e9b92a7b5528f412c183c4cb41df9778c76))
+* the adoption probe accepted repositories jj would corrupt ([1b2bbb7](https://github.com/viztor/dsh-jujutsu/commit/1b2bbb7aa21edaf376f341830489c03d897491e2))
+* the adoption tests commit without a Git identity, so CI could not run them ([fcec783](https://github.com/viztor/dsh-jujutsu/commit/fcec78381d0de40a627867013723c0351947a659))
+
 ## [0.2.0](https://github.com/viztor/dsh-jujutsu/compare/v0.1.0...v0.2.0) (2026-10-18)
 
 ### Features
