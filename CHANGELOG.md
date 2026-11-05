@@ -8,10 +8,9 @@ for the bot to reconstruct.
 
 ## [0.3.4](https://github.com/viztor/dsh-jujutsu/compare/v0.3.3...v0.3.4) (2026-11-05)
 
-
 ### Bug Fixes
 
-* **changelog:** drop the blank line the 0.3.3 section arrived with ([477cf2f](https://github.com/viztor/dsh-jujutsu/commit/477cf2fc62db9a956d5647dc125d8251adf8da98))
+- **changelog:** drop the blank line the 0.3.3 section arrived with ([477cf2f](https://github.com/viztor/dsh-jujutsu/commit/477cf2fc62db9a956d5647dc125d8251adf8da98))
 
 ## [0.3.3](https://github.com/viztor/dsh-jujutsu/compare/v0.3.2...v0.3.3) (2026-11-05)
 
