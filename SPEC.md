@@ -1,6 +1,12 @@
 # `dsh-jujutsu` — specification
 
-**Status:** draft for review. Nothing here is implemented.
+> **Superseded in part.** The agent surface has grown from eleven tools to 24;
+> the normative record of what shipped is
+> [docs/40](docs/40-consolidated-agent-surface-spec.md). This document remains
+> the build specification for the guard, detection, prompt and original tool
+> layer.
+
+**Status:** implemented; this document is the original build specification.
 **Runtime targeted:** DSH `0.2.0-rc.2`, Cordis `4.0.4`, Node ≥ 24.
 **Toolchain:** `jj` 0.46.0, `jj-hunk` 0.5.1.
 

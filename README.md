@@ -21,8 +21,9 @@ and uses `jj` instead — and it is _told_ why, rather than just being blocked.
 - **Refuses Git where it would mislead.** `git status` in a colocated repo
   reports a different state than `jj status`. The guard catches that and hands
   back the command to run instead.
-- **Eleven `jj` tools**, so the model can read and write history without
-  shelling out and parsing output.
+- **A tiered `jj` tool surface** — 28 tools by default, with `core` (14) and
+  `minimal` (5) for smaller prompts — so the model can read and write history
+  without shelling out and parsing output.
 - **Teaches the model** what `jj` is: no staging area, `@` is always a commit,
   change IDs survive rewrites.
 - **A settings panel**, on the plugin's own page.
@@ -78,18 +79,26 @@ half-translated command, and every argument is shell-quoted.
 Reads and writes are configured separately. A user who is happy to let the model
 _look_ with Git has not thereby agreed to let it _write_.
 
-### Eleven `jj` tools
+### The `jj` tools
 
-| Tool                                 | What it does                                             |
-| ------------------------------------ | -------------------------------------------------------- |
-| `jj_status`                          | The working copy, including whether it is **conflicted** |
-| `jj_log`, `jj_diff`, `jj_op_log`     | History, changes, and the operation log                  |
-| `jj_new`, `jj_describe`, `jj_squash` | Start, describe and fold changes                         |
-| `jj_bookmark`, `jj_op_restore`       | Name revisions; undo anything                            |
-| `jj_hunk_list`, `jj_hunk_apply`      | Select and apply individual hunks                        |
+The default `full` surface is 28 tools; the settings page can select `core`
+(14) or `minimal` (5). Every one returns **structured JSON**, never prose, and
+revisions are addressed by **change ID**, which survives a rewrite — a commit ID
+does not.
 
-All of them return **structured JSON**, never prose. Revisions are addressed by
-**change ID**, which survives a rewrite — a commit ID does not.
+| Group               | Tools                                                                            | What it does                                                        |
+| ------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Read                | `jj_status`, `jj_log`, `jj_diff`, `jj_show`, `jj_file`, `jj_evolog`, `jj_op_log` | Working copy, history, one revision, files at a revision, evolution |
+| Author              | `jj_new`, `jj_commit`, `jj_describe`, `jj_edit`, `jj_squash`, `jj_bookmark`      | Start, commit, split, reword, resume, fold, name                    |
+| Hunks               | `jj_hunk_list`, `jj_hunk_apply`                                                  | Select and apply individual hunks                                   |
+| History / recovery  | `jj_history`, `jj_op`, `jj_op_restore`, `jj_repair`                              | Rebase, duplicate, revert, abandon, restore, undo, converge         |
+| Workspaces / verify | `jj_workspace`, `jj_test`                                                        | One workspace per agent; isolated test, run, bisect                 |
+| Publish / hygiene   | `jj_publish`, `jj_fix`, `jj_sparse`                                              | Push/fetch/tags (gated), format the stack, sparse patterns          |
+| Coordination        | `jj_coordinate`, `jj_group`, `jj_doctor`, `jj_sign`                              | Plan/merge/squash agent groups; readiness report; signing           |
+
+Reads pass `--ignore-working-copy`, so a history read never snapshots another
+agent's half-written files. `jj_status({snapshot:true})` is the explicit
+checkpoint and the only read that writes.
 
 ### Teaches the model
 
@@ -113,8 +122,8 @@ See [docs/37](docs/37-git-compatible-adoption.md).
 
 Depth is deferred rather than paid for. The rule and the workspace state ride the
 system prompt because they must be in force before the model's first Git command;
-the **manual** — the working-copy model, the Git→`jj` verb map, what each of the
-eleven tools returns — is registered as a `jujutsu` runtime skill, so its cost is
+the **manual** — the working-copy model, the Git→`jj` verb map, what each tool
+returns — is registered as a `jujutsu` runtime skill, so its cost is
 one catalog line until the model actually needs it. Turn it off with _Offer the
 jj manual_. Why the split is drawn there, and why the manual is not an MCP
 server, is [docs/36](docs/36-ai-and-jujutsu.md).
@@ -135,6 +144,10 @@ Open **Plugins → Jujutsu**. Most settings are on that page:
 | Offer the jj manual             | on      | Ship the `jj` manual as an on-demand skill                                         |
 | Use Jujutsu in Git repos        | off     | Adopt a plain Git repo by creating `.jj` beside `.git`                             |
 | Force Jujutsu                   | off     | Refuse `jj` outside a workspace, naming `jj git init --colocate`                   |
+| Tool surface                    | full    | `full`, `core` (14 tools), or `minimal` (5 tools)                                  |
+| Publishing                      | ask     | `jj_publish` push: `ask` (dry-run preview), `deny`, or `allow`                     |
+| Workspace ownership             | advise  | `off`, `advise`, or `enforce` when a tool targets another workspace's `@`          |
+| Default grouping                | merge   | What `jj_coordinate` suggests: `merge` or `stack`                                  |
 
 ### Advanced: where the binaries are found
 
@@ -142,11 +155,14 @@ Three settings are **not on the page**, because only an unusual install needs th
 and showing them would ask everyone else to decide about them. Set them in the
 profile's config instead — they are ordinary `Config` fields:
 
-| Setting       | Default   | What it changes                                                 |
-| ------------- | --------- | --------------------------------------------------------------- |
-| `jjPath`      | `jj`      | Set when `jj` is not on `PATH`, or to pin a specific build      |
-| `jjHunkPath`  | `jj-hunk` | Same, for `jj-hunk`                                             |
-| `hunkInstall` | `ask`     | What to do when `jj-hunk` is missing: `ask`, `never`, or `auto` |
+| Setting               | Default            | What it changes                                                         |
+| --------------------- | ------------------ | ----------------------------------------------------------------------- |
+| `jjPath`              | `jj`               | Set when `jj` is not on `PATH`, or to pin a specific build              |
+| `jjHunkPath`          | `jj-hunk`          | Same, for `jj-hunk`                                                     |
+| `hunkInstall`         | `ask`              | What to do when `jj-hunk` is missing: `ask`, `never`, or `auto`         |
+| `verifyCloneDirs`     | `["node_modules"]` | Directories `jj_test` copy-on-write clones into its ephemeral workspace |
+| `agentBookmarkPrefix` | `agent/`           | Bookmark prefix recording workspace ownership; empty disables           |
+| `workspaceRoot`       | `..`               | Directory `jj_workspace add` uses when no path is passed                |
 
 ### Turning it off for one project
 
@@ -256,7 +272,7 @@ npm publish --dry-run   # what a publish would upload, from the working tree
 | `src/client/`        | The panel, built to `lib/client.js` by `vp pack`. Harness primitives only.             |
 | `locale/`            | Display name and one-liner, per language.                                              |
 | `SPEC.md`            | The build specification.                                                               |
-| `docs/`              | 37 documents: verified contracts, measurements, decisions.                             |
+| `docs/`              | 40 documents: verified contracts, measurements, decisions.                             |
 | `research/digest.md` | The durable record of the conversation that seeded the design.                         |
 
 ### What is verified, and how
@@ -266,8 +282,8 @@ citations ([docs/11](docs/11-verified-dsh-api-contract.md)); every claim about
 `jj` was measured against the installed 0.46.0 ([docs/13](docs/13-empirical-verification.md)).
 Both documents record what the sweeps did **not** find, and what remains open.
 
-The guard, the eleven tools, the prompt injection and the panel have all been
-observed working in a live session. **349 tests**, `pnpm run ci` green.
+The guard, the jj tools, the prompt injection and the panel have all been
+observed working in a live session. **383 tests**, `pnpm run ci` green.
 
 ### Where this came from
 
