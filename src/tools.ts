@@ -34,18 +34,27 @@
 
 import type { Context } from "@deepseek-ai/cordis";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { randomUUID } from "node:crypto";
+import { basename, resolve as resolvePath } from "node:path";
 
-import { ErrorCode, type ToolError } from "./errors.ts";
+import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import { applyHunks, listHunks } from "./hunk.ts";
 import type { Settings } from "./settings.ts";
-import { ShellUnavailableError, runJj } from "./shell.ts";
+import { ShellUnavailableError, readOnly, run, runJj, shellQuote } from "./shell.ts";
 
 /**
- * The tool set, in the order `docs/18-tool-surface.md` presents them: four
- * reads, five mutations, two hunk-level. Exported so a test can assert the
- * count without duplicating the list.
+ * The tool set, in registration order. The tier lists below decide which subset
+ * a given `toolset` setting actually mounts; `TOOL_NAMES` is the full surface.
  */
-export const TOOL_NAMES = [
+export const MINIMAL_TOOL_NAMES = [
+  "jj_status",
+  "jj_log",
+  "jj_diff",
+  "jj_new",
+  "jj_hunk_apply",
+] as const;
+
+export const CORE_TOOL_NAMES = [
   "jj_status",
   "jj_log",
   "jj_diff",
@@ -57,6 +66,27 @@ export const TOOL_NAMES = [
   "jj_op_restore",
   "jj_hunk_list",
   "jj_hunk_apply",
+  "jj_workspace",
+  "jj_test",
+  "jj_repair",
+] as const;
+
+export const TOOL_NAMES = [
+  ...CORE_TOOL_NAMES,
+  "jj_show",
+  "jj_file",
+  "jj_evolog",
+  "jj_commit",
+  "jj_edit",
+  "jj_history",
+  "jj_op",
+  "jj_publish",
+  "jj_fix",
+  "jj_sparse",
+  "jj_doctor",
+  "jj_coordinate",
+  "jj_group",
+  "jj_sign",
 ] as const;
 
 /**
@@ -384,7 +414,7 @@ async function identityConfigured(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<boolean | undefined> {
-  const raw = await jj(ctx, settings, cwd, ["config", "list", "user"], signal);
+  const raw = await jj(ctx, settings, cwd, readOnly(["config", "list", "user"]), signal);
   return typeof raw === "string" ? parseIdentity(raw) : undefined;
 }
 
@@ -422,10 +452,176 @@ async function conflictOf(
     ctx,
     settings,
     cwd,
-    ["log", "--no-graph", "-T", "conflict", "-r", "@"],
+    readOnly(["log", "--no-graph", "-T", "conflict", "-r", "@"]),
     signal,
   );
   return typeof raw === "string" ? raw.trim() === "true" : undefined;
+}
+
+/** The latest operation id, read without creating one. */
+async function latestOpId(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<string | undefined> {
+  const raw = await jj(
+    ctx,
+    settings,
+    cwd,
+    readOnly(["op", "log", "--limit", "1", "--no-graph", "-T", "id.short()"]),
+  );
+  if (typeof raw !== "string") return undefined;
+  const id = raw.trim();
+  return id.length > 0 ? id : undefined;
+}
+
+/** Change ids that are divergent, read without snapshotting. */
+async function divergentOf(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<string[] | undefined> {
+  const raw = await jj(
+    ctx,
+    settings,
+    cwd,
+    readOnly(["log", "--no-graph", "-T", 'change_id.short() ++ "\\n"', "-r", "divergent()"]),
+  );
+  if (typeof raw !== "string") return undefined;
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/** Bookmarks, read without snapshotting. */
+async function bookmarkRows(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<{ name: string; target: string[] }[] | undefined> {
+  const rows = await jjJson(
+    ctx,
+    settings,
+    cwd,
+    readOnly(["bookmark", "list", "-T", 'json(self) ++ "\\n"']),
+  );
+  if (!Array.isArray(rows)) return undefined;
+  return rows as { name: string; target: string[] }[];
+}
+
+/** The current workspace's name, parsed from the plain `workspace list` output. */
+async function currentWorkspaceName(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<string | undefined> {
+  const raw = await jj(ctx, settings, cwd, readOnly(["workspace", "list"]));
+  if (typeof raw !== "string") return undefined;
+  for (const line of raw.split("\n")) {
+    const match = /^(\S+):\s+\.(?:\s|$)/.exec(line);
+    if (match !== null) return match[1];
+  }
+  return undefined;
+}
+
+/**
+ * Which other workspace has this change as its working copy?
+ *
+ * `jj_edit` is the dangerous case: entering another agent's `@` would make two
+ * workspaces amend the same change. The check compares against every
+ * workspace's target, not a bookmark that may be stale.
+ */
+async function workspaceOwningChange(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+  changeId: string,
+): Promise<string | undefined> {
+  const rows = await jjJson(
+    ctx,
+    settings,
+    cwd,
+    readOnly(["workspace", "list", "-T", 'json(self) ++ "\\n"']),
+  );
+  if (!Array.isArray(rows)) return undefined;
+  const current = await currentWorkspaceName(ctx, settings, cwd);
+  for (const row of rows as { name: string; target: { change_id: string } }[]) {
+    if (row.name === current) continue;
+    if (row.target.change_id === changeId) return row.name;
+  }
+  return undefined;
+}
+
+/**
+ * Do any of these revsets resolve to another workspace's working copy?
+ *
+ * Used by the history-rewriting tools. `advise` returns a warning the model
+ * sees; `enforce` returns a typed refusal. The check is per exact change id, so
+ * a broad revset that merely contains a shared ancestor is not refused — only
+ * targeting the workspace's own `@` is.
+ */
+async function ownershipIssue(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+  revsets: readonly string[],
+): Promise<{ error?: ToolError; warning?: string }> {
+  if (settings.coordination === "off") return {};
+  const owners = new Set<string>();
+  for (const revset of revsets) {
+    if (revset.length === 0) continue;
+    const rows = await jjJson(
+      ctx,
+      settings,
+      cwd,
+      readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset]),
+    );
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows as { change_id?: string }[]) {
+      if (typeof row.change_id !== "string") continue;
+      const owner = await workspaceOwningChange(ctx, settings, cwd, row.change_id);
+      if (owner !== undefined) owners.add(owner);
+    }
+  }
+  if (owners.size === 0) return {};
+  const message = `Target touches workspace(s) ${[...owners].join(", ")}'s working copy.`;
+  if (settings.coordination === "enforce") {
+    return {
+      error: toolError(
+        ErrorCode.JJ_CHANGE_OWNED_BY_WORKSPACE,
+        message,
+        "Work in that workspace, or set coordination to advise/off to override.",
+      ),
+    };
+  }
+  return { warning: message };
+}
+
+/**
+ * Conflicted paths, when there are any.
+ *
+ * `jj resolve --list` exits **2** with "No conflicts found at this revision"
+ * (measured on 0.46.0), so a non-zero exit is not automatically an error. Any
+ * other failure returns `undefined` and the status tool reports `null`.
+ */
+async function conflictedPaths(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<string[] | undefined> {
+  const result = await runJj(ctx, settings.jjPath, readOnly(["resolve", "--list"]), {
+    cwd,
+    timeoutMs: 15_000,
+  });
+  if (result.exitCode === 0) {
+    return result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+  if (/No conflicts found/i.test(result.stderr)) return [];
+  return undefined;
 }
 
 /**
@@ -571,21 +767,58 @@ export function buildToolDefinitions(
   register({
     name: "jj_status",
     description:
-      "Show the Jujutsu working copy: the current revision, its parent, and whether there are unresolved conflicts.",
-    parameters: {},
+      "Show the Jujutsu working copy: the current revision, its parent, conflicts, divergence, and the latest operation id. By default it does not snapshot disk edits; pass snapshot:true to capture them and get a fresh checkpoint.",
+    parameters: {
+      snapshot: {
+        type: "boolean",
+        description:
+          "Capture disk edits into @ first (jj util snapshot), then read. Default false: a read never mutates the repository.",
+      },
+    },
     output: JSON_OUTPUT,
-    execute: onWorkspaceRoot(async (_args, cwd) => {
-      const revisions = await jjJson(ctx, settings, cwd, [
-        "log",
-        "--no-graph",
-        "-T",
-        'json(self) ++ "\\n"',
-        "-r",
-        "@|@-",
-      ]);
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const snapshot = args.snapshot === true;
+      if (snapshot) {
+        const result = await runJj(ctx, settings.jjPath, ["util", "snapshot"], { cwd });
+        if (result.exitCode !== 0) {
+          return toolError(
+            ErrorCode.JJ_SNAPSHOT_FAILED,
+            `jj util snapshot exited ${String(result.exitCode)}: ${result.stderr.trim().slice(0, 200)}`,
+            "Run `jj util snapshot` by hand to see the full output.",
+          );
+        }
+      }
+      const revisions = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", "@|@-"]),
+      );
       if (!Array.isArray(revisions)) return revisions; // error object
-      const conflict = await conflictOf(ctx, settings, cwd);
-      return { conflict: conflict ?? null, revisions };
+      const [conflict, opId, divergent, conflicts, workspaceName, bookmarks] = await Promise.all([
+        conflictOf(ctx, settings, cwd),
+        latestOpId(ctx, settings, cwd),
+        divergentOf(ctx, settings, cwd),
+        conflictedPaths(ctx, settings, cwd),
+        currentWorkspaceName(ctx, settings, cwd),
+        bookmarkRows(ctx, settings, cwd),
+      ]);
+      const owner =
+        workspaceName === undefined || settings.agentBookmarkPrefix === ""
+          ? undefined
+          : (bookmarks ?? []).find(
+              (entry) => entry.name === `${settings.agentBookmarkPrefix}${workspaceName}`,
+            )?.name;
+      return {
+        conflict: conflict ?? null,
+        revisions,
+        ...(opId === undefined ? {} : { opId }),
+        divergent: divergent ?? [],
+        conflicts: conflicts ?? [],
+        workspace:
+          workspaceName === undefined ? null : { name: workspaceName, owner: owner ?? null },
+        snapshot,
+      };
     }),
   });
 
@@ -595,27 +828,57 @@ export function buildToolDefinitions(
     parameters: {
       revset: { type: "string", description: "A revset, e.g. `::@` or `all()`." },
       limit: { type: "integer", description: "Maximum revisions to return." },
+      atOp: {
+        type: "string",
+        description:
+          "Read the repository as it was at this operation id (implies a read-only view).",
+      },
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
       const revset = typeof args.revset === "string" ? args.revset : "::@";
-      const argv = ["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
+      const argv =
+        typeof args.atOp === "string"
+          ? ["--at-op", args.atOp, "log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset]
+          : ["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
-      return jjJson(ctx, settings, cwd, argv);
+      return jjJson(ctx, settings, cwd, readOnly(argv));
     }),
   });
 
   register({
     name: "jj_diff",
     description:
-      "Show the changes in a revision as JSON. `@` always has a diff; that is normal in Jujutsu.",
+      "Show the changes in a revision as JSON. `@` always has a diff; that is normal in Jujutsu. Set interdiff:true to compare two patches instead of two trees.",
     parameters: {
       revset: { type: "string", description: "Defaults to `@`." },
+      from: { type: "string", description: "Compare from this revision (with `to`)." },
+      to: { type: "string", description: "Compare to this revision (with `from`)." },
+      interdiff: {
+        type: "boolean",
+        description:
+          "Compare the patches introduced by `from` and `to` rather than their trees. Useful for review and for “what changed since the last push”.",
+      },
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
       const revset = typeof args.revset === "string" ? args.revset : "@";
-      const raw = await jj(ctx, settings, cwd, ["diff", "--summary", "-r", revset]);
+      const from = typeof args.from === "string" ? args.from : undefined;
+      const to = typeof args.to === "string" ? args.to : undefined;
+      const interdiff = args.interdiff === true;
+      const interdiffFrom = from ?? "@-";
+      const interdiffTo = to ?? "@";
+      const argv = interdiff
+        ? ["interdiff", "--summary", "--from", interdiffFrom, "--to", interdiffTo]
+        : from !== undefined || to !== undefined
+          ? [
+              "diff",
+              "--summary",
+              ...(from === undefined ? [] : ["--from", from]),
+              ...(to === undefined ? [] : ["--to", to]),
+            ]
+          : ["diff", "--summary", "-r", revset];
+      const raw = await jj(ctx, settings, cwd, readOnly(argv));
       if (typeof raw !== "string") return raw; // error object
       return { files: parseSummary(raw) };
     }),
@@ -627,12 +890,19 @@ export function buildToolDefinitions(
       "Show the operation log. Every mutation is recorded and reversible with jj_op_restore — this is the recovery path.",
     parameters: {
       limit: { type: "integer", description: "Maximum operations to return." },
+      atOp: {
+        type: "string",
+        description: "Read the operation log as it was at this operation id.",
+      },
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
-      const argv = ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
+      const argv =
+        typeof args.atOp === "string"
+          ? ["--at-op", args.atOp, "op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"']
+          : ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
       if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
-      return jjJson(ctx, settings, cwd, argv);
+      return jjJson(ctx, settings, cwd, readOnly(argv));
     }),
   });
 
@@ -658,7 +928,10 @@ export function buildToolDefinitions(
       const argv = ["new"];
       if (typeof args.revset === "string") argv.push(args.revset);
       if (typeof args.message === "string") argv.push("-m", args.message);
-      return jj(ctx, settings, cwd, argv);
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return { stdout: raw, ...(opId === undefined ? {} : { opId }) };
     }),
   });
 
@@ -674,7 +947,10 @@ export function buildToolDefinitions(
     execute: onWorkspaceRoot(async (args, cwd) => {
       const argv = ["describe", "-m", String(args.message)];
       if (typeof args.revset === "string") argv.push("-r", args.revset);
-      return jj(ctx, settings, cwd, argv);
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return { stdout: raw, ...(opId === undefined ? {} : { opId }) };
     }),
   });
 
@@ -697,10 +973,22 @@ export function buildToolDefinitions(
     execute: onWorkspaceRoot(async (args, cwd) => {
       const conflicted = await conflictRefusal(ctx, settings, cwd);
       if (conflicted !== undefined) return conflicted;
+      const owned = await ownershipIssue(ctx, settings, cwd, [
+        ...(typeof args.from === "string" ? [args.from] : []),
+        ...(typeof args.into === "string" ? [args.into] : []),
+      ]);
+      if (owned.error !== undefined) return owned.error;
       const argv = ["squash"];
       if (typeof args.from === "string") argv.push("--from", args.from);
       if (typeof args.into === "string") argv.push("--into", args.into);
-      return jj(ctx, settings, cwd, argv);
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return {
+        stdout: raw,
+        ...(opId === undefined ? {} : { opId }),
+        ...(owned.warning === undefined ? {} : { warning: owned.warning }),
+      };
     }),
   });
 
@@ -729,17 +1017,22 @@ export function buildToolDefinitions(
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
-      return jj(
+      const action = String(args.action);
+      const raw = await jj(
         ctx,
         settings,
         cwd,
         bookmarkArgv(
-          String(args.action),
+          action,
           typeof args.name === "string" ? args.name : undefined,
           typeof args.revset === "string" ? args.revset : undefined,
           typeof args.newName === "string" ? args.newName : undefined,
         ),
       );
+      if (typeof raw !== "string") return raw;
+      if (action === "list") return raw;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return { stdout: raw, ...(opId === undefined ? {} : { opId }) };
     }),
   });
 
@@ -752,7 +1045,10 @@ export function buildToolDefinitions(
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
-      return jj(ctx, settings, cwd, ["op", "restore", String(args.opId)]);
+      const raw = await jj(ctx, settings, cwd, ["op", "restore", String(args.opId)]);
+      if (typeof raw !== "string") return raw;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return { stdout: raw, ...(opId === undefined ? {} : { opId }) };
     }),
   });
 
@@ -827,7 +1123,1527 @@ export function buildToolDefinitions(
         },
         typeof args.message === "string" ? args.message : undefined,
       );
-      return outcome.ok ? { stdout: outcome.value } : outcome.error;
+      if (!outcome.ok) return outcome.error;
+      const opId = await latestOpId(ctx, settings, cwd);
+      return { stdout: outcome.value, ...(opId === undefined ? {} : { opId }) };
+    }),
+  });
+
+  /* ── agent-surface additions (docs/39) ─────────────────────────────────── */
+
+  register({
+    name: "jj_show",
+    description:
+      "Show one revision's metadata and changed files in a single read. Use `patch:true` for the diff text; the default summary keeps the payload small.",
+    parameters: {
+      revset: { type: "string", description: "Defaults to `@`." },
+      patch: { type: "boolean", description: "Include the diff text. Default false." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const revset = typeof args.revset === "string" ? args.revset : "@";
+      const commits = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset, "--limit", "1"]),
+      );
+      if (!Array.isArray(commits)) return commits;
+      const summary = await jj(ctx, settings, cwd, readOnly(["show", "--summary", "-r", revset]));
+      if (typeof summary !== "string") return summary;
+      const fileLines = summary
+        .split("\n")
+        .filter((line) => /^[MADRC] /.test(line))
+        .join("\n");
+      const result: Record<string, unknown> = {
+        commit: commits[0] ?? null,
+        files: parseSummary(fileLines),
+      };
+      if (args.patch === true) {
+        const patch = await jj(ctx, settings, cwd, readOnly(["diff", "--git", "-r", revset]));
+        if (typeof patch === "string") result.patch = patch;
+      }
+      return result;
+    }),
+  });
+
+  register({
+    name: "jj_file",
+    description:
+      "Read or modify files at a revision: list paths, show contents, search, annotate, chmod the executable bit, or delete files. Read actions do not check out the revision.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["list", "show", "search", "annotate", "chmod", "delete"],
+        required: true,
+        description: "What to do.",
+      },
+      revision: { type: "string", description: "Defaults to `@`." },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        description: "Files or path prefixes. Required for show, annotate, chmod and delete.",
+      },
+      mode: {
+        type: "string",
+        enum: ["n", "x"],
+        description: "chmod only: n makes a path non-executable, x makes it executable.",
+      },
+      pattern: {
+        type: "string",
+        description: "Required for search; a jj string pattern (regex by default).",
+      },
+      nameOnly: { type: "boolean", description: "Search only: return paths, not matching lines." },
+      lineNumbers: { type: "boolean", description: "Search only: prefix lines with line numbers." },
+      maxBytes: {
+        type: "integer",
+        description: "Show only: cap the returned content per file. Default 65536.",
+      },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      const rev = typeof args.revision === "string" ? args.revision : "@";
+      const paths = Array.isArray(args.paths)
+        ? args.paths.filter((p): p is string => typeof p === "string")
+        : [];
+      if (action === "list") {
+        const raw = await jj(
+          ctx,
+          settings,
+          cwd,
+          readOnly(["file", "list", "-r", rev, "-T", 'path ++ "\\n"', ...paths]),
+        );
+        if (typeof raw !== "string") return raw;
+        return {
+          paths: raw
+            .split("\n")
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0),
+        };
+      }
+      if (action === "show") {
+        if (paths.length === 0) {
+          return toolError(
+            ErrorCode.JJ_EXEC_FAILED,
+            "jj_file show needs at least one path.",
+            "Pass paths:[...] or use jj_file list first.",
+          );
+        }
+        const raw = await jj(ctx, settings, cwd, readOnly(["file", "show", "-r", rev, ...paths]));
+        if (typeof raw !== "string") return raw;
+        const limit =
+          typeof args.maxBytes === "number" && args.maxBytes > 0
+            ? Math.min(args.maxBytes, 1_000_000)
+            : 65_536;
+        const truncated = raw.length > limit;
+        return { revision: rev, content: truncated ? raw.slice(0, limit) : raw, truncated };
+      }
+      if (action === "search") {
+        if (typeof args.pattern !== "string" || args.pattern.length === 0) {
+          return toolError(
+            ErrorCode.JJ_EXEC_FAILED,
+            "jj_file search needs a pattern.",
+            "Pass pattern:'regex-or-glob'.",
+          );
+        }
+        const argv = [
+          "file",
+          "search",
+          "-r",
+          rev,
+          "--pattern",
+          args.pattern,
+          ...(args.nameOnly === true ? ["--name-only"] : []),
+          ...(args.lineNumbers === true ? ["--line-number"] : []),
+          ...paths,
+        ];
+        const raw = await jj(ctx, settings, cwd, readOnly(argv));
+        return typeof raw === "string" ? { revision: rev, output: raw } : raw;
+      }
+      if (action === "chmod") {
+        if ((args.mode !== "n" && args.mode !== "x") || paths.length === 0) {
+          return toolError(
+            ErrorCode.JJ_EXEC_FAILED,
+            "jj_file chmod needs mode ('n' or 'x') and at least one path.",
+          );
+        }
+        const beforeOpId = await latestOpId(ctx, settings, cwd);
+        const raw = await jj(ctx, settings, cwd, ["file", "chmod", args.mode, "-r", rev, ...paths]);
+        if (typeof raw !== "string") return raw;
+        return {
+          revision: rev,
+          paths,
+          mode: args.mode,
+          stdout: raw,
+          beforeOpId,
+          opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+        };
+      }
+      if (action === "delete") {
+        if (paths.length === 0) {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_file delete needs at least one path.");
+        }
+        const beforeOpId = await latestOpId(ctx, settings, cwd);
+        const raw = await jj(ctx, settings, cwd, ["file", "delete", "-r", rev, ...paths]);
+        if (typeof raw !== "string") return raw;
+        return {
+          revision: rev,
+          paths,
+          deleted: true,
+          stdout: raw,
+          beforeOpId,
+          opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+        };
+      }
+      if (action === "annotate") {
+        if (paths.length !== 1) {
+          return toolError(
+            ErrorCode.JJ_EXEC_FAILED,
+            "jj_file annotate needs exactly one path.",
+            "Pass paths:['src/file.ts'].",
+          );
+        }
+        const raw = await jj(
+          ctx,
+          settings,
+          cwd,
+          readOnly(["file", "annotate", "-r", rev, paths[0]!]),
+        );
+        return typeof raw === "string" ? { revision: rev, path: paths[0], output: raw } : raw;
+      }
+      return toolError(ErrorCode.JJ_EXEC_FAILED, `Unknown jj_file action: ${action}`);
+    }),
+  });
+
+  register({
+    name: "jj_evolog",
+    description:
+      "Show how a change evolved: its previous commits and the operation that produced each. Use it after a rebase or a squash to see what changed.",
+    parameters: {
+      revset: { type: "string", description: "Defaults to `@`." },
+      limit: { type: "integer", description: "Maximum entries to return." },
+      patch: { type: "boolean", description: "Include the patch for each step. Default false." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const revset = typeof args.revset === "string" ? args.revset : "@";
+      const argv = ["evolog", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset];
+      if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
+      if (args.patch === true) argv.push("-p");
+      return jjJson(ctx, settings, cwd, readOnly(argv));
+    }),
+  });
+
+  register({
+    name: "jj_commit",
+    description:
+      "Commit the working copy: mode commit describes @ and starts a new change (optionally keeping selected paths); mode split divides an existing revision by path. Both mint commits, so an identity is required.",
+    parameters: {
+      mode: {
+        type: "string",
+        enum: ["commit", "split"],
+        description: "Default commit.",
+      },
+      message: { type: "string", required: true, description: "The change description." },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        description: "Paths to keep in the commit (commit) or select for the first half (split).",
+      },
+      revision: { type: "string", description: "Split only: revision to split. Default @." },
+      parallel: { type: "boolean", description: "Split only: make the two halves siblings." },
+      onto: {
+        type: "string",
+        description: "Split only: move the selected half onto this revision.",
+      },
+      insertAfter: {
+        type: "string",
+        description: "Split only: insert the selected half after this revision.",
+      },
+      insertBefore: {
+        type: "string",
+        description: "Split only: insert the selected half before this revision.",
+      },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      if ((await identityConfigured(ctx, settings, cwd)) === false) return identityRefusal();
+      const conflicted = await conflictRefusal(ctx, settings, cwd);
+      if (conflicted !== undefined) return conflicted;
+      const paths = Array.isArray(args.paths)
+        ? args.paths.filter((p): p is string => typeof p === "string")
+        : [];
+      const mode = args.mode === "split" ? "split" : "commit";
+      const owned = await ownershipIssue(
+        ctx,
+        settings,
+        cwd,
+        mode === "split" && typeof args.revision === "string" ? [args.revision] : [],
+      );
+      if (owned.error !== undefined) return owned.error;
+      // `jj split` without filesets opens a diff editor. The tool is
+      // non-interactive by contract, so refuse rather than hang the loop.
+      if (mode === "split" && paths.length === 0) {
+        return toolError(
+          ErrorCode.JJ_EXEC_FAILED,
+          "jj_commit split needs at least one path.",
+          "Pass paths:[...] to select the first half; use jj_hunk_apply for hunk-level splits.",
+        );
+      }
+      const argv =
+        mode === "split"
+          ? [
+              "split",
+              "-r",
+              typeof args.revision === "string" ? args.revision : "@",
+              "-m",
+              String(args.message),
+              ...(args.parallel === true ? ["--parallel"] : []),
+              ...(typeof args.onto === "string" ? ["-o", args.onto] : []),
+              ...(typeof args.insertAfter === "string" ? ["-A", args.insertAfter] : []),
+              ...(typeof args.insertBefore === "string" ? ["-B", args.insertBefore] : []),
+              ...paths,
+            ]
+          : ["commit", "-m", String(args.message), ...paths];
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      const workingCopy = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", "@", "--limit", "1"]),
+      );
+      return {
+        mode,
+        stdout: raw,
+        workingCopy,
+        ...(owned.warning === undefined ? {} : { warning: owned.warning }),
+      };
+    }),
+  });
+
+  register({
+    name: "jj_edit",
+    description:
+      "Set an existing revision as the working-copy revision. Use this to resume work on a change; jj recommends jj_new + jj_squash for most other edits.",
+    parameters: {
+      revset: { type: "string", required: true, description: "The revision to edit." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const revset = String(args.revset);
+      const resolved = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", revset, "--limit", "2"]),
+      );
+      let warning: string | undefined;
+      if (Array.isArray(resolved) && resolved.length === 1) {
+        const target = resolved[0] as { change_id?: string };
+        if (typeof target.change_id === "string") {
+          const owner = await workspaceOwningChange(ctx, settings, cwd, target.change_id);
+          if (owner !== undefined) {
+            const message = `${target.change_id} is workspace ${owner}'s working copy.`;
+            if (settings.coordination === "enforce") {
+              return toolError(
+                ErrorCode.JJ_CHANGE_OWNED_BY_WORKSPACE,
+                message,
+                `Work in that workspace, or see jj_coordinate for a grouping plan. Set coordination to advise/off to override.`,
+              );
+            }
+            if (settings.coordination === "advise") warning = message;
+          }
+        }
+      }
+      const raw = await jj(ctx, settings, cwd, ["edit", revset]);
+      if (typeof raw !== "string") return raw;
+      const workingCopy = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", "@", "--limit", "1"]),
+      );
+      return { stdout: raw, workingCopy, ...(warning === undefined ? {} : { warning }) };
+    }),
+  });
+
+  register({
+    name: "jj_history",
+    description:
+      "Rewrite history: rebase a stack, duplicate a change, revert it, abandon it, restore paths, or edit metadata. Destructive actions return beforeOpId so they can be restored.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: [
+          "rebase",
+          "duplicate",
+          "revert",
+          "abandon",
+          "restore",
+          "metaedit",
+          "parallelize",
+          "simplify-parents",
+        ],
+        required: true,
+      },
+      revsets: { type: "string", description: "The revisions to act on." },
+      source: {
+        type: "string",
+        description: "Rebase: rebase this revision and its descendants (-s).",
+      },
+      branch: { type: "string", description: "Rebase: rebase this branch (-b)." },
+      revisions: {
+        type: "string",
+        description: "Rebase: rebase these revisions without descendants (-r).",
+      },
+      onto: { type: "string", description: "Destination (-o)." },
+      insertAfter: { type: "string", description: "Insert after this revision (-A)." },
+      insertBefore: { type: "string", description: "Insert before this revision (-B)." },
+      skipEmptied: { type: "boolean", description: "Rebase: abandon commits that become empty." },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        description: "Restore: paths to restore.",
+      },
+      from: { type: "string", description: "Restore: source revision." },
+      into: { type: "string", description: "Restore: destination revision." },
+      changesIn: { type: "string", description: "Restore: undo the changes in this revision." },
+      message: { type: "string", description: "Metaedit: new description." },
+      author: {
+        type: "string",
+        description: "Metaedit: new author, e.g. 'Name <mail@example.com>'.",
+      },
+      allowImmutable: {
+        type: "boolean",
+        description: "Allow rewriting immutable commits. Default false.",
+      },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      const beforeOpId = await latestOpId(ctx, settings, cwd);
+      const owned = await ownershipIssue(ctx, settings, cwd, [
+        ...(typeof args.revsets === "string" ? [args.revsets] : []),
+        ...(typeof args.source === "string" ? [args.source] : []),
+        ...(typeof args.branch === "string" ? [args.branch] : []),
+        ...(typeof args.revisions === "string" ? [args.revisions] : []),
+        ...(action === "restore" && typeof args.into === "string" ? [args.into] : []),
+        ...(action === "restore" && typeof args.changesIn === "string" ? [args.changesIn] : []),
+      ]);
+      if (owned.error !== undefined) return owned.error;
+      const immutable = args.allowImmutable === true ? ["--ignore-immutable"] : [];
+      const dest =
+        typeof args.onto === "string"
+          ? ["-o", args.onto]
+          : typeof args.insertAfter === "string"
+            ? ["-A", args.insertAfter]
+            : typeof args.insertBefore === "string"
+              ? ["-B", args.insertBefore]
+              : [];
+      let argv: string[];
+      if (action === "parallelize" || action === "simplify-parents") {
+        if (typeof args.revsets !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, `jj_history ${action} needs revsets.`);
+        }
+        argv = [...immutable, action, args.revsets];
+      } else if (action === "rebase") {
+        const src =
+          typeof args.source === "string"
+            ? ["-s", args.source]
+            : typeof args.branch === "string"
+              ? ["-b", args.branch]
+              : typeof args.revisions === "string"
+                ? ["-r", args.revisions]
+                : [];
+        if (src.length === 0) {
+          return toolError(
+            ErrorCode.JJ_REBASE_SOURCE_AMBIGUOUS,
+            "jj_history rebase needs exactly one of source, branch, or revisions.",
+            "Pass source:'<rev>', branch:'<bookmark>', or revisions:'<revset>'.",
+          );
+        }
+        if (dest.length === 0) {
+          return toolError(
+            ErrorCode.JJ_REBASE_DESTINATION_AMBIGUOUS,
+            "jj_history rebase needs one of onto, insertAfter, or insertBefore.",
+            "Pass onto:'<rev>'.",
+          );
+        }
+        argv = [
+          ...immutable,
+          "rebase",
+          ...src,
+          ...dest,
+          ...(args.skipEmptied === true ? ["--skip-emptied"] : []),
+        ];
+      } else if (action === "duplicate") {
+        argv = [
+          ...immutable,
+          "duplicate",
+          ...(typeof args.revsets === "string" ? [args.revsets] : []),
+          ...dest,
+        ];
+      } else if (action === "revert") {
+        if (typeof args.revsets !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_history revert needs revsets.");
+        }
+        if (dest.length === 0) {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_history revert needs a destination.");
+        }
+        argv = [...immutable, "revert", "-r", args.revsets, ...dest];
+      } else if (action === "abandon") {
+        if (typeof args.revsets !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_history abandon needs revsets.");
+        }
+        argv = [...immutable, "abandon", args.revsets];
+      } else if (action === "restore") {
+        const paths = Array.isArray(args.paths)
+          ? args.paths.filter((p): p is string => typeof p === "string")
+          : [];
+        argv = [
+          ...immutable,
+          "restore",
+          ...(typeof args.from === "string" ? ["-f", args.from] : []),
+          ...(typeof args.into === "string" ? ["-t", args.into] : []),
+          ...(typeof args.changesIn === "string" ? ["-c", args.changesIn] : []),
+          ...paths,
+        ];
+      } else {
+        argv = [
+          ...immutable,
+          "metaedit",
+          ...(typeof args.revsets === "string" ? [args.revsets] : []),
+          ...(typeof args.message === "string" ? ["-m", args.message] : []),
+          ...(typeof args.author === "string" ? ["--author", args.author] : []),
+        ];
+      }
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      const afterOpId = await latestOpId(ctx, settings, cwd);
+      return {
+        action,
+        stdout: raw,
+        beforeOpId,
+        afterOpId,
+        ...(owned.warning === undefined ? {} : { warning: owned.warning }),
+      };
+    }),
+  });
+
+  register({
+    name: "jj_op",
+    description:
+      "Work with the operation log: log, show, diff, restore, revert, abandon, integrate. Restore is the checkpoint rollback; revert is the surgical undo of one operation.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["log", "show", "diff", "restore", "revert", "abandon", "integrate"],
+        required: true,
+      },
+      opId: { type: "string", description: "The operation id." },
+      from: { type: "string", description: "Diff: first operation." },
+      to: { type: "string", description: "Diff: second operation." },
+      operation: { type: "string", description: "Abandon: operation or range, e.g. '..<op-id>'." },
+      limit: { type: "integer", description: "Log: maximum entries." },
+      summary: { type: "boolean", description: "Show/diff: summary only." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      if (action === "log") {
+        const argv = ["op", "log", "--no-graph", "-T", 'json(self) ++ "\\n"'];
+        if (typeof args.limit === "number") argv.push("--limit", String(args.limit));
+        return jjJson(ctx, settings, cwd, readOnly(argv));
+      }
+      const opId = typeof args.opId === "string" ? args.opId : undefined;
+      if (action === "show") {
+        if (opId === undefined)
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op show needs opId.");
+        const raw = await jj(
+          ctx,
+          settings,
+          cwd,
+          readOnly(["op", "show", opId, ...(args.summary === true ? ["--summary"] : [])]),
+        );
+        return typeof raw === "string" ? { opId, output: raw } : raw;
+      }
+      if (action === "diff") {
+        if (typeof args.from !== "string" || typeof args.to !== "string") {
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op diff needs from and to.");
+        }
+        const raw = await jj(
+          ctx,
+          settings,
+          cwd,
+          readOnly([
+            "op",
+            "diff",
+            "--from",
+            args.from,
+            "--to",
+            args.to,
+            ...(args.summary === true ? ["--summary"] : []),
+          ]),
+        );
+        return typeof raw === "string" ? { from: args.from, to: args.to, output: raw } : raw;
+      }
+      const beforeOpId = await latestOpId(ctx, settings, cwd);
+      let argv: string[];
+      if (action === "restore") {
+        if (opId === undefined)
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op restore needs opId.");
+        argv = ["op", "restore", opId];
+      } else if (action === "revert") {
+        if (opId === undefined)
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op revert needs opId.");
+        argv = ["op", "revert", opId];
+      } else if (action === "abandon") {
+        if (typeof args.operation !== "string") {
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op abandon needs operation.");
+        }
+        argv = ["op", "abandon", args.operation];
+      } else if (action === "integrate") {
+        if (opId === undefined)
+          return toolError(ErrorCode.JJ_OP_NOT_FOUND, "jj_op integrate needs opId.");
+        argv = ["op", "integrate", opId];
+      } else {
+        return toolError(ErrorCode.JJ_OP_NOT_FOUND, `Unknown jj_op action: ${action}`);
+      }
+      const raw = await jj(ctx, settings, cwd, argv);
+      if (typeof raw !== "string") return raw;
+      return { action, stdout: raw, beforeOpId, afterOpId: await latestOpId(ctx, settings, cwd) };
+    }),
+  });
+
+  register({
+    name: "jj_repair",
+    description:
+      "Recover a broken multi-agent state: undo/redo the last operation, absorb edits into their owning ancestors, or converge divergent changes.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["undo", "redo", "absorb", "converge"],
+        required: true,
+      },
+      allowCrossWorkspace: {
+        type: "boolean",
+        description: "Undo: allow undoing another workspace's operation. Default false.",
+      },
+      from: { type: "string", description: "Absorb: source revision." },
+      into: { type: "string", description: "Absorb: destination revisions." },
+      paths: { type: "array", items: { type: "string" }, description: "Absorb: paths to absorb." },
+      revset: { type: "string", description: "Converge: search space. Default divergent()." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      if (action === "undo") {
+        const raw = await jj(ctx, settings, cwd, [
+          "undo",
+          ...(args.allowCrossWorkspace === true ? ["--allow-cross-workspace"] : []),
+        ]);
+        return typeof raw === "string" ? { undone: true, stdout: raw } : raw;
+      }
+      if (action === "redo") {
+        const raw = await jj(ctx, settings, cwd, ["redo"]);
+        return typeof raw === "string" ? { redone: true, stdout: raw } : raw;
+      }
+      if (action === "absorb") {
+        const paths = Array.isArray(args.paths)
+          ? args.paths.filter((p): p is string => typeof p === "string")
+          : [];
+        const raw = await jj(ctx, settings, cwd, [
+          "absorb",
+          ...(typeof args.from === "string" ? ["--from", args.from] : []),
+          ...(typeof args.into === "string" ? ["--into", args.into] : []),
+          ...paths,
+        ]);
+        return typeof raw === "string" ? { absorbed: true, stdout: raw } : raw;
+      }
+      const before = await divergentOf(ctx, settings, cwd);
+      const revset = typeof args.revset === "string" ? args.revset : "divergent()";
+      const raw = await jj(ctx, settings, cwd, ["converge", "--no-interactive", "-r", revset]);
+      if (typeof raw !== "string") return raw;
+      const after = await divergentOf(ctx, settings, cwd);
+      return {
+        before: before ?? [],
+        after: after ?? [],
+        resolved: (after ?? []).length === 0,
+        stdout: raw,
+      };
+    }),
+  });
+
+  register({
+    name: "jj_workspace",
+    description:
+      "Manage Jujutsu workspaces. add creates a colocated workspace and returns its path for a subagent cwd; remove snapshots the work before deleting; forget discards it.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["list", "add", "remove", "forget", "update-stale", "root", "rename"],
+        required: true,
+      },
+      name: { type: "string", description: "Workspace name." },
+      path: { type: "string", description: "Add: destination path." },
+      revset: { type: "string", description: "Add: base revision." },
+      colocate: { type: "boolean", description: "Add: create a Git worktree. Default true." },
+      bookmark: {
+        type: "string",
+        description:
+          "Add: ownership bookmark. Defaults to agentBookmarkPrefix + workspace name; pass an empty string to disable.",
+      },
+      newName: { type: "string", description: "Rename: the new name for the current workspace." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      if (action === "list") {
+        const rows = await jjJson(
+          ctx,
+          settings,
+          cwd,
+          readOnly(["workspace", "list", "-T", 'json(self) ++ "\\n"']),
+        );
+        if (!Array.isArray(rows)) return rows;
+        const bookmarks = (await bookmarkRows(ctx, settings, cwd)) ?? [];
+        const prefix = settings.agentBookmarkPrefix;
+        return (rows as { name: string; target: { commit_id: string } }[]).map((row) => {
+          const exact =
+            prefix === ""
+              ? undefined
+              : bookmarks.find((entry) => entry.name === `${prefix}${row.name}`)?.name;
+          const names = [
+            ...new Set([
+              ...bookmarks
+                .filter((entry) => entry.target.includes(row.target.commit_id))
+                .map((entry) => entry.name),
+              ...(exact === undefined ? [] : [exact]),
+            ]),
+          ];
+          // The ownership bookmark is matched by name, not by target: it is
+          // created at the workspace's initial @ and does not follow commits.
+          const owner =
+            exact ?? (prefix === "" ? undefined : names.find((entry) => entry.startsWith(prefix)));
+          return { ...row, owner: owner ?? null, bookmarks: names };
+        });
+      }
+      if (action === "root") {
+        const raw = await jj(ctx, settings, cwd, readOnly(["workspace", "root"]));
+        return typeof raw === "string" ? { root: raw.trim() } : raw;
+      }
+      if (action === "add") {
+        const explicitName = typeof args.name === "string" ? args.name : undefined;
+        const name = explicitName ?? `agent-${randomUUID().slice(0, 8)}`;
+        const target =
+          typeof args.path === "string"
+            ? resolvePath(cwd, args.path)
+            : resolvePath(cwd, settings.workspaceRoot, explicitName ?? basename(name));
+        const finalName = explicitName ?? basename(target);
+        const argv = [
+          "workspace",
+          "add",
+          target,
+          "--name",
+          finalName,
+          ...(args.colocate === false ? ["--no-colocate"] : ["--colocate"]),
+          ...(typeof args.revset === "string" ? ["-r", args.revset] : []),
+        ];
+        // `workspace add` must be allowed to update the working copy: jj
+        // snapshots the current workspace before creating the new one. Passing
+        // --ignore-working-copy creates the workspace and then exits with
+        // "This command must be able to update the working copy." Call it at a
+        // quiescent boundary, not in the middle of another agent's write.
+        const raw = await jj(ctx, settings, cwd, argv);
+        if (typeof raw !== "string") return raw;
+        // The ownership bookmark is the coordination convention: it names the
+        // workspace's working copy so jj_coordinate can group agents without a
+        // side database.
+        let bookmark: string | null = null;
+        let warning: string | undefined;
+        if (settings.agentBookmarkPrefix !== "" && args.bookmark !== "") {
+          const bookmarkName =
+            typeof args.bookmark === "string" && args.bookmark.length > 0
+              ? args.bookmark
+              : `${settings.agentBookmarkPrefix}${finalName}`;
+          const set = await jj(ctx, settings, cwd, [
+            "bookmark",
+            "set",
+            bookmarkName,
+            "-r",
+            `${finalName}@`,
+          ]);
+          if (typeof set === "string") bookmark = bookmarkName;
+          else warning = `workspace created, but the ownership bookmark was not set`;
+        }
+        return {
+          name: finalName,
+          path: target,
+          bookmark,
+          ...(warning === undefined ? {} : { warning }),
+          stdout: raw,
+        };
+      }
+      if (action === "rename") {
+        if (typeof args.newName !== "string") {
+          return toolError(ErrorCode.JJ_WORKSPACE_NOT_FOUND, "jj_workspace rename needs newName.");
+        }
+        const raw = await jj(ctx, settings, cwd, ["workspace", "rename", args.newName]);
+        return typeof raw === "string" ? { renamed: true, stdout: raw } : raw;
+      }
+      if (typeof args.name !== "string") {
+        return toolError(ErrorCode.JJ_WORKSPACE_NOT_FOUND, `jj_workspace ${action} needs name.`);
+      }
+      if (action === "remove") {
+        const raw = await jj(ctx, settings, cwd, ["workspace", "remove", args.name]);
+        return typeof raw === "string" ? { removed: true, stdout: raw } : raw;
+      }
+      if (action === "forget") {
+        const raw = await jj(ctx, settings, cwd, readOnly(["workspace", "forget", args.name]));
+        return typeof raw === "string" ? { forgotten: true, stdout: raw } : raw;
+      }
+      if (action === "update-stale") {
+        const raw = await jj(ctx, settings, cwd, ["workspace", "update-stale"]);
+        return typeof raw === "string" ? { updated: true, stdout: raw } : raw;
+      }
+      return toolError(ErrorCode.JJ_WORKSPACE_NOT_FOUND, `Unknown jj_workspace action: ${action}`);
+    }),
+  });
+
+  register({
+    name: "jj_test",
+    description:
+      "Run a command against a revision in isolation. mode test (default) creates an ephemeral colocated workspace, clones verifyCloneDirs, runs the command, and cleans up. mode run uses jj run --ignore-changes; mode bisect uses jj bisect run in an ephemeral workspace.",
+    parameters: {
+      mode: { type: "string", enum: ["test", "run", "bisect"], description: "Default test." },
+      revision: { type: "string", description: "Test/run: revision to test. Default @." },
+      range: { type: "string", description: "Bisect: revision range." },
+      command: { type: "string", required: true, description: "Shell command to run." },
+      deps: { type: "string", enum: ["clone", "install", "none"], description: "Default clone." },
+      timeoutMs: { type: "integer", description: "Command timeout in milliseconds." },
+      keep: { type: "boolean", description: "Leave the ephemeral workspace for debugging." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const mode = args.mode === "run" ? "run" : args.mode === "bisect" ? "bisect" : "test";
+      const command = String(args.command);
+      if (mode === "run") {
+        const rev = typeof args.revision === "string" ? args.revision : "@";
+        const result = await runJj(
+          ctx,
+          settings.jjPath,
+          [
+            "run",
+            "--ignore-working-copy",
+            "--ignore-changes",
+            "-r",
+            rev,
+            "--",
+            "bash",
+            "-lc",
+            command,
+          ],
+          { cwd },
+        );
+        return {
+          mode,
+          revision: rev,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          timedOut: result.timedOut,
+        };
+      }
+      const tempResult = await run(ctx, ["mktemp", "-d"] as const, { cwd });
+      if (tempResult.exitCode !== 0) {
+        return toolError(
+          ErrorCode.JJ_TEST_WORKSPACE_FAILED,
+          `Could not create a temporary directory: ${tempResult.stderr.trim().slice(0, 200)}`,
+        );
+      }
+      if (mode === "bisect" && typeof args.range !== "string") {
+        return toolError(
+          ErrorCode.JJ_TEST_WORKSPACE_FAILED,
+          "jj_test bisect needs a range.",
+          "Pass range:'<good>..<bad>'.",
+        );
+      }
+      const temp = tempResult.stdout.trim();
+      const name = `dsh-test-${randomUUID().slice(0, 8)}`;
+      const started = Date.now();
+      let cleanedUp = false;
+      try {
+        const add = await runJj(
+          ctx,
+          settings.jjPath,
+          [
+            "workspace",
+            "add",
+            temp,
+            "--name",
+            name,
+            "--colocate",
+            // `workspace add` without -r bases the new working copy on the
+            // *parent* of @, which silently tests the wrong tree. Pass the
+            // revision explicitly, including the default @.
+            ...(mode === "test"
+              ? ["-r", typeof args.revision === "string" ? args.revision : "@"]
+              : []),
+          ],
+          { cwd },
+        );
+        if (add.exitCode !== 0) {
+          return toolError(
+            ErrorCode.JJ_TEST_WORKSPACE_FAILED,
+            `Could not create the test workspace: ${add.stderr.trim().slice(0, 300)}`,
+            "Run `jj workspace list` to check for a name collision.",
+          );
+        }
+        if (mode === "test" && args.deps === "install") {
+          const installed = await run(
+            ctx,
+            ["bash", "-lc", "pnpm install --frozen-lockfile"] as const,
+            {
+              cwd: temp,
+              ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}),
+            },
+          );
+          if (installed.exitCode !== 0) {
+            await runJj(ctx, settings.jjPath, readOnly(["workspace", "forget", name]), { cwd });
+            await run(ctx, ["rm", "-rf", temp] as const, { cwd });
+            cleanedUp = true;
+            return {
+              mode,
+              revision: typeof args.revision === "string" ? args.revision : "@",
+              workspace: { name, path: temp },
+              command,
+              phase: "install",
+              exitCode: installed.exitCode,
+              stdout: installed.stdout,
+              stderr: installed.stderr,
+              timedOut: installed.timedOut,
+              durationMs: Date.now() - started,
+              cleanedUp,
+            };
+          }
+        } else if (mode === "test" && args.deps !== "none") {
+          for (const dir of settings.verifyCloneDirs) {
+            const source = resolvePath(cwd, dir);
+            const dest = resolvePath(temp, dir);
+            const copied = await run(ctx, ["cp", "-cR", source, dest] as const, { cwd });
+            if (copied.exitCode !== 0) {
+              await run(ctx, ["cp", "-a", source, dest] as const, { cwd });
+            }
+          }
+        }
+        const executed =
+          mode === "bisect"
+            ? await run(
+                ctx,
+                [
+                  "bash",
+                  "-lc",
+                  `jj bisect run --range ${shellQuote(typeof args.range === "string" ? args.range : "")} -- bash -lc ${shellQuote(command)}`,
+                ] as const,
+                {
+                  cwd: temp,
+                  ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}),
+                },
+              )
+            : await run(ctx, ["bash", "-lc", command] as const, {
+                cwd: temp,
+                ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}),
+              });
+        if (args.keep !== true) {
+          await runJj(ctx, settings.jjPath, readOnly(["workspace", "forget", name]), { cwd });
+          await run(ctx, ["rm", "-rf", temp] as const, { cwd });
+          cleanedUp = true;
+        }
+        return {
+          mode,
+          revision: typeof args.revision === "string" ? args.revision : "@",
+          workspace: { name, path: temp },
+          command,
+          exitCode: executed.exitCode,
+          stdout: executed.stdout,
+          stderr: executed.stderr,
+          timedOut: executed.timedOut,
+          durationMs: Date.now() - started,
+          cleanedUp,
+        };
+      } finally {
+        if (!cleanedUp && args.keep !== true) {
+          try {
+            await runJj(ctx, settings.jjPath, readOnly(["workspace", "forget", name]), { cwd });
+            await run(ctx, ["rm", "-rf", temp] as const, { cwd });
+          } catch {
+            /* best-effort cleanup; the workspace path is in the result */
+          }
+        }
+      }
+    }),
+  });
+
+  register({
+    name: "jj_publish",
+    description:
+      "Publish or fetch. push leaves the machine: with publish=ask it returns a dry-run preview and needs confirm:true; deny refuses; allow pushes. fetch, tag-list, tag-set, tag-delete, tag-track and tag-untrack stay local.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["push", "fetch", "tag-list", "tag-set", "tag-delete", "tag-track", "tag-untrack"],
+        required: true,
+      },
+      remote: { type: "string", description: "Remote name." },
+      bookmark: { type: "string", description: "Push: bookmark to push." },
+      change: {
+        type: "string",
+        description: "Push: create a bookmark for this change and push it.",
+      },
+      tag: { type: "string", description: "Tag name." },
+      revision: { type: "string", description: "Tag-set: target revision." },
+      all: { type: "boolean", description: "Push: push all bookmarks and tags." },
+      allowMove: { type: "boolean", description: "Tag-set: allow moving an existing tag." },
+      dryRun: { type: "boolean", description: "Push: dry run." },
+      confirm: { type: "boolean", description: "Push: confirm a real push when publish=ask." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      if (action === "fetch") {
+        const raw = await jj(ctx, settings, cwd, [
+          "git",
+          "fetch",
+          ...(typeof args.remote === "string" ? ["--remote", args.remote] : []),
+        ]);
+        return typeof raw === "string" ? { fetched: true, stdout: raw } : raw;
+      }
+      if (action === "tag-list") {
+        return jjJson(ctx, settings, cwd, readOnly(["tag", "list", "-T", 'json(self) ++ "\\n"']));
+      }
+      if (action === "tag-set") {
+        if (typeof args.tag !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_publish tag-set needs tag.");
+        }
+        const raw = await jj(ctx, settings, cwd, [
+          "tag",
+          "set",
+          args.tag,
+          ...(typeof args.revision === "string" ? ["-r", args.revision] : []),
+          ...(args.allowMove === true ? ["--allow-move"] : []),
+        ]);
+        return typeof raw === "string" ? { tag: args.tag, stdout: raw } : raw;
+      }
+      if (action === "tag-delete") {
+        if (typeof args.tag !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_publish tag-delete needs tag.");
+        }
+        const raw = await jj(ctx, settings, cwd, ["tag", "delete", args.tag]);
+        return typeof raw === "string" ? { deleted: true, stdout: raw } : raw;
+      }
+      if (action === "tag-track" || action === "tag-untrack") {
+        if (typeof args.tag !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, `jj_publish ${action} needs tag.`);
+        }
+        const raw = await jj(ctx, settings, cwd, [
+          "tag",
+          action === "tag-track" ? "track" : "untrack",
+          args.tag,
+          ...(typeof args.remote === "string" ? ["--remote", args.remote] : []),
+        ]);
+        return typeof raw === "string" ? { tag: args.tag, stdout: raw } : raw;
+      }
+      if (settings.publish === "deny") {
+        return toolError(
+          ErrorCode.JJ_PUBLISH_APPROVAL_REQUIRED,
+          "Publishing is disabled by the publish setting.",
+          "Set publish to ask or allow to enable jj_publish push.",
+        );
+      }
+      const pushArgs = [
+        "git",
+        "push",
+        ...(typeof args.remote === "string" ? ["--remote", args.remote] : []),
+        ...(typeof args.bookmark === "string" ? ["--bookmark", args.bookmark] : []),
+        ...(typeof args.change === "string" ? ["--change", args.change] : []),
+        ...(typeof args.tag === "string" ? ["--tag", args.tag] : []),
+        ...(args.all === true ? ["--all"] : []),
+      ];
+      const dryRun = args.dryRun === true || (settings.publish === "ask" && args.confirm !== true);
+      const pushed = await runJj(
+        ctx,
+        settings.jjPath,
+        readOnly([...pushArgs, ...(dryRun ? ["--dry-run"] : [])]),
+        { cwd },
+      );
+      if (pushed.exitCode !== 0) {
+        return toolError(
+          ErrorCode.JJ_EXEC_FAILED,
+          `jj git push exited ${String(pushed.exitCode)}: ${pushed.stderr.trim().slice(0, 300)}`,
+          "Run `jj git push --dry-run` by hand to see the full output.",
+        );
+      }
+      // `jj git push` writes its summary to stderr, not stdout; return both so
+      // the model sees the same "Changes to push" block a human would.
+      return dryRun
+        ? {
+            action: "push",
+            dryRun: true,
+            requiresConfirmation: settings.publish === "ask" && args.confirm !== true,
+            stdout: pushed.stdout,
+            stderr: pushed.stderr,
+          }
+        : { action: "push", dryRun: false, stdout: pushed.stdout, stderr: pushed.stderr };
+    }),
+  });
+
+  register({
+    name: "jj_fix",
+    description:
+      "Apply the formatters configured in fix.tools to the mutable stack. Requires jj config fix.tools; without it, configure a formatter first.",
+    parameters: {
+      revsets: {
+        type: "string",
+        description: "Revisions to fix. Default reachable(@, mutable()).",
+      },
+      paths: { type: "array", items: { type: "string" }, description: "Restrict to these paths." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const beforeOpId = await latestOpId(ctx, settings, cwd);
+      const paths = Array.isArray(args.paths)
+        ? args.paths.filter((p): p is string => typeof p === "string")
+        : [];
+      const raw = await jj(ctx, settings, cwd, [
+        "fix",
+        ...(typeof args.revsets === "string" ? ["-s", args.revsets] : []),
+        ...paths,
+      ]);
+      if (typeof raw !== "string") return raw;
+      return { stdout: raw, beforeOpId, afterOpId: await latestOpId(ctx, settings, cwd) };
+    }),
+  });
+
+  register({
+    name: "jj_sparse",
+    description:
+      "Manage sparse checkout patterns for a monorepo. list shows the patterns; set adds/removes/clears; reset includes everything.",
+    parameters: {
+      action: { type: "string", enum: ["list", "set", "reset"], required: true },
+      add: { type: "array", items: { type: "string" }, description: "Set: patterns to add." },
+      remove: { type: "array", items: { type: "string" }, description: "Set: patterns to remove." },
+      clear: { type: "boolean", description: "Set: start from an empty pattern set." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      if (action === "list") {
+        const raw = await jj(ctx, settings, cwd, readOnly(["sparse", "list"]));
+        return typeof raw === "string"
+          ? { patterns: raw.split("\n").filter((p) => p.length > 0) }
+          : raw;
+      }
+      if (action === "reset") {
+        const raw = await jj(ctx, settings, cwd, ["sparse", "reset"]);
+        return typeof raw === "string" ? { reset: true, stdout: raw } : raw;
+      }
+      const argv = [
+        "sparse",
+        "set",
+        ...(args.clear === true ? ["--clear"] : []),
+        ...(Array.isArray(args.add)
+          ? args.add.filter((p): p is string => typeof p === "string").flatMap((p) => ["--add", p])
+          : []),
+        ...(Array.isArray(args.remove)
+          ? args.remove
+              .filter((p): p is string => typeof p === "string")
+              .flatMap((p) => ["--remove", p])
+          : []),
+      ];
+      const raw = await jj(ctx, settings, cwd, argv);
+      return typeof raw === "string" ? { stdout: raw } : raw;
+    }),
+  });
+
+  register({
+    name: "jj_doctor",
+    description:
+      "Report whether this repository is configured for multi-agent work: jj version, workspaces and ownership bookmarks, snapshot settings, divergence, sparse patterns, and the op-log head. Read-only.",
+    parameters: {},
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (_args, cwd) => {
+      const version = await runJj(ctx, settings.jjPath, ["--version"], { cwd });
+      const workspaces = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["workspace", "list", "-T", 'json(self) ++ "\\n"']),
+      );
+      const bookmarks = (await bookmarkRows(ctx, settings, cwd)) ?? [];
+      const divergence = (await divergentOf(ctx, settings, cwd)) ?? [];
+      const opId = await latestOpId(ctx, settings, cwd);
+      const rootRaw = await jj(ctx, settings, cwd, readOnly(["workspace", "root"]));
+      const sparseRaw = await jj(ctx, settings, cwd, readOnly(["sparse", "list"]));
+      const configRaw = await jj(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["config", "list", "--include-defaults"]),
+      );
+      const wanted = [
+        "snapshot.auto-update-stale",
+        "snapshot.max-new-file-size",
+        "git.colocate",
+        "signing.backend",
+        "fix.tools",
+      ];
+      const config: Record<string, string> = {};
+      if (typeof configRaw === "string") {
+        for (const line of configRaw.split("\n")) {
+          const match = /^([^=]+?)\s*=\s*(.*)$/.exec(line.trim());
+          if (match === null) continue;
+          const key = match[1]!.trim();
+          if (wanted.includes(key)) config[key] = match[2]!.trim();
+        }
+      }
+      const prefix = settings.agentBookmarkPrefix;
+      const owned = prefix === "" ? [] : bookmarks.filter((b) => b.name.startsWith(prefix));
+      const warnings: string[] = [];
+      if (Array.isArray(workspaces) && workspaces.length > 1) {
+        if (config["snapshot.auto-update-stale"] !== "true") {
+          warnings.push(
+            "snapshot.auto-update-stale is not true; another agent's rebase can leave this workspace stale.",
+          );
+        }
+        if (owned.length === 0) {
+          warnings.push(
+            "No agent/* ownership bookmarks; jj_coordinate cannot tell which workspace belongs to which agent.",
+          );
+        }
+      }
+      if (divergence.length > 0) {
+        warnings.push("Divergent changes exist; run jj_repair({action:'converge'}).");
+      }
+      return {
+        version: version.exitCode === 0 ? version.stdout.trim() : null,
+        root: typeof rootRaw === "string" ? rootRaw.trim() : null,
+        workspaces: Array.isArray(workspaces) ? workspaces : [],
+        ownerBookmarks: owned,
+        divergence,
+        opId: opId ?? null,
+        sparse:
+          typeof sparseRaw === "string"
+            ? sparseRaw.split("\n").filter((line) => line.length > 0)
+            : [],
+        config,
+        warnings,
+      };
+    }),
+  });
+
+  register({
+    name: "jj_coordinate",
+    description:
+      "Plan how to group agents working in this repo. Lists each workspace's change, owner bookmark, parent and conflict state, groups workspaces that share a parent, and suggests merge or squash. Read-only.",
+    parameters: {},
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (_args, cwd) => {
+      const rows = await jjJson(
+        ctx,
+        settings,
+        cwd,
+        readOnly(["workspace", "list", "-T", 'json(self) ++ "\\n"']),
+      );
+      if (!Array.isArray(rows)) return rows;
+      const bookmarks = (await bookmarkRows(ctx, settings, cwd)) ?? [];
+      const prefix = settings.agentBookmarkPrefix;
+      const workspaces: Record<string, unknown>[] = [];
+      for (const row of rows as {
+        name: string;
+        target: { commit_id: string; change_id: string };
+      }[]) {
+        const parents = await jjJson(
+          ctx,
+          settings,
+          cwd,
+          readOnly([
+            "log",
+            "--no-graph",
+            "-T",
+            'json(self) ++ "\\n"',
+            "-r",
+            `${row.name}@-`,
+            "--limit",
+            "1",
+          ]),
+        );
+        const conflict = await jj(
+          ctx,
+          settings,
+          cwd,
+          readOnly(["log", "--no-graph", "-T", "conflict", "-r", `${row.name}@`]),
+        );
+        const exact =
+          prefix === ""
+            ? undefined
+            : bookmarks.find((entry) => entry.name === `${prefix}${row.name}`)?.name;
+        const names = [
+          ...new Set([
+            ...bookmarks
+              .filter((entry) => entry.target.includes(row.target.commit_id))
+              .map((entry) => entry.name),
+            ...(exact === undefined ? [] : [exact]),
+          ]),
+        ];
+        const owner =
+          exact ?? (prefix === "" ? undefined : names.find((entry) => entry.startsWith(prefix)));
+        const parent = Array.isArray(parents)
+          ? (parents[0] as { change_id?: string } | undefined)
+          : undefined;
+        workspaces.push({
+          name: row.name,
+          changeId: row.target.change_id,
+          commitId: row.target.commit_id,
+          parentChangeId: parent?.change_id ?? null,
+          headChangeId: parent?.change_id ?? row.target.change_id,
+          owner: owner ?? null,
+          bookmarks: names,
+          conflicted: typeof conflict === "string" && conflict.trim() === "true",
+        });
+      }
+      const groups = new Map<string, Record<string, unknown>[]>();
+      for (const workspace of workspaces) {
+        const key =
+          typeof workspace.parentChangeId === "string" ? workspace.parentChangeId : "root";
+        groups.set(key, [...(groups.get(key) ?? []), workspace]);
+      }
+      const plan = [...groups.entries()].map(([parent, members]) => ({
+        parent,
+        workspaces: members.map((member) => String(member.name)),
+        changes: members.map((member) => String(member.headChangeId ?? member.changeId)),
+        conflicted: members.some((member) => member.conflicted === true),
+        suggestedAction:
+          members.length > 1
+            ? settings.groupDefault
+            : members[0]?.conflicted === true
+              ? "resolve conflict before grouping"
+              : "none",
+      }));
+      const warnings: string[] = [];
+      for (const workspace of workspaces) {
+        if (workspace.owner === null) {
+          warnings.push(`${String(workspace.name)} has no ownership bookmark.`);
+        }
+        if (workspace.conflicted === true) {
+          warnings.push(`${String(workspace.name)} has a conflicted working copy.`);
+        }
+      }
+      const mergeCandidates = workspaces
+        .filter((workspace) => workspace.conflicted !== true)
+        .map((workspace) => String(workspace.headChangeId ?? workspace.changeId));
+      const recommended =
+        mergeCandidates.length > 1
+          ? {
+              action: settings.groupDefault,
+              revsets: mergeCandidates,
+              // A stack also needs a base; the Lead supplies it because only
+              // the Lead knows the intended integration point.
+              ...(settings.groupDefault === "stack" ? { onto: null } : {}),
+            }
+          : null;
+      return {
+        workspaces,
+        groups: plan,
+        mergeCandidates,
+        recommended,
+        divergence: (await divergentOf(ctx, settings, cwd)) ?? [],
+        warnings,
+      };
+    }),
+  });
+
+  register({
+    name: "jj_group",
+    description:
+      "Group agent commits: merge several revisions into one integration commit, squash several into one, or name a group with a bookmark. History-mutating actions return beforeOpId and opId.",
+    parameters: {
+      action: {
+        type: "string",
+        enum: ["merge", "squash", "bookmark", "stack"],
+        required: true,
+      },
+      revsets: {
+        type: "array",
+        items: { type: "string" },
+        description: "Merge/stack: revisions to group. Squash: source revisions.",
+      },
+      into: { type: "string", description: "Squash: destination revision." },
+      onto: { type: "string", description: "Stack: base revision the chain is built on." },
+      message: { type: "string", description: "Merge: commit description." },
+      bookmark: {
+        type: "string",
+        description: "Merge/stack: bookmark to create at the group head.",
+      },
+      revset: { type: "string", description: "Bookmark: target revision. Default @." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = String(args.action);
+      const beforeOpId = await latestOpId(ctx, settings, cwd);
+      const revs = Array.isArray(args.revsets)
+        ? args.revsets.filter((rev): rev is string => typeof rev === "string")
+        : [];
+      const owned = await ownershipIssue(
+        ctx,
+        settings,
+        cwd,
+        action === "stack"
+          ? revs
+          : action === "squash"
+            ? [...revs, ...(typeof args.into === "string" ? [args.into] : [])]
+            : [],
+      );
+      if (owned.error !== undefined) return owned.error;
+      if (action === "stack") {
+        if (revs.length === 0 || typeof args.onto !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_group stack needs revsets and onto.");
+        }
+        const changes: string[] = [];
+        for (const rev of revs) {
+          const rows = await jjJson(
+            ctx,
+            settings,
+            cwd,
+            readOnly(["log", "--no-graph", "-T", 'json(self) ++ "\\n"', "-r", rev, "--limit", "2"]),
+          );
+          if (!Array.isArray(rows) || rows.length !== 1) {
+            return toolError(
+              ErrorCode.JJ_EXEC_FAILED,
+              `jj_group stack could not resolve ${rev} to exactly one change.`,
+              "Pass change ids or single-revision revsets.",
+            );
+          }
+          changes.push(String((rows[0] as { change_id: string }).change_id));
+        }
+        let parent = args.onto;
+        for (const change of changes) {
+          const rebased = await jj(ctx, settings, cwd, ["rebase", "-r", change, "-o", parent]);
+          if (typeof rebased !== "string") return rebased;
+          parent = change;
+        }
+        let bookmark: string | null = null;
+        if (typeof args.bookmark === "string" && args.bookmark.length > 0) {
+          const set = await jj(ctx, settings, cwd, [
+            "bookmark",
+            "set",
+            args.bookmark,
+            "-r",
+            changes[changes.length - 1]!,
+          ]);
+          if (typeof set === "string") bookmark = args.bookmark;
+        }
+        return {
+          action,
+          changes,
+          parent,
+          bookmark,
+          beforeOpId,
+          opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+          ...(owned.warning === undefined ? {} : { warning: owned.warning }),
+        };
+      }
+      if (action === "merge") {
+        if (revs.length === 0) {
+          return toolError(
+            ErrorCode.JJ_EXEC_FAILED,
+            "jj_group merge needs at least one revision in revsets.",
+          );
+        }
+        const message =
+          typeof args.message === "string" && args.message.length > 0
+            ? args.message
+            : `group: merge ${revs.length} changes`;
+        const raw = await jj(ctx, settings, cwd, ["new", ...revs, "-m", message]);
+        if (typeof raw !== "string") return raw;
+        let bookmark: string | null = null;
+        if (typeof args.bookmark === "string" && args.bookmark.length > 0) {
+          const set = await jj(ctx, settings, cwd, ["bookmark", "set", args.bookmark, "-r", "@"]);
+          if (typeof set === "string") bookmark = args.bookmark;
+        }
+        return {
+          action,
+          stdout: raw,
+          bookmark,
+          beforeOpId,
+          opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+        };
+      }
+      if (action === "squash") {
+        if (revs.length === 0 || typeof args.into !== "string") {
+          return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_group squash needs revsets and into.");
+        }
+        const raw = await jj(ctx, settings, cwd, [
+          "squash",
+          "--from",
+          revs.join("|"),
+          "--into",
+          args.into,
+        ]);
+        if (typeof raw !== "string") return raw;
+        return {
+          action,
+          stdout: raw,
+          beforeOpId,
+          opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+          ...(owned.warning === undefined ? {} : { warning: owned.warning }),
+        };
+      }
+      if (typeof args.bookmark !== "string" || args.bookmark.length === 0) {
+        return toolError(ErrorCode.JJ_EXEC_FAILED, "jj_group bookmark needs bookmark.");
+      }
+      const raw = await jj(ctx, settings, cwd, [
+        "bookmark",
+        "set",
+        args.bookmark,
+        "-r",
+        typeof args.revset === "string" ? args.revset : "@",
+      ]);
+      if (typeof raw !== "string") return raw;
+      return {
+        action,
+        stdout: raw,
+        beforeOpId,
+        opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+      };
+    }),
+  });
+
+  register({
+    name: "jj_sign",
+    description:
+      "Sign or unsign revisions with the configured signing backend. Requires jj signing config; without it jj reports the missing backend.",
+    parameters: {
+      action: { type: "string", enum: ["sign", "unsign"], required: true },
+      revsets: { type: "string", description: "Revisions to sign or unsign. Default @." },
+    },
+    output: JSON_OUTPUT,
+    execute: onWorkspaceRoot(async (args, cwd) => {
+      const action = args.action === "unsign" ? "unsign" : "sign";
+      const beforeOpId = await latestOpId(ctx, settings, cwd);
+      const raw = await jj(ctx, settings, cwd, [
+        action,
+        "-r",
+        typeof args.revsets === "string" ? args.revsets : "@",
+      ]);
+      if (typeof raw !== "string") return raw;
+      return {
+        action,
+        stdout: raw,
+        beforeOpId,
+        opId: (await latestOpId(ctx, settings, cwd)) ?? null,
+      };
     }),
   });
 
@@ -886,7 +2702,16 @@ export function applyTools(ctx: Context, settings: Settings): void {
     (ctx.tools as ToolRegistry | undefined) ?? (ctx.get("tools") as ToolRegistry | undefined);
   if (registry === undefined) return;
 
+  const allowed = new Set<string>(
+    settings.toolset === "minimal"
+      ? MINIMAL_TOOL_NAMES
+      : settings.toolset === "core"
+        ? CORE_TOOL_NAMES
+        : TOOL_NAMES,
+  );
+
   for (const definition of buildToolDefinitions(ctx, settings)) {
+    if (!allowed.has(String(definition.name))) continue;
     try {
       registry.register(defineTool(definition as never));
     } catch {

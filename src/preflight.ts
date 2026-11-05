@@ -35,7 +35,7 @@ import { adoptRepo } from "./adopt.ts";
 import { detect, invalidateDetection } from "./detect.ts";
 import { type Marker, markerFor } from "./marker.ts";
 import type { Settings } from "./settings.ts";
-import { runJj } from "./shell.ts";
+import { runJj, readOnly } from "./shell.ts";
 import { setWorkspaceState } from "./state.ts";
 
 interface SessionLike {
@@ -81,6 +81,8 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
               kind: adopted.kind === "none" ? "jj-colocated" : adopted.kind,
               jjHunk: await hasJjHunk(ctx, settings, workspace.vcsRoot),
               ...(await changeId(ctx, settings, workspace.vcsRoot)),
+              ...(await startOp(ctx, settings, workspace.vcsRoot)),
+              ...(await workspaceName(ctx, settings, workspace.vcsRoot)),
               adoption: { status: "adopted" },
             });
             return;
@@ -120,6 +122,8 @@ export function applyPreflight(ctx: Context, settings: Settings): void {
         kind: workspace.kind,
         jjHunk: await hasJjHunk(ctx, settings, workspace.root),
         ...(await changeId(ctx, settings, workspace.root)),
+        ...(await startOp(ctx, settings, workspace.root)),
+        ...(await workspaceName(ctx, settings, workspace.root)),
       });
     } catch (error) {
       // Never fail session creation. A broken preflight must not cost the user
@@ -173,12 +177,66 @@ async function changeId(
     const result = await runJj(
       ctx,
       settings.jjPath,
-      ["log", "--no-graph", "-T", "change_id.short()", "-r", "@"],
+      readOnly(["log", "--no-graph", "-T", "change_id.short()", "-r", "@"]),
       { cwd, timeoutMs: 10_000 },
     );
     if (result.exitCode !== 0) return {};
     const id = result.stdout.trim();
     return id.length > 0 ? { changeId: id } : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The operation id the session inherited, captured without snapshotting.
+ *
+ * This is the rollback anchor the prompt names. A read here must not create the
+ * operation it is trying to record, so it goes through {@link readOnly}.
+ */
+async function startOp(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<{ startOp?: string }> {
+  try {
+    const result = await runJj(
+      ctx,
+      settings.jjPath,
+      readOnly(["op", "log", "--limit", "1", "--no-graph", "-T", "id.short()"]),
+      { cwd, timeoutMs: 10_000 },
+    );
+    if (result.exitCode !== 0) return {};
+    const id = result.stdout.trim();
+    return id.length > 0 ? { startOp: id } : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The current workspace name, from the plain `jj workspace list` output.
+ *
+ * The current workspace is the one whose path column is `.`; `jj workspace
+ * list -T json` does not carry that marker, so the plain form is the reliable
+ * source. A failure degrades to "unknown" rather than failing preflight.
+ */
+async function workspaceName(
+  ctx: Context,
+  settings: Settings,
+  cwd: string,
+): Promise<{ workspaceName?: string }> {
+  try {
+    const result = await runJj(ctx, settings.jjPath, readOnly(["workspace", "list"]), {
+      cwd,
+      timeoutMs: 10_000,
+    });
+    if (result.exitCode !== 0) return {};
+    for (const line of result.stdout.split("\n")) {
+      const match = /^(\S+):\s+\.(?:\s|$)/.exec(line);
+      if (match !== null && match[1] !== undefined) return { workspaceName: match[1] };
+    }
+    return {};
   } catch {
     return {};
   }

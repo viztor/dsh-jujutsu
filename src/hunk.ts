@@ -33,7 +33,14 @@ import type { Context } from "@deepseek-ai/cordis";
 
 import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import type { Settings } from "./settings.ts";
-import { type RunOptions, type RunResult, ShellUnavailableError, run, runJj } from "./shell.ts";
+import {
+  type RunOptions,
+  type RunResult,
+  ShellUnavailableError,
+  readOnly,
+  run,
+  runJj,
+} from "./shell.ts";
 
 /** The commands the bridge exposes. */
 export type HunkMode = "split" | "commit" | "squash";
@@ -148,7 +155,7 @@ async function requireSingleRevision(
     result = await runJj(
       ctx,
       settings.jjPath,
-      ["log", "--no-graph", "-T", 'change_id ++ "\\n"', "-r", options.revset],
+      readOnly(["log", "--no-graph", "-T", 'change_id ++ "\\n"', "-r", options.revset]),
       runOptions(options),
     );
   } catch (error) {

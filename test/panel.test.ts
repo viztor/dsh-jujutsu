@@ -218,14 +218,28 @@ describe("the panel covers the schema", () => {
     // them on the page would ask every other reader to decide about them. They
     // stay settable -- `Config` still declares them -- just not drawn.
     const missing = [...schemaFields()].filter((f) => !(f in loadPanel().FIELDS));
-    expect(missing).toEqual(["jjPath", "jjHunkPath", "hunkInstall"]);
+    expect(missing).toEqual([
+      "jjPath",
+      "jjHunkPath",
+      "hunkInstall",
+      "verifyCloneDirs",
+      "agentBookmarkPrefix",
+      "workspaceRoot",
+    ]);
   });
 
   it("keeps the config-file-only fields settable", () => {
     // Not drawn is not the same as not supported. If these left `Config`, a
     // custom install could no longer point at its own jj.
     const schema = readFileSync("src/config.ts", "utf8");
-    for (const field of ["jjPath", "jjHunkPath", "hunkInstall"]) {
+    for (const field of [
+      "jjPath",
+      "jjHunkPath",
+      "hunkInstall",
+      "verifyCloneDirs",
+      "agentBookmarkPrefix",
+      "workspaceRoot",
+    ]) {
       expect(schema, field).toContain(`${field}: z`);
     }
   });
@@ -667,11 +681,21 @@ describe("two settings on the same scale read the same way round", () => {
       .filter(([, meta]) => meta.choices !== undefined)
       .map(([name, meta]) => [name, meta.choices as string[]] as const);
 
-    const shared = enums.filter(([, choices]) => choices.length === 3);
-    expect(shared.length).toBeGreaterThan(1);
-    const [first] = shared;
-    for (const [name, choices] of shared) {
-      expect(choices, `${name} vs ${first?.[0]}`).toEqual(first?.[1]);
+    // Group by the *set* of choices, not by length: `toolset` is also a
+    // three-value enum, but it is a different scale and must not be forced to
+    // read deny|ask|allow. Two fields that offer the same choices must order
+    // them the same way.
+    const groups = new Map<string, (readonly [string, string[]])[]>();
+    for (const entry of enums) {
+      const key = [...entry[1]].sort().join("|");
+      groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const [first] = group;
+      for (const [name, choices] of group) {
+        expect(choices, `${name} vs ${first?.[0]}`).toEqual(first?.[1]);
+      }
     }
   });
 });
@@ -720,18 +744,31 @@ describe("a two-state setting is a boolean, not a two-option enum", () => {
     // boolean wearing the wrong control, and it reads as a decision the user has
     // to make rather than a switch they flip.
     const { FIELDS } = loadPanel();
+    // `groupDefault` is deliberately a two-choice enum: merge and stack are two
+    // actionable grouping strategies, not an on/off pair. A segmented control
+    // is the right control for a choice between two actions.
+    const allowedTwoChoice = new Set(["groupDefault"]);
     const tooSmall = Object.entries(FIELDS as Record<string, { choices?: string[] }>)
-      .filter(([, meta]) => meta.choices !== undefined && meta.choices.length < 3)
+      .filter(
+        ([name, meta]) =>
+          meta.choices !== undefined && meta.choices.length < 3 && !allowedTwoChoice.has(name),
+      )
       .map(([name]) => name);
     expect(tooSmall).toEqual([]);
   });
 
   it("declares guard as a boolean in the schema", () => {
     // The panel could be right and the schema wrong, or the reverse. This is the
-    // other half: `guard` is `z.boolean()`, not an enum of deny/off.
+    // other half: `guard` is `z.boolean()`, not an enum of deny/off. The check is
+    // scoped to the guard block because other settings (coordination) do use
+    // enums that include an "off" value.
     const schema = readFileSync("src/config.ts", "utf8");
     expect(schema).toMatch(/^ {2}guard: z\n?\s*\.boolean\(\)/m);
-    expect(schema).not.toContain('z.const("off")');
+    const guardBlock = schema.slice(
+      schema.indexOf("  guard: z"),
+      schema.indexOf("  readOnlyGit: z"),
+    );
+    expect(guardBlock).not.toContain("z.const(");
   });
 
   it("reads guard as a boolean in both places that check it", () => {

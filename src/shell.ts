@@ -97,3 +97,18 @@ export function runJj(
 ): Promise<RunResult> {
   return run(ctx, [binary, ...args], options);
 }
+
+/**
+ * Append the flag that keeps a read from snapshotting the working copy.
+ *
+ * Almost every `jj` command snapshots the working copy before it runs, so a
+ * history read in a shared workspace can capture another agent's half-written
+ * files into `@` and add an operation. Every read path in this plugin goes
+ * through this helper so a new read tool cannot forget the flag.
+ *
+ * `jj util snapshot` is the only read-shaped command allowed to write, and it
+ * is behind `jj_status({snapshot:true})`.
+ */
+export function readOnly(args: readonly string[]): string[] {
+  return [...args, "--ignore-working-copy"];
+}

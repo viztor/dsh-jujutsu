@@ -22,7 +22,7 @@ Every module below has a real signature and a documented contract. Build order i
 | `adopt.ts`       | Git-compatibility probe and the colocated `jj git init`              | `docs/37`                                 |
 | `preflight.ts`   | the 14 environment checks at `agent/created`                         | `docs/26` Part A                          |
 | `hunk.ts`        | the `jj-hunk` bridge                                                 | `docs/08`, `docs/24` §3.8                 |
-| `tools.ts`       | the eleven first-class tools                                         | `docs/18`, `docs/25` §3                   |
+| `tools.ts`       | the 28-tool agent surface                                            | `docs/40`                                 |
 | `state.ts`       | the cached per-session workspace state the prompt reads              | `docs/22` §2                              |
 | `marker.ts`      | the per-project switch, `.dsh-jujutsu.json`                          | `docs/29` §3                              |
 | `shell.ts`       | `ctx.shell` wrapper + `shellQuote`                                   | `docs/24` §1, §3.1                        |
@@ -32,7 +32,7 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 349 tests, `pnpm run ci` green:
+Implemented and tested — 383 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -52,7 +52,7 @@ Implemented and tested — 349 tests, `pnpm run ci` green:
 | `preflight.ts`  | gathers detection, `@`, and `jj-hunk` at `agent/created`                                                                                                                    |
 | `shell.ts`      | the `ctx.shell` wrapper and `shellQuote`                                                                                                                                    |
 | `hunk.ts`       | the `jj-hunk` bridge with its pre-checks                                                                                                                                    |
-| `tools.ts`      | the eleven `jj` tools, and `buildToolDefinitions` for testing them                                                                                                          |
+| `tools.ts`      | the `jj` tools, and `buildToolDefinitions` for testing them                                                                                                                 |
 
 ### Live verification
 
@@ -89,7 +89,7 @@ documentation _does_ state matches reality.
 
 ### One live verification is still pending, and the cause is now proven
 
-The guard is live-verified. The **eleven tools are not** — and the reason is a
+The guard is live-verified. The **tool surface is not** — and the reason is a
 harness behaviour, not a bug in this plugin: **a reinstall reloads the patch, not
 the code.** Three attempts, all measured:
 
@@ -107,7 +107,7 @@ reinstall reloads the patch, not the code".
 What that cost, and what it fixed: the first live install registered no tools and
 said nothing, because `applyTools` read the registry through `ctx.tools` only. It
 now reads **either** `ctx.tools` or `ctx.get('tools')`, and `buildToolDefinitions`
-is exported so a test validates all eleven against the real `defineTool` without a
+is exported so a test validates every tool against the real `defineTool` without a
 live registry. A silent no-op behind a `catch` is the same failure the probe hit
 in `docs/35-probe-results-live.md`, and it is the reason that test exists.
 

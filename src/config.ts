@@ -211,4 +211,87 @@ export const Config = z.object({
       "Refuse jj commands outside a Jujutsu workspace, with a message naming jj git init --colocate. jj cannot run most commands without a workspace, so the refusal costs one call instead of a failed call; off leaves jj to fail with its own error. Only jj invocations are affected; Git commands keep their own settings.",
     )
     .volatile(),
+
+  /**
+   * Which tool tier to register. The full surface costs ~2.5k tokens of schema
+   * on every request; `core` is the safety-first 14, `minimal` is the five a
+   * small model can still drive.
+   */
+  toolset: z
+    .union([z.const("minimal"), z.const("core"), z.const("full")])
+    .default("full")
+    .description(
+      "How many jj tools to register. full (default) is the complete agent surface; core is the 14 safety-first tools; minimal is status, log, diff, new and hunk apply for tiny models. The guard and the prompt are unchanged.",
+    )
+    .volatile(),
+
+  /**
+   * Dependency directories `jj_test` clones into its ephemeral workspace.
+   * A CoW clone is what makes a full-suite run practical without a reinstall.
+   */
+  verifyCloneDirs: z
+    .array(z.string())
+    .default(["node_modules"])
+    .description(
+      "Directories jj_test copy-on-write clones from the session workspace into its ephemeral test workspace. Defaults to node_modules. Add build caches only when they are safe to share; a stale cache can hide a real failure.",
+    )
+    .volatile(),
+
+  /**
+   * Publishing (`jj git push`) is the one operation that leaves the machine.
+   * `ask` returns a dry-run preview and requires an explicit confirm; `deny`
+   * refuses; `allow` pushes without confirmation.
+   */
+  publish: z
+    .union([z.const("deny"), z.const("ask"), z.const("allow")])
+    .default("ask")
+    .description(
+      "What jj_publish may do with git push. ask (default) returns a dry-run preview and needs confirm:true; deny refuses every push; allow pushes without confirmation. Fetch and local tags are unaffected.",
+    )
+    .volatile(),
+
+  /**
+   * The bookmark prefix `jj_workspace add` uses to record which agent owns a
+   * workspace. Set to an empty string to disable ownership bookmarks.
+   */
+  agentBookmarkPrefix: z
+    .string()
+    .default("agent/")
+    .description(
+      "Bookmark prefix jj_workspace add uses to record workspace ownership, e.g. agent/agent-a. Empty disables the convention. jj_coordinate reads these bookmarks to group agents.",
+    )
+    .volatile(),
+
+  /**
+   * Where `jj_workspace add` puts a workspace when no path is given. Relative
+   * paths resolve from the session workspace root; `..` keeps siblings.
+   */
+  workspaceRoot: z
+    .string()
+    .default("..")
+    .description(
+      "Directory jj_workspace add uses when no path is passed. Relative paths resolve from the session workspace root; the default `..` creates siblings. Use an absolute path to keep workspaces on another volume.",
+    )
+    .volatile(),
+
+  /**
+   * How strongly to enforce workspace ownership. `advise` returns a warning;
+   * `enforce` refuses the edit; `off` does not check.
+   */
+  coordination: z
+    .union([z.const("off"), z.const("advise"), z.const("enforce")])
+    .default("advise")
+    .description(
+      "What to do when a tool targets a change that is another workspace's working copy. off does not check; advise (default) returns a warning; enforce refuses the edit. Prevents two agents from entering the same change.",
+    )
+    .volatile(),
+
+  /** Default grouping action jj_coordinate suggests for independent heads. */
+  groupDefault: z
+    .union([z.const("merge"), z.const("stack")])
+    .default("merge")
+    .description(
+      "What jj_coordinate suggests when several workspaces have independent heads. merge creates an integration merge; stack rebases the heads into a linear chain with jj_group. The Lead still decides.",
+    )
+    .volatile(),
 });

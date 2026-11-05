@@ -51,6 +51,17 @@ export const ErrorCode = {
   // The codes outlived the decision to reject the mechanism.
   SHELL_EXEC_FAILED: "SHELL_EXEC_FAILED",
   SHELL_TIMEOUT: "SHELL_TIMEOUT",
+  // The agent-surface additions (docs/39). One code per family, not one per
+  // command: the model needs to tell "the destination was wrong" from "the
+  // command failed", and a code per flag would be a vocabulary nobody reads.
+  JJ_SNAPSHOT_FAILED: "JJ_SNAPSHOT_FAILED",
+  JJ_WORKSPACE_NOT_FOUND: "JJ_WORKSPACE_NOT_FOUND",
+  JJ_TEST_WORKSPACE_FAILED: "JJ_TEST_WORKSPACE_FAILED",
+  JJ_REBASE_SOURCE_AMBIGUOUS: "JJ_REBASE_SOURCE_AMBIGUOUS",
+  JJ_REBASE_DESTINATION_AMBIGUOUS: "JJ_REBASE_DESTINATION_AMBIGUOUS",
+  JJ_OP_NOT_FOUND: "JJ_OP_NOT_FOUND",
+  JJ_CHANGE_OWNED_BY_WORKSPACE: "JJ_CHANGE_OWNED_BY_WORKSPACE",
+  JJ_PUBLISH_APPROVAL_REQUIRED: "JJ_PUBLISH_APPROVAL_REQUIRED",
   // `FS_ERROR` was here. It named "ctx.fs.stat / readText throws while probing",
   // which this plugin swallows everywhere on purpose: the guard fails **open** on
   // a filesystem error, and a probe that cannot read is treated as a path that is

@@ -39,10 +39,28 @@ export interface Settings {
    * repo in "." — a call the model cannot learn anything from.
    */
   readonly forceJj: boolean;
+  /** Which tool tier to register: minimal, core, or the full agent surface. */
+  readonly toolset: "minimal" | "core" | "full";
+  /** Directories `jj_test` copy-on-write clones into its ephemeral workspace. */
+  readonly verifyCloneDirs: readonly string[];
+  /** What `jj_publish` may do with `git push`. */
+  readonly publish: "deny" | "ask" | "allow";
+  /** Bookmark prefix recording which agent owns a workspace; empty disables. */
+  readonly agentBookmarkPrefix: string;
+  /** Directory `jj_workspace add` uses when no path is passed. */
+  readonly workspaceRoot: string;
+  /** How strongly to enforce workspace ownership. */
+  readonly coordination: "off" | "advise" | "enforce";
+  /** Default grouping action jj_coordinate suggests. */
+  readonly groupDefault: "merge" | "stack";
 }
 
 const READ_ONLY = ["deny", "ask", "allow"] as const;
 const INSTALL = ["ask", "never", "auto"] as const;
+const TOOLSET = ["minimal", "core", "full"] as const;
+const PUBLISH = ["deny", "ask", "allow"] as const;
+const COORDINATION = ["off", "advise", "enforce"] as const;
+const GROUP_DEFAULT = ["merge", "stack"] as const;
 
 /** Narrow one enum field, falling back to `fallback`. */
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -57,6 +75,13 @@ function boolean(value: unknown, fallback: boolean): boolean {
 
 function string(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+/** Narrow a string array, dropping empty entries; fall back when absent. */
+function strings(value: unknown, fallback: readonly string[]): readonly string[] {
+  if (!Array.isArray(value)) return fallback;
+  const out = value.filter((item): item is string => typeof item === "string" && item.length > 0);
+  return out.length > 0 ? out : fallback;
 }
 
 /**
@@ -80,5 +105,13 @@ export function resolveSettings(raw: unknown): Settings {
     preferJj: boolean(row.preferJj, true),
     adoptGitRepos: boolean(row.adoptGitRepos, false),
     forceJj: boolean(row.forceJj, false),
+    toolset: oneOf(row.toolset, TOOLSET, "full"),
+    verifyCloneDirs: strings(row.verifyCloneDirs, ["node_modules"]),
+    publish: oneOf(row.publish, PUBLISH, "ask"),
+    agentBookmarkPrefix:
+      typeof row.agentBookmarkPrefix === "string" ? row.agentBookmarkPrefix : "agent/",
+    workspaceRoot: string(row.workspaceRoot, ".."),
+    coordination: oneOf(row.coordination, COORDINATION, "advise"),
+    groupDefault: oneOf(row.groupDefault, GROUP_DEFAULT, "merge"),
   };
 }

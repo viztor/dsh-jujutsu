@@ -1151,18 +1151,21 @@ function translateSwitch(args: readonly string[]): string | undefined {
 }
 
 /**
- * `git worktree add <path>` → `jj workspace add <path>`.
+ * `git worktree add <path>` → `jj workspace add --colocate <path>`, and
+ * `git worktree list` → `jj workspace list`.
  *
- * The destination-only form. The flags Git and `jj` share for this
- * command do not overlap (`-b`, `--detach` vs `--name`, `-r`), so any
- * flag refuses the translation.
+ * The destination-only form. The flags Git and `jj` share for this command do
+ * not overlap (`-b`, `--detach` vs `--name`, `-r`), so any flag refuses the
+ * translation. `remove` takes a workspace *name* while Git takes a path; the
+ * two are not interchangeable, so the fallback message handles it.
  */
 function translateWorktree(args: readonly string[]): readonly string[] | undefined {
+  if (args[0] === "list" && args.length === 1) return ["jj", "workspace", "list"];
   if (args[0] !== "add") return undefined;
   const [path] = args.slice(1);
   if (path === undefined || path.startsWith("-")) return undefined;
   if (args.length > 2) return undefined;
-  return ["jj", "workspace", "add", path];
+  return ["jj", "workspace", "add", "--colocate", path];
 }
 
 /**

@@ -119,26 +119,40 @@ jj records them as Git does and they keep working, but jj does not manage them �
 there is no \`jj submodule\` command, so updating one is the user's job or a plain
 Git checkout's.
 
-## The eleven tools
+## The tools
 
-Prefer these over shelling out: every one returns JSON rather than jj's
+Prefer these over shelling out: each returns JSON rather than jj's
 graph-and-prose output, and the mutating ones refuse states that would corrupt
-the graph.
+the graph. Reads pass \`--ignore-working-copy\`, so a history read never captures
+another agent's half-written files; \`jj_status({snapshot:true})\` is the one
+read that writes, and it returns the checkpoint \`opId\`.
 
-- Reads: \`jj_status\`, \`jj_log\` (\`revset\`, \`limit\`), \`jj_diff\`
-  (\`revset\`), \`jj_op_log\`.
-- Mutations: \`jj_new\` (\`revset\`, \`message\`), \`jj_describe\` (\`message\`),
-  \`jj_squash\` (\`from\`, \`into\`), \`jj_bookmark\` (\`list\` | \`create\` |
-  \`set\` | \`move\` | \`delete\` | \`forget\` | \`rename\` | \`track\` |
-  \`untrack\`; \`-r\` for create/set, \`--to\` for move), \`jj_op_restore\`
-  (\`opId\`).
-- Hunks: \`jj_hunk_list\` (preview a \`query\`), \`jj_hunk_apply\` (\`split\` |
-  \`commit\` | \`squash\`; \`query\` required, \`message\` for split/commit).
+- Read: \`jj_status\` (\`opId\`, \`divergent\`, \`conflicts\`; \`snapshot\`),
+  \`jj_log\`, \`jj_diff\` (\`interdiff\`), \`jj_show\`, \`jj_file\`
+  (\`list\`/\`show\`/\`search\`/\`annotate\`), \`jj_evolog\`, \`jj_op_log\`.
+- Author: \`jj_new\`, \`jj_describe\`, \`jj_commit\` (\`commit\`/\`split\`),
+  \`jj_edit\`, \`jj_squash\`, \`jj_hunk_list\`, \`jj_hunk_apply\`.
+- History: \`jj_history\` (\`rebase\`/\`duplicate\`/\`revert\`/\`abandon\`/
+  \`restore\`/\`metaedit\`), \`jj_repair\` (\`undo\`/\`redo\`/\`absorb\`/
+  \`converge\`).
+- Recover: \`jj_op\` (\`log\`/\`show\`/\`diff\`/\`restore\`/\`revert\`/
+  \`abandon\`/\`integrate\`), \`jj_op_restore\`.
+- Workspaces: \`jj_workspace\` (\`list\`/\`add\`/\`remove\`/\`forget\`/
+  \`update-stale\`/\`root\`/\`rename\`). A workspace path is the \`cwd\` for another
+  agent; \`add\` writes an \`agent/<name>\` ownership bookmark.
+- Coordinate: \`jj_coordinate\` plans groups from those bookmarks;
+  \`jj_group\` merges, squashes or names them; \`jj_doctor\` reports readiness.
+- Verify: \`jj_test\` (\`test\`/\`run\`/\`bisect\`), \`jj_fix\`.
+- Publish: \`jj_bookmark\`, \`jj_publish\` (\`push\`/\`fetch\`/tags; push asks or
+  denies by default).
+
+Every commit-rewriting mutation returns \`opId\`; destructive history tools also return
+\`beforeOpId\`, so \`jj_op({action:"restore", opId: beforeOpId})\` undoes them.
 
 What they refuse: a missing \`user.name\`/\`user.email\` (fix with
 \`jj config set --user user.name "…"\` and the same for \`user.email\`), a
-conflicted \`@\` for \`jj_new\`, \`jj_squash\` and \`jj_hunk_apply\`, and anything
-interactive — pass the query, message and revset as arguments.
+conflicted \`@\` for the tools that rewrite it, and anything interactive — pass
+the query, message and revset as arguments.
 
 ## Selecting hunks
 

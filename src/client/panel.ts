@@ -274,6 +274,14 @@ const STRINGS: Record<string, Record<string, string>> = {
     valueDeny: "Deny",
     valueAsk: "Ask",
     valueAllow: "Allow",
+    valueMinimal: "Minimal",
+    valueCore: "Core",
+    valueFull: "Full",
+    valueOff: "Off",
+    valueAdvise: "Advise",
+    valueEnforce: "Enforce",
+    valueMerge: "Merge",
+    valueStack: "Stack",
 
     groupGuard: "Guard",
     groupInit: "When there is no repository",
@@ -308,6 +316,18 @@ const STRINGS: Record<string, Record<string, string>> = {
     teachSkillLabel: "Offer the jj manual",
     teachSkillHint:
       "Offer the jj manual as an on-demand skill. It costs nothing either way; off only means the model has less to read when it needs depth.",
+    toolsetLabel: "Tool surface",
+    toolsetHint:
+      "How many jj tools to register. full (default) is the complete agent surface; core is the 14 safety-first tools; minimal is status, log, diff, new and hunk apply for tiny models. The guard and the prompt are unchanged.",
+    publishLabel: "Publishing",
+    publishHint:
+      "What jj_publish may do with git push. ask (default) returns a dry-run preview and needs confirm:true; deny refuses every push; allow pushes without confirmation. Fetch and local tags are unaffected.",
+    coordinationLabel: "Workspace ownership",
+    coordinationHint:
+      "What to do when a tool targets a change that is another workspace's working copy. off does not check; advise (default) returns a warning; enforce refuses the edit. Prevents two agents from entering the same change.",
+    groupDefaultLabel: "Default grouping",
+    groupDefaultHint:
+      "What jj_coordinate suggests when several workspaces have independent heads. merge creates an integration merge; stack rebases the heads into a linear chain with jj_group. The Lead still decides.",
   },
   zh: {
     save: "保存",
@@ -321,6 +341,14 @@ const STRINGS: Record<string, Record<string, string>> = {
     valueDeny: "拒绝",
     valueAsk: "询问",
     valueAllow: "允许",
+    valueMinimal: "最小",
+    valueCore: "核心",
+    valueFull: "完整",
+    valueOff: "关闭",
+    valueAdvise: "提醒",
+    valueEnforce: "强制",
+    valueMerge: "合并",
+    valueStack: "堆叠",
 
     groupGuard: "拦截",
     groupInit: "当目录中没有版本控制",
@@ -355,6 +383,18 @@ const STRINGS: Record<string, Record<string, string>> = {
     teachSkillLabel: "提供 jj 手册",
     teachSkillHint:
       "将 jj 手册作为按需技能提供。对 token 影响中性；关闭只意味着模型在需要深入时能读到的内容更少。",
+    toolsetLabel: "工具集",
+    toolsetHint:
+      "注册多少 jj 工具。完整是全部面向代理的能力；核心是 14 个安全优先的工具；最小是极小模型也能驱动的 5 个。拦截与提示不受影响。",
+    publishLabel: "发布",
+    publishHint:
+      "jj_publish 对 git push 的处理方式。询问会返回 dry-run 预览并要求 confirm:true；拒绝所有推送；允许无需确认。fetch 与本地标签不受影响。",
+    coordinationLabel: "工作区归属",
+    coordinationHint:
+      "当工具的目标是另一个工作区的工作副本时如何处理。关闭不检查；提醒（默认）返回警告；强制拒绝编辑。避免两个代理进入同一个变更。",
+    groupDefaultLabel: "默认分组方式",
+    groupDefaultHint:
+      "当多个工作区有独立头时 jj_coordinate 建议的方式。合并创建集成合并；堆叠用 jj_group 把头重排为线性链。最终仍由 Lead 决定。",
   },
 };
 
@@ -405,6 +445,30 @@ const FIELDS: Record<string, FieldMeta> = {
   forceJj: { kind: "boolean", labelKey: "forceJjLabel", hintKey: "forceJjHint" },
   injectContext: { kind: "boolean", labelKey: "injectContextLabel", hintKey: "injectContextHint" },
   teachSkill: { kind: "boolean", labelKey: "teachSkillLabel", hintKey: "teachSkillHint" },
+  toolset: {
+    kind: "enum",
+    labelKey: "toolsetLabel",
+    hintKey: "toolsetHint",
+    choices: ["minimal", "core", "full"],
+  },
+  publish: {
+    kind: "enum",
+    labelKey: "publishLabel",
+    hintKey: "publishHint",
+    choices: ["deny", "ask", "allow"],
+  },
+  coordination: {
+    kind: "enum",
+    labelKey: "coordinationLabel",
+    hintKey: "coordinationHint",
+    choices: ["off", "advise", "enforce"],
+  },
+  groupDefault: {
+    kind: "enum",
+    labelKey: "groupDefaultLabel",
+    hintKey: "groupDefaultHint",
+    choices: ["merge", "stack"],
+  },
 };
 
 interface GroupMeta {
@@ -445,7 +509,7 @@ const GROUPS: readonly GroupMeta[] = [
   {
     id: "prompt",
     titleKey: "groupPrompt",
-    fields: ["injectContext", "teachSkill"],
+    fields: ["injectContext", "teachSkill", "toolset", "publish", "coordination", "groupDefault"],
   },
 ];
 

@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { applyTools, TOOL_NAMES } from "../src/tools.ts";
+import { applyTools, CORE_TOOL_NAMES, MINIMAL_TOOL_NAMES, TOOL_NAMES } from "../src/tools.ts";
 import { resolveSettings } from "../src/settings.ts";
 import { fakeHarness, realShell } from "./helpers.ts";
 
@@ -24,7 +24,7 @@ function registered() {
   return harness.tools.map((tool) => String(tool.name));
 }
 
-describe("the eleven tools", () => {
+describe("the agent surface", () => {
   it("registers every documented name, exactly once", () => {
     const names = registered();
     expect(new Set(names).size).toBe(names.length);
@@ -33,11 +33,23 @@ describe("the eleven tools", () => {
     }
   });
 
-  it("registers the documented count", () => {
-    // docs/18 says eleven: 4 reads, 5 mutations, 2 hunk. An earlier draft said
-    // "ten" while listing eleven, which a subagent caught.
-    expect(TOOL_NAMES).toHaveLength(11);
-    expect(registered()).toHaveLength(11);
+  it("registers the full surface by default", () => {
+    // docs/40: core is 14, full adds inspection, authoring, surgery, publishing,
+    // coordination and diagnostics. The default is full because the plugin is a
+    // power-user surface; `toolset:"core"` is the smaller prompt.
+    expect(TOOL_NAMES).toHaveLength(28);
+    expect(CORE_TOOL_NAMES).toHaveLength(14);
+    expect(MINIMAL_TOOL_NAMES).toHaveLength(5);
+    expect(registered()).toHaveLength(28);
+  });
+
+  it("honours the core and minimal tiers", () => {
+    const core = fakeHarness();
+    applyTools(core.ctx, resolveSettings({ toolset: "core" }));
+    expect(core.tools).toHaveLength(14);
+    const minimal = fakeHarness();
+    applyTools(minimal.ctx, resolveSettings({ toolset: "minimal" }));
+    expect(minimal.tools).toHaveLength(5);
   });
 
   it("gives every tool a description that names its jj fact", () => {
@@ -78,7 +90,7 @@ describe("every definition survives the real defineTool", () => {
     const { buildToolDefinitions } = await import("../src/tools.ts");
     const harness = fakeHarness();
     const definitions = buildToolDefinitions(harness.ctx, resolveSettings({}));
-    expect(definitions).toHaveLength(11);
+    expect(definitions).toHaveLength(28);
     for (const definition of definitions) {
       const name = String(definition.name);
       expect(() => defineTool(definition as never), name).not.toThrow();

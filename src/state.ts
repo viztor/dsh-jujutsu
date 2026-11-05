@@ -61,6 +61,16 @@ export interface WorkspaceState {
    * same answer from the same two sources.
    */
   readonly forceJj?: boolean;
+  /**
+   * The operation id captured when the session was created.
+   *
+   * This is the rollback anchor: `jj op restore <startOp>` teleports the whole
+   * repository back to the state the session inherited. It is captured with
+   * `--ignore-working-copy`, so taking the checkpoint never snapshots anything.
+   */
+  readonly startOp?: string;
+  /** The workspace name, when `jj workspace list` could be asked. */
+  readonly workspaceName?: string;
 }
 
 /** session id → state. Sessions are few and long-lived, so a plain Map is right. */

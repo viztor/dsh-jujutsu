@@ -402,7 +402,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     classification: "deny",
     message: {
       reason:
-        "Refused: git worktree add. Run: jj workspace add <path>. Workspaces are Jujutsu's native multi-working-copy feature.",
+        "Refused: git worktree add. Run: jj workspace add --colocate <path>. Workspaces are Jujutsu's native multi-working-copy feature, and --colocate gives the new workspace its own Git worktree so Git-aware tooling keeps working.",
       /* display falls back to reason */
     },
   },

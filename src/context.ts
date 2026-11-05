@@ -176,7 +176,13 @@ function renderState(context: unknown, settings: Settings): string {
   const lines = [
     `Workspace root: ${state.root}`,
     `Layout: ${layout}`,
+    ...(state.workspaceName === undefined ? [] : [`Workspace: ${state.workspaceName}`]),
     `Working copy @: ${state.changeId ?? "unknown"}`,
+    // The rollback anchor. It is captured with --ignore-working-copy, so it is
+    // the state this session inherited, not a fresh snapshot.
+    ...(state.startOp === undefined
+      ? []
+      : [`Session checkpoint: op ${state.startOp}. Restore with jj_op_restore ${state.startOp}.`]),
     `Hunk selection: ${hunk}`,
     // The card itself is loaded on demand; this line is the only thing that
     // tells the model it exists. Without it, a cold start has to discover the
