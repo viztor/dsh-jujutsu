@@ -6,6 +6,13 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.3.3](https://github.com/viztor/dsh-jujutsu/compare/v0.3.2...v0.3.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* **release:** write the GitHub Packages token to the npmrc npm reads ([737cfd9](https://github.com/viztor/dsh-jujutsu/commit/737cfd9dc445b5ef587ff4061859af20821061b5))
+
 ## [0.3.2](https://github.com/viztor/dsh-jujutsu/compare/v0.3.1...v0.3.2) (2026-11-05)
 
 ### Bug Fixes
