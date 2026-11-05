@@ -8,21 +8,19 @@ for the bot to reconstruct.
 
 ## [0.3.0](https://github.com/viztor/dsh-jujutsu/compare/v0.2.0...v0.3.0) (2026-11-05)
 
-
 ### Features
 
-* adopt a plain Git repo for Jujutsu, and refuse the ones jj cannot hold ([ce41b23](https://github.com/viztor/dsh-jujutsu/commit/ce41b2390c1e3fc5af51ed16bf4fe54e89d78f42))
-* **agent:** add multi-agent coordination and the full jj tool surface ([cf38410](https://github.com/viztor/dsh-jujutsu/commit/cf384103d92fa212f8bab467edd35ad68089e3b5))
-* force Jujutsu on request, teach it from a skill, and stop refusing submodules ([0699b58](https://github.com/viztor/dsh-jujutsu/commit/0699b5849f069438c817e5b4717a783eb28d5845))
-
+- adopt a plain Git repo for Jujutsu, and refuse the ones jj cannot hold ([ce41b23](https://github.com/viztor/dsh-jujutsu/commit/ce41b2390c1e3fc5af51ed16bf4fe54e89d78f42))
+- **agent:** add multi-agent coordination and the full jj tool surface ([cf38410](https://github.com/viztor/dsh-jujutsu/commit/cf384103d92fa212f8bab467edd35ad68089e3b5))
+- force Jujutsu on request, teach it from a skill, and stop refusing submodules ([0699b58](https://github.com/viztor/dsh-jujutsu/commit/0699b5849f069438c817e5b4717a783eb28d5845))
 
 ### Bug Fixes
 
-* a quoted heredoc body is data, not a Git invocation ([ba928e9](https://github.com/viztor/dsh-jujutsu/commit/ba928e9b92a7b5528f412c183c4cb41df9778c76))
-* **package:** describe the tiered tool surface ([3c54951](https://github.com/viztor/dsh-jujutsu/commit/3c54951379ac16472fd2b8435113c2b8001a7414))
-* **package:** keep peer ranges inside the tested DSH alpha line ([867c147](https://github.com/viztor/dsh-jujutsu/commit/867c1470288035859db6b1ab8ea4c0427b9a6355))
-* the adoption probe accepted repositories jj would corrupt ([1b2bbb7](https://github.com/viztor/dsh-jujutsu/commit/1b2bbb7aa21edaf376f341830489c03d897491e2))
-* the adoption tests commit without a Git identity, so CI could not run them ([fcec783](https://github.com/viztor/dsh-jujutsu/commit/fcec78381d0de40a627867013723c0351947a659))
+- a quoted heredoc body is data, not a Git invocation ([ba928e9](https://github.com/viztor/dsh-jujutsu/commit/ba928e9b92a7b5528f412c183c4cb41df9778c76))
+- **package:** describe the tiered tool surface ([3c54951](https://github.com/viztor/dsh-jujutsu/commit/3c54951379ac16472fd2b8435113c2b8001a7414))
+- **package:** keep peer ranges inside the tested DSH alpha line ([867c147](https://github.com/viztor/dsh-jujutsu/commit/867c1470288035859db6b1ab8ea4c0427b9a6355))
+- the adoption probe accepted repositories jj would corrupt ([1b2bbb7](https://github.com/viztor/dsh-jujutsu/commit/1b2bbb7aa21edaf376f341830489c03d897491e2))
+- the adoption tests commit without a Git identity, so CI could not run them ([fcec783](https://github.com/viztor/dsh-jujutsu/commit/fcec78381d0de40a627867013723c0351947a659))
 
 ## [0.2.0](https://github.com/viztor/dsh-jujutsu/compare/v0.1.0...v0.2.0) (2026-10-18)
 
