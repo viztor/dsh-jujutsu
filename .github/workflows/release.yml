@@ -286,9 +286,25 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-          # Write auth token for GitHub Packages into the runner .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> "$HOME/.npmrc"
-          echo "@$owner:registry=https://npm.pkg.github.com" >> "$HOME/.npmrc"
+          # Write the GitHub Packages token into the npmrc npm actually reads.
+          #
+          # `$HOME/.npmrc` is the wrong file here, and it failed exactly the way a
+          # wrong file does — silently, as `ENEEDAUTH` ("You need to authorize this
+          # machine using `npm adduser`") from a runner that had the token all
+          # along. `setup-node` with `registry-url` exports
+          # `NPM_CONFIG_USERCONFIG=/home/runner/work/_temp/.npmrc` and points npm
+          # at that copy instead; the step above already worked this out for the
+          # `_authToken` it strips, and this one did not, so the token was appended
+          # to a file nothing reads. The 0.3.2 release published to npmjs.org and
+          # then failed here.
+          #
+          # Resolved the same way the OIDC step resolves it, because two steps
+          # disagreeing about which .npmrc is in play is how this bug happened
+          # twice in different places.
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> "$npmrc"
+          echo "@$owner:registry=https://npm.pkg.github.com" >> "$npmrc"
+          echo "wrote the GitHub Packages registry and token to $npmrc"
 
           if npm view "$pkg_name@$version" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
             echo "$pkg_name@$version is already on GitHub Packages, skipping"
