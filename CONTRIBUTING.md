@@ -96,9 +96,47 @@ npm trust github dsh-jujutsu --file release.yml --repo viztor/dsh-jujutsu --allo
 npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu --allow-publish
 ```
 
-**This has already happened here.** `dsh-jujutsu@0.1.0` was the token-based
-bootstrap, and `0.2.0` was the first release published through OIDC — the first
-time this pipeline ran at all. Both publishers are configured.
+**This has already happened here, and then it stopped working.**
+`dsh-jujutsu@0.1.0` was the token-based bootstrap, and `0.2.0` was the first
+release published through OIDC — the registry carries `slsa.dev/provenance/v1`
+attestations for it, which only a trusted publisher issues. Both entries were
+configured and matched. Read the next subsection before trusting that they still
+do.
+
+#### 2026-11-05: OIDC publishing failed, so treat both entries as absent
+
+`0.2.0` published through OIDC on 2026-10-18. On 2026-11-05 both publish paths
+failed at `npm publish` with `ENEEDAUTH` ("This command requires you to be logged
+in to https://registry.npmjs.org/"): `release-please.yml` when it cut `v0.3.0` and
+again for `v0.3.1`, then `release.yml` on a manual `workflow_dispatch` for `0.3.2`.
+
+**The error is the diagnostic.** `ENEEDAUTH`, not a provenance or permission
+error, means npm fell back to token authentication — the run was not recognised as
+a trusted publisher at all. The workflow is not the cause: the publish job carries
+`id-token: write`, and the step that strips the placeholder `_authToken` line from
+`.npmrc` ran, so there was no token to fall back to and nothing to mistake it for.
+
+One candidate is the two-day rule above: a configuration that never completes its
+first publish is said to expire, and the failing entries may never have published
+(the only OIDC publish this repository has ever done went through
+`release-please.yml`). npm also began restricting tokens that bypass 2FA around
+this period, which is worth checking on the account itself. Either way the
+remedy is the same, because npm validates a configuration only on a publish:
+
+```bash
+npm login
+npm trust list dsh-jujutsu   # what is actually registered, and for which workflow
+npm trust github dsh-jujutsu --file release.yml --repo viztor/dsh-jujutsu --allow-publish
+npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu --allow-publish
+```
+
+Then re-run the release: Actions → _release_ → _Run workflow_ → `dry-run: false`.
+Re-running is safe for a version that failed to publish — the publish step skips
+versions already on the registry.
+
+The local token is **not** a fallback right now: `npm whoami` rejects the one in
+`~/.npmrc` with 401, so a fresh login or a fresh granular token is a prerequisite
+for any of the above.
 
 #### The token: keep it or drop it, both work
 
