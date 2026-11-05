@@ -6,6 +6,13 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.3.1](https://github.com/viztor/dsh-jujutsu/compare/v0.3.0...v0.3.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **changelog:** format the 0.3.0 release bullets ([0fe9efb](https://github.com/viztor/dsh-jujutsu/commit/0fe9efb0644ac27038f15d001657196e38ff3b7d))
+
 ## [0.3.0](https://github.com/viztor/dsh-jujutsu/compare/v0.2.0...v0.3.0) (2026-11-05)
 
 ### Features
