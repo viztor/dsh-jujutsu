@@ -96,14 +96,14 @@ npm trust github dsh-jujutsu --file release.yml --repo viztor/dsh-jujutsu --allo
 npm trust github dsh-jujutsu --file release-please.yml --repo viztor/dsh-jujutsu --allow-publish
 ```
 
-**This has already happened here, and then it stopped working.**
-`dsh-jujutsu@0.1.0` was the token-based bootstrap, and `0.2.0` was the first
-release published through OIDC — the registry carries `slsa.dev/provenance/v1`
-attestations for it, which only a trusted publisher issues. Both entries were
-configured and matched. Read the next subsection before trusting that they still
-do.
+**This has already happened here.** `dsh-jujutsu@0.1.0` was the token-based
+bootstrap, and `0.2.0` was the first release published through OIDC — the registry
+carries `slsa.dev/provenance/v1` attestations for it, which only a trusted
+publisher issues. Both entries were configured and matched. They then stopped
+matching for a while; the next subsection is what that looked like and how it was
+repaired.
 
-#### 2026-11-05: OIDC publishing failed, so treat both entries as absent
+#### 2026-11-05: OIDC publishing broke, and how it was put back
 
 `0.2.0` published through OIDC on 2026-10-18. On 2026-11-05 both publish paths
 failed at `npm publish` with `ENEEDAUTH` ("This command requires you to be logged
@@ -134,9 +134,31 @@ Then re-run the release: Actions → _release_ → _Run workflow_ → `dry-run: 
 Re-running is safe for a version that failed to publish — the publish step skips
 versions already on the registry.
 
-The local token is **not** a fallback right now: `npm whoami` rejects the one in
-`~/.npmrc` with 401, so a fresh login or a fresh granular token is a prerequisite
-for any of the above.
+**Resolution, same day.** Both entries were re-created on npmjs.com with **Allow
+npm publish** ticked, and the manual path then published `0.3.2` through OIDC. The
+registry is the proof, not the run's green tick:
+
+- `dist-tags.latest` moved `0.2.0` → `0.3.2`;
+- the version carries `slsa.dev/provenance/v1`;
+- it records `_npmUser.name = "GitHub Actions"` with a `trustedPublisher.oidcConfigId`,
+  which is a shape a token publish can never produce.
+
+Nothing in the workflow changed between the failure and the success — only the
+configuration on npm. So the entries can lapse and be restored, and a red publish
+is worth re-checking before it is worth debugging.
+
+Two operational notes from doing it: `npm trust` demands a one-time password on
+every invocation, and that OTP is web-based
+(`https://www.npmjs.com/auth/cli/<id>`) rather than a code you paste — the CLI
+polls `/-/v1/done` until the page is approved, and the session expires in minutes,
+so keep the browser and the terminal in step. `npm login --auth-type=web` works the
+same way, and its link expires too.
+
+The token in `~/.npmrc` is a dead classic token (`npm whoami` → 401), so a fresh
+login or a fresh granular token is a prerequisite for any of this from a
+workstation. The repair above used `npm login --auth-type=web` into a throwaway
+`NPM_CONFIG_USERCONFIG` rather than replacing `~/.npmrc`, so the broken token was
+never mistaken for a working one.
 
 #### The token: keep it or drop it, both work
 
