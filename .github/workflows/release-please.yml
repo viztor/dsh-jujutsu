@@ -112,37 +112,71 @@ jobs:
       #    history, nothing to push. `GITHUB_HEAD_REF`, which was meant to name
       #    the release PR's branch, is unset on a `push` event regardless.
       #
-      # So: check out the release PR's branch, rewrite the bullet character, push
-      # it back. The branch name comes from the action's `prs` output, a JSON
-      # array of `{ number, title, headBranchName, … }`.
+      # So: check out the release PR's branch, format the changelog, push it back.
+      # The branch name comes from the action's `prs` output, a JSON array of
+      # `{ number, title, headBranchName, … }`.
       #
-      # Three steps, because each has a distinct failure mode. The rewrite is
-      # `sed` on purpose: `vp check --fix` would need a full `pnpm install` in a
-      # job that has no Node at all, and it rewrites every Markdown file it can
-      # reach rather than the one character this step is aimed at. The rewrite
-      # has to come after the checkout, because the file only exists once the
-      # branch is on disk, and before the push, because that is where the result
-      # leaves the machine.
+      # == The formatter, not a reimplementation of it ==
       #
-      # Formatting here is the durable answer. The alternative — waiving the gate
-      # for the one file release-please owns — makes the release PR the only PR in
-      # the repository allowed to be red, and a rule with an exception is a rule
-      # you learn to ignore.
+      # This step first rewrote the bullets with `sed -i 's/^\* /- /'`, on the
+      # theory that the bullet character was the entire difference between what
+      # release-please writes and what `vp check` accepts. It is not: release-please
+      # also emits two blank lines between a version heading and its first
+      # section, and the formatter collapses them to one. The sed fix corrected the
+      # bullets, left the blank line, and 0.3.3 was refused by the gate in the
+      # publish path — with the tag already cut and the GitHub release already
+      # created. A release PR whose CI is skipped (see `RELEASE_PLEASE_TOKEN`)
+      # reaches `main` untested, so the first time anyone sees the diff is when the
+      # gate blocks the publish.
+      #
+      # The lesson is not "add one more sed". The formatter defines what
+      # "formatted" means; reimplementing it here is a second definition, and the
+      # two drift silently until a release fails. So the toolchain runs, and
+      # `vp check` decides.
+      #
+      # That costs an install in a job that otherwise has no Node. It is paid only
+      # when a release PR is created or updated — `prs_created` is false on every
+      # other push — and `./.github/actions/setup` is reused rather than
+      # re-listed, because two lists of setup steps is how `ci.yml` and
+      # `release.yml` drifted apart once already.
+      #
+      # Formatting here is still the durable answer. The alternative — waiving the
+      # gate for the one file release-please owns — makes the release PR the only
+      # PR in the repository allowed to be red, and a rule with an exception is a
+      # rule you learn to ignore.
       - name: Check out the release pull request
         if: steps.release.outputs.prs_created == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ fromJSON(steps.release.outputs.prs)[0].headBranchName }}
 
+      - name: Install the toolchain the formatter lives in
+        if: steps.release.outputs.prs_created == 'true'
+        uses: ./.github/actions/setup
+
+      # Path-limited on purpose: the formatter is being asked about one generated
+      # file, and a `--fix` across the tree in a job that pushes to a release
+      # branch is a much larger permission than this needs. The guard below fails
+      # if the formatter touched anything else, so that assumption is checked
+      # rather than assumed.
       - name: Format the generated changelog
         if: steps.release.outputs.prs_created == 'true'
         run: |
-          sed -i -E 's/^\* /- /' CHANGELOG.md
+          ./node_modules/.bin/vp check --fix CHANGELOG.md
+
           if grep -q '^\* ' CHANGELOG.md; then
-            echo "::error file=CHANGELOG.md::star bullets survived the rewrite"
+            echo "::error file=CHANGELOG.md::star bullets survived formatting"
             exit 1
           fi
-          echo "dash bullets: $(grep -c '^- ' CHANGELOG.md)"
+
+          other="$(git status --porcelain | grep -v ' CHANGELOG.md$' || true)"
+          if [ -n "$other" ]; then
+            echo "::error::the changelog formatter changed more than CHANGELOG.md:"
+            echo "$other"
+            exit 1
+          fi
+
+          git diff --stat -- CHANGELOG.md || true
 
       - name: Push the formatted changelog
         if: steps.release.outputs.prs_created == 'true'
