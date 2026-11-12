@@ -8,10 +8,9 @@ for the bot to reconstruct.
 
 ## [0.3.6](https://github.com/viztor/dsh-jujutsu/compare/v0.3.5...v0.3.6) (2026-11-12)
 
-
 ### Bug Fixes
 
-* **deps:** keep the 4.0.6 tuple so alpha prereleases stay admitted ([f08ff35](https://github.com/viztor/dsh-jujutsu/commit/f08ff358bdfc360d7c78deb159b715d7a8659ada))
+- **deps:** keep the 4.0.6 tuple so alpha prereleases stay admitted ([f08ff35](https://github.com/viztor/dsh-jujutsu/commit/f08ff358bdfc360d7c78deb159b715d7a8659ada))
 
 ## [0.3.5](https://github.com/viztor/dsh-jujutsu/compare/v0.3.4...v0.3.5) (2026-11-12)
 
