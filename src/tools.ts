@@ -41,6 +41,7 @@ import { ErrorCode, type ToolError, toolError } from "./errors.ts";
 import { applyHunks, listHunks } from "./hunk.ts";
 import type { Settings } from "./settings.ts";
 import { ShellUnavailableError, readOnly, run, runJj, shellQuote } from "./shell.ts";
+import { currentWorkspaceNameFrom } from "./workspace.ts";
 
 /**
  * The tool set, in registration order. The tier lists below decide which subset
@@ -517,12 +518,7 @@ async function currentWorkspaceName(
   cwd: string,
 ): Promise<string | undefined> {
   const raw = await jj(ctx, settings, cwd, readOnly(["workspace", "list"]));
-  if (typeof raw !== "string") return undefined;
-  for (const line of raw.split("\n")) {
-    const match = /^(\S+):\s+\.(?:\s|$)/.exec(line);
-    if (match !== null) return match[1];
-  }
-  return undefined;
+  return typeof raw === "string" ? currentWorkspaceNameFrom(raw) : undefined;
 }
 
 /**

@@ -37,6 +37,7 @@ import { type Marker, markerFor } from "./marker.ts";
 import type { Settings } from "./settings.ts";
 import { runJj, readOnly } from "./shell.ts";
 import { setWorkspaceState } from "./state.ts";
+import { currentWorkspaceNameFrom } from "./workspace.ts";
 
 interface SessionLike {
   readonly id?: string;
@@ -232,11 +233,8 @@ async function workspaceName(
       timeoutMs: 10_000,
     });
     if (result.exitCode !== 0) return {};
-    for (const line of result.stdout.split("\n")) {
-      const match = /^(\S+):\s+\.(?:\s|$)/.exec(line);
-      if (match !== null && match[1] !== undefined) return { workspaceName: match[1] };
-    }
-    return {};
+    const name = currentWorkspaceNameFrom(result.stdout);
+    return name === undefined ? {} : { workspaceName: name };
   } catch {
     return {};
   }

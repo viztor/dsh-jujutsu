@@ -27,12 +27,13 @@ Every module below has a real signature and a documented contract. Build order i
 | `marker.ts`      | the per-project switch, `.dsh-jujutsu.json`                          | `docs/29` §3                              |
 | `shell.ts`       | `ctx.shell` wrapper + `shellQuote`                                   | `docs/24` §1, §3.1                        |
 | `errors.ts`      | error codes and `toolError`                                          | `docs/26` Part B                          |
+| `workspace.ts`   | reads the current workspace name out of `jj workspace list`          | `SPEC.md` §5.9                            |
 
 ## State
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 383 tests, `pnpm run ci` green:
+Implemented and tested — 388 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
