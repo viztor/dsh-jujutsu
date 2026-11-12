@@ -8,10 +8,9 @@ for the bot to reconstruct.
 
 ## [0.3.5](https://github.com/viztor/dsh-jujutsu/compare/v0.3.4...v0.3.5) (2026-11-12)
 
-
 ### Bug Fixes
 
-* **deps:** declare support for the Cordis 4.1 line and the rc channel ([6061990](https://github.com/viztor/dsh-jujutsu/commit/6061990840e9b2ff405d8e33af0812d91d3ef92d))
+- **deps:** declare support for the Cordis 4.1 line and the rc channel ([6061990](https://github.com/viztor/dsh-jujutsu/commit/6061990840e9b2ff405d8e33af0812d91d3ef92d))
 
 ## [0.3.4](https://github.com/viztor/dsh-jujutsu/compare/v0.3.3...v0.3.4) (2026-11-05)
 
