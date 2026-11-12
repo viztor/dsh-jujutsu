@@ -6,6 +6,12 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.3.7](https://github.com/viztor/dsh-jujutsu/compare/v0.3.6...v0.3.7) (2026-11-12)
+
+### Bug Fixes
+
+- **status:** read the workspace name from jj 0.47's annotated listing ([77722ce](https://github.com/viztor/dsh-jujutsu/commit/77722ce872e3bb49c58e9a3534cb2eccc74e064c))
+
 ## [0.3.6](https://github.com/viztor/dsh-jujutsu/compare/v0.3.5...v0.3.6) (2026-11-12)
 
 ### Bug Fixes
