@@ -1,6 +1,6 @@
 # 18 — Tool surface (D4: the full first-class set)
 
-> **Superseded in part.** The implemented surface is now 24 tools
+> **Superseded in part.** The implemented surface is now 28 tools
 > ([40](40-consolidated-agent-surface-spec.md)). This document remains the
 > rationale for the original eleven and the schema-budget analysis; read it for
 > _why tools_, not for the current list.

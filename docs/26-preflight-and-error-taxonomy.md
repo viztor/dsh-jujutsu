@@ -1,6 +1,5 @@
 # 26 — Preflight and error taxonomy
 
-**Status:** specification. Nothing here is implemented.
 **Scope:** every environmental precondition the plugin checks, every error code
 it can produce, and the fail-open / fail-closed posture of each.
 **Toolchain measured against:** `jj` 0.46.0 (`/opt/homebrew/bin/jj`),

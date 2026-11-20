@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Jujutsu",
-    "description": "Refuses Git inside a Jujutsu workspace and hands the model the jj command instead."
+    "description": "Refuses Git in a Jujutsu workspace and hands back the jj command.",
+    "detail": "DETAIL.md"
   }
 }

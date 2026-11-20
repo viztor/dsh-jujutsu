@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Jujutsu",
-    "description": "在 Jujutsu 工作区中拒绝 Git 命令，并引导模型改用对应的 jj 命令。"
+    "description": "在 Jujutsu 工作区中拒绝 Git 命令，并把对应的 jj 命令返回给模型。",
+    "detail": "DETAIL.md"
   }
 }

@@ -1,10 +1,5 @@
 # 34 — The probe plan: what is needed to close the remaining unknowns
 
-**Status:** the plan, not the results. Three items are already closed this
-session ([33](33-probe-results-jj.md)) and six more are being closed by source
-reading ([31](31-probe-results-pipeline.md), [32](32-probe-results-teaching.md)).
-What is left needs **one throwaway plugin and one session**.
-
 ## 1. What is still open, and what settles it
 
 | #       | Question                                                                      | Settled by                                                                  | Blocked on                  |

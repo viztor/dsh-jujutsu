@@ -25,7 +25,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { PreToolDecision, ToolExecution } from "@deepseek-ai/dsh-tools";
 
-import { isRemembered } from "./bypass.ts";
+import { isReadOnlyRemembered, isRemembered } from "./bypass.ts";
 import { detect, effectiveCwd, invalidateDetection, mayChangeLayout } from "./detect.ts";
 import { markAsked, markDenied } from "./explain.ts";
 import { invalidateMarkers, markerFor } from "./marker.ts";
@@ -224,15 +224,25 @@ function gate(
   const posture = refusal.readOnly ? settings.readOnlyGit : settings.bypass;
   if (posture === "allow") return { kind: "allow" };
 
-  // A verb the user already approved in this session is not asked about again.
+  // A command the user already approved in this session is not asked about
+  // again. Two layers, because the two kinds of command are not the same
+  // decision:
+  //
+  // - the **verb** layer covers everything, so approving `git commit` stops the
+  //   next `git commit` from asking;
+  // - the **read-only class** layer covers only refusals the classifier marked
+  //   `readOnly`, so approving `git status` also lets `git log` through. A user
+  //   who agreed to let the model *look* with Git agreed to the whole read-only
+  //   surface, and asking once per read-only verb is the repetition this layer
+  //   exists to remove.
+  //
+  // The `refusal.readOnly` guard on the class check is what keeps the widening
+  // bounded: a mutating form of a read-only verb (`git branch -d` after `git
+  // branch`) is never covered by it, and mutating commands stay per-verb.
   const sessionId = exec.agent?.session.id;
-  if (
-    posture === "ask" &&
-    settings.rememberBypass &&
-    sessionId !== undefined &&
-    isRemembered(sessionId, refusal.verb)
-  ) {
-    return { kind: "allow" };
+  if (posture === "ask" && settings.rememberBypass && sessionId !== undefined) {
+    if (isRemembered(sessionId, refusal.verb, refusal.readOnly)) return { kind: "allow" };
+    if (refusal.readOnly && isReadOnlyRemembered(sessionId)) return { kind: "allow" };
   }
 
   // The reason is composed once, for both postures: when static analysis

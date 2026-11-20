@@ -1,6 +1,6 @@
 # 25 — Prompt copy
 
-> **Superseded in part.** The tool names and count have grown to 24
+> **Superseded in part.** The tool names and count have grown to 28
 > ([40](40-consolidated-agent-surface-spec.md)); the denial catalogue below is
 > still current. Read the tool-description section as the original eleven.
 

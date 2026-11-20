@@ -1,9 +1,5 @@
 # 24 — Implementation plan
 
-**Status:** the bridge from spec to code. Nothing here is built yet.
-Every harness interface below was read from the installed `0.2.0-rc.2` source;
-package-relative citations.
-
 ## 1. The verified interfaces this builds on
 
 | Need                     | Interface                                                                       | Source                                       |

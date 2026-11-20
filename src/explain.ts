@@ -27,7 +27,8 @@
  * `allowed-once` is per call, so a user who approves a verb is asked again next
  * time. The only place the plugin can observe that an ask was *approved* is
  * here: an asked call whose result is **not an error** is a call that ran, which
- * means the user said yes. That is what feeds `bypass.ts`.
+ * means the user said yes. That is what feeds `bypass.ts` — the verb, and, when
+ * the approved command only reads, the read-only class as well.
  *
  * ## Two constraints, both from the same code
  *
@@ -45,7 +46,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { ToolExecution } from "@deepseek-ai/dsh-tools";
 
-import { remember } from "./bypass.ts";
+import { remember, rememberReadOnly } from "./bypass.ts";
 import type { Settings } from "./settings.ts";
 import type { Refusal } from "./verbs.ts";
 
@@ -82,11 +83,16 @@ export function applyExplain(ctx: Context, settings: Settings): void {
       if (pending === undefined) return next();
 
       // An asked call that ran is an approved call. Remember the verb so the
-      // user is not asked about it again in this session.
+      // user is not asked about it again in this session — and, when the
+      // approved command only reads, remember the read-only class too: the
+      // user's answer was about *looking*, so `git log` must not ask again
+      // after `git status` was approved. Mutating commands stay per-verb;
+      // `rememberReadOnly` is never called for them.
       if (pending.asked && result.isError !== true) {
         const sessionId = exec.agent?.session.id;
         if (settings.rememberBypass && sessionId !== undefined) {
-          remember(sessionId, pending.refusal.verb);
+          remember(sessionId, pending.refusal.verb, pending.refusal.readOnly);
+          if (pending.refusal.readOnly) rememberReadOnly(sessionId);
         }
         return next();
       }

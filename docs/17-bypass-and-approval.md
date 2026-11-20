@@ -119,15 +119,36 @@ Two options, and the second is better:
 
 1. **Accept the repetition.** Correct, annoying.
 2. **Session-scoped allowlist owned by the plugin.** When the user approves a
-   verb, remember `(session, verb)` in memory and return `next()` for that verb
-   for the rest of the session. This is _our_ state, not the harness's, so it
-   must be explicit in the config and visible in the log:
+   command, remember it in memory and return `next()` for it for the rest of the
+   session. This is _our_ state, not the harness's, so it must be explicit in
+   the config and visible in the log:
 
    ```ts
    // config
    bypass: z.union([z.const('ask'), z.const('deny'), z.const('allow')]).default('ask'),
    rememberBypass: z.boolean().default(true),
    ```
+
+   The allowlist has **two layers**, because the two kinds of command are not
+   the same decision:
+
+   - **Read-only commands are remembered as a class.** Approving `git status`
+     also allows `git log`, `git diff`, `git show` and the rest of the read-only
+     surface for the session. The user's answer was about _looking_, and asking
+     again for every read-only verb is the repetition this section exists to
+     remove. `src/bypass.ts` holds the class as `rememberReadOnly` /
+     `isReadOnlyRemembered`, and `gate()` consults it only when the classifier
+     marked the refusal `readOnly` — so it can never open a mutating form of a
+     read-only verb (`git branch` does not allow `git branch -d`).
+   - **Mutating commands stay per verb.** Approving `git commit` must not
+     approve `git push`, or the guard would be one approval away from being off.
+     `remember` / `isRemembered` key on `(session, verb, readOnly)`: the
+     read-only flag is part of the key because a verb can have both a listing
+     form and a mutating one — approving `git branch` must not approve
+     `git branch -d feat`.
+
+   Both layers are cleared by `forget()`, both are in memory only, and
+   `rememberBypass: false` disables both.
 
    `bypass: 'allow'` is the escape hatch for a user who has decided they want
    Git in this workspace; `bypass: 'deny'` is the CI stance.

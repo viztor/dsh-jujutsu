@@ -33,7 +33,7 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 388 tests, `pnpm run ci` green:
+Implemented and tested — 393 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -46,7 +46,7 @@ Implemented and tested — 388 tests, `pnpm run ci` green:
 | `detect.ts`     | detection that **walks upward**, plus `effectiveCwd`                                                                                                                        |
 | `guard.ts`      | the `tools/pre-execute` listener, fail-open, three-term policy read                                                                                                         |
 | `explain.ts`    | the denial's second channel; learns an approval                                                                                                                             |
-| `bypass.ts`     | the session-scoped remembered grant                                                                                                                                         |
+| `bypass.ts`     | the session-scoped remembered grant: per verb, and as a class for read-only commands                                                                                        |
 | `context.ts`    | the rule and the state, empty outside a `jj` workspace                                                                                                                      |
 | `skill.ts`      | the `jujutsu` manual as a runtime skill, registered only when `teachSkill` is on                                                                                            |
 | `adopt.ts`      | the probe that refuses LFS, shallow clones, linked worktrees and half-finished Git operations (submodules are fine), plus the `jj git init --colocate` that adopts the rest |

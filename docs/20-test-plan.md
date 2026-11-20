@@ -1,9 +1,5 @@
 # 20 — Test plan
 
-**Status:** plan. No plugin code exists yet; the fixtures do, and every command
-in §b and §c marked _measured_ was executed on this machine against the built
-fixtures.
-
 Sources: [SPEC §5.1–§5.2, §7, §8, §10](../SPEC.md),
 [11](11-verified-dsh-api-contract.md) (harness API),
 [13](13-empirical-verification.md) (measured `jj` behaviour),

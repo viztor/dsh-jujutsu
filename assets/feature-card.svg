@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="card-title card-desc">
+  <title id="card-title">dsh-jujutsu — Jujutsu for DeepSeek Harness</title>
+  <desc id="card-desc">Refuses Git in a Jujutsu workspace and hands back the jj command. 28 jj tools, multi-agent workspaces, and op-log recovery.</desc>
+
+  <defs>
+    <!-- The icon's own two-stop accent, reused so the card and the mark agree. -->
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#2E9BFF"/>
+    </linearGradient>
+    <linearGradient id="canvas" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#090c11"/>
+    </linearGradient>
+    <radialGradient id="glow-a" cx="0.16" cy="0.1" r="0.7">
+      <stop offset="0" stop-color="#7C5CFF" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#7C5CFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-b" cx="0.9" cy="0.92" r="0.55">
+      <stop offset="0" stop-color="#2E9BFF" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#2E9BFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Canvas: dark, with two soft accent glows and a gradient rule along the top. -->
+  <rect width="1200" height="630" fill="url(#canvas)"/>
+  <rect width="1200" height="630" fill="url(#glow-a)"/>
+  <rect width="1200" height="630" fill="url(#glow-b)"/>
+  <rect x="0.5" y="0.5" width="1199" height="629" fill="none" stroke="#30363d" stroke-opacity="0.7"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+
+  <!-- The mark: the two jj strokes from icon.svg, scaled 4/3. -->
+  <g transform="translate(80 74) scale(1.3333)" fill="none" stroke="url(#accent)" stroke-width="6.5" stroke-linecap="round">
+    <path d="M15 9 V27 a9 9 0 0 1 -9 9"/>
+    <path d="M38 9 V27 a9 9 0 0 1 -9 9" opacity="0.55"/>
+  </g>
+
+  <!-- Wordmark and one-line tagline. -->
+  <text x="168" y="128" font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif" font-size="54" font-weight="600" letter-spacing="-1.2" fill="#f0f6fc">dsh-jujutsu</text>
+  <text x="80" y="198" font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif" font-size="26" fill="#8b949e">Jujutsu for DeepSeek Harness — the agent uses <tspan fill="#c9d1d9">jj</tspan>, and is told why.</text>
+
+  <rect x="80" y="238" width="1040" height="1" fill="#21262d"/>
+
+  <!-- Four feature chips, two by two. Each is a card, an accent dot, a title, a line. -->
+  <g font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif">
+    <g>
+      <rect x="80" y="272" width="508" height="124" rx="16" fill="#121821" stroke="#232b36"/>
+      <circle cx="112" cy="314" r="5" fill="url(#accent)"/>
+      <text x="132" y="322" font-size="24" font-weight="600" fill="#e6edf3">Git guard</text>
+      <text x="132" y="362" font-size="19" fill="#8b949e">Refuses Git, hands back the jj command</text>
+    </g>
+    <g>
+      <rect x="612" y="272" width="508" height="124" rx="16" fill="#121821" stroke="#232b36"/>
+      <circle cx="644" cy="314" r="5" fill="url(#accent)"/>
+      <text x="664" y="322" font-size="24" font-weight="600" fill="#e6edf3">28 jj tools</text>
+      <text x="664" y="362" font-size="19" fill="#8b949e">Structured JSON, addressed by change ID</text>
+    </g>
+    <g>
+      <rect x="80" y="416" width="508" height="124" rx="16" fill="#121821" stroke="#232b36"/>
+      <circle cx="112" cy="458" r="5" fill="url(#accent)"/>
+      <text x="132" y="466" font-size="24" font-weight="600" fill="#e6edf3">Multi-agent</text>
+      <text x="132" y="506" font-size="19" fill="#8b949e">A workspace per agent, coordinated</text>
+    </g>
+    <g>
+      <rect x="612" y="416" width="508" height="124" rx="16" fill="#121821" stroke="#232b36"/>
+      <circle cx="644" cy="458" r="5" fill="url(#accent)"/>
+      <text x="664" y="466" font-size="24" font-weight="600" fill="#e6edf3">Op-log recovery</text>
+      <text x="664" y="506" font-size="19" fill="#8b949e">Undo any operation, restore any state</text>
+    </g>
+  </g>
+
+  <!-- Footer: how to install it, and what it needs. -->
+  <text x="80" y="588" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#6e7681">dsh plugin install dsh-jujutsu</text>
+  <text x="1120" y="588" text-anchor="end" font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif" font-size="18" fill="#6e7681">MIT · jj 0.46+</text>
+</svg>
