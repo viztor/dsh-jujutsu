@@ -6,6 +6,19 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.4.0](https://github.com/viztor/dsh-jujutsu/compare/v0.3.7...v0.4.0) (2026-11-20)
+
+
+### Features
+
+* remember read-only Git approvals as a class, and rewrite the public face ([5b37505](https://github.com/viztor/dsh-jujutsu/commit/5b375057718f0ed613f86f437040592993f30f97))
+
+
+### Bug Fixes
+
+* **guard:** strip redirections, close the nested .git/.jj hole, and widen the read-only surface ([f25e8d0](https://github.com/viztor/dsh-jujutsu/commit/f25e8d0ec7367b7fa9e1cbc60ed2f8ab5179f657))
+* **test:** unbreak the suite on Node 26 by aligning vite-plus ([4559042](https://github.com/viztor/dsh-jujutsu/commit/4559042c9d26aa39d58d69b73f1985109dc8e731))
+
 ## [0.3.7](https://github.com/viztor/dsh-jujutsu/compare/v0.3.6...v0.3.7) (2026-11-12)
 
 ### Bug Fixes
