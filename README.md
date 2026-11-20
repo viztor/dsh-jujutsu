@@ -148,7 +148,7 @@ Releases go through CI with npm's OIDC trusted publishing, so there is no token 
 | `SPEC.md`     | The build specification.                                                               |
 | `docs/`       | The design record: verified contracts, measurements, decisions.                        |
 
-The harness contract and the `jj` behaviour are both verified against the real thing, with citations in [docs/11](docs/11-verified-dsh-api-contract.md) and [docs/13](docs/13-empirical-verification.md). **393 tests**, `pnpm run ci` green.
+The harness contract and the `jj` behaviour are both verified against the real thing, with citations in [docs/11](docs/11-verified-dsh-api-contract.md) and [docs/13](docs/13-empirical-verification.md). **401 tests**, `pnpm run ci` green.
 
 ## License
 

@@ -115,6 +115,8 @@ function translateCommand(verb: string, args: readonly string[]): readonly strin
       return translateDiff(args);
     case "show":
       return translateShow(args);
+    case "reflog":
+      return translateReflog(args);
     case "blame":
       return translateBlame(args);
     case "branch":
@@ -125,6 +127,12 @@ function translateCommand(verb: string, args: readonly string[]): readonly strin
       return translateRemote(args);
     case "config":
       return translateConfig(args);
+    case "rev-parse":
+      return translateRevParse(args);
+    case "ls-files":
+      return translateLsFiles(args);
+    case "grep":
+      return translateGrep(args);
     case "commit":
       return translateCommit(args);
     case "clone":
@@ -608,6 +616,7 @@ function translateLog(args: readonly string[]): readonly string[] | undefined {
     {
       "--oneline": "--no-graph",
       "--patch": "-p",
+      "-p": "-p",
       "--graph": "--graph",
       "--reversed": "--reversed",
       "--count": "--count",
@@ -726,6 +735,7 @@ function translateDiff(args: readonly string[]): readonly string[] | undefined {
 function translateShow(args: readonly string[]): readonly string[] | undefined {
   const out = ["jj", "show"];
   const revs: string[] = [];
+  const flags: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === undefined) return undefined;
@@ -740,7 +750,45 @@ function translateShow(args: readonly string[]): readonly string[] | undefined {
     if (arg.includes(":")) return undefined; // `rev:path` is a file, not a revision
     if (!pushRev(revs, arg)) return undefined;
   }
-  out.push(...revs);
+  // `jj show` shares the diff-format flags (`--stat`, `--name-only`,
+  // `--summary`, …) with `jj log` and `jj diff`, so the same table maps them.
+  // Dropping one would silently narrow the output the model asked for.
+  walkDiffFormat(args, flags, {}, {});
+  out.push(...revs, ...flags);
+  return out;
+}
+
+/**
+ * `git reflog` → `jj op log`.
+ *
+ * The operation log is Jujutsu's reflog: every mutation is recorded and
+ * reversible with `jj op restore`. `git reflog show` is the default form and
+ * translates the same way; `-n`/`--max-count` is `jj op log --limit`. A ref
+ * argument (`git reflog show main`) has no equivalent — `jj op log` is
+ * repository-wide — so it refuses rather than answering a different question.
+ */
+function translateReflog(args: readonly string[]): readonly string[] | undefined {
+  const out = ["jj", "op", "log"];
+  let limit: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) return undefined;
+    if (arg === "show") continue;
+    if (arg === "-n" || arg === "--max-count") {
+      const value = args[i + 1];
+      if (value === undefined) return undefined;
+      limit = value;
+      i += 1;
+      continue;
+    }
+    const bareCount = /^-(\d+)$/.exec(arg);
+    if (bareCount !== null) {
+      limit = bareCount[1];
+      continue;
+    }
+    return undefined;
+  }
+  if (limit !== undefined) out.push("--limit", limit);
   return out;
 }
 
@@ -875,6 +923,71 @@ function translateRemote(args: readonly string[]): readonly string[] | undefined
  * on the catalogue message rather than translating to a command that
  * appears to work.
  */
+/**
+ * `git rev-parse --show-toplevel` → `jj workspace root`.
+ *
+ * The one form with a faithful single-command equivalent. Everything else
+ * (`HEAD`, `--abbrev-ref`, `--git-dir`) either has no `jj` spelling or would
+ * need a template, so the catalogue message stands.
+ */
+function translateRevParse(args: readonly string[]): readonly string[] | undefined {
+  if (args.length !== 1) return undefined;
+  const [arg] = args;
+  if (arg === undefined) return undefined;
+  if (arg === "--show-toplevel") return ["jj", "workspace", "root"];
+  // `git rev-parse HEAD` prints the commit hash; `jj log -r @ -T commit_id`
+  // prints the same hash for the same revision. A flag (`--abbrev-ref`,
+  // `--git-dir`, …) asks a different question and refuses.
+  if (arg.startsWith("-")) return undefined;
+  const rev = normalizeRev(arg);
+  if (rev === undefined) return undefined;
+  return ["jj", "log", "-r", rev, "-T", "commit_id", "--no-graph"];
+}
+
+/**
+ * `git ls-files [paths]` → `jj file list [filesets]`.
+ *
+ * `jj file list` lists the files in a revision (the working copy by default),
+ * which is the same question `git ls-files` answers for the index. Flags
+ * (`--cached`, `--deleted`, …) select a different set and refuse.
+ */
+function translateLsFiles(args: readonly string[]): readonly string[] | undefined {
+  const out = ["jj", "file", "list"];
+  for (const arg of args) {
+    if (arg.startsWith("-")) return undefined;
+    out.push(arg);
+  }
+  return out;
+}
+
+/**
+ * `git grep <pattern> [paths]` → `jj file search --pattern <pattern> [filesets]`.
+ *
+ * `-n`/`--line-number` and `-l`/`--name-only` are the two flags `jj file
+ * search` spells the same way; anything else refuses rather than answering a
+ * different question.
+ */
+function translateGrep(args: readonly string[]): readonly string[] | undefined {
+  const out = ["jj", "file", "search"];
+  const positionals: string[] = [];
+  for (const arg of args) {
+    if (arg === "-n" || arg === "--line-number") {
+      out.push("--line-number");
+      continue;
+    }
+    if (arg === "-l" || arg === "--name-only") {
+      out.push("--name-only");
+      continue;
+    }
+    if (arg.startsWith("-")) return undefined;
+    positionals.push(arg);
+  }
+  if (positionals.length === 0) return undefined;
+  const [pattern, ...paths] = positionals;
+  out.push("--pattern", pattern ?? "", ...paths);
+  return out;
+}
+
 function translateConfig(args: readonly string[]): readonly string[] | undefined {
   if (args.length === 0) return ["jj", "config", "list"];
   const [first, ...rest] = args;
@@ -886,6 +999,11 @@ function translateConfig(args: readonly string[]): readonly string[] | undefined
   }
   if ((first === "--list" || first === "-l") && rest.length === 0) {
     return ["jj", "config", "list"];
+  }
+  // `git config user.name` is the bare get form; `jj config list <key>` is the
+  // same read.
+  if (!first.startsWith("-") && rest.length === 0) {
+    return ["jj", "config", "list", first];
   }
   return undefined;
 }
@@ -899,10 +1017,16 @@ function translateConfig(args: readonly string[]): readonly string[] | undefined
  * `--amend`, `--file`) stays on the catalogue message.
  */
 function translateCommit(args: readonly string[]): readonly string[] | undefined {
-  if (args.length !== 2) return undefined;
-  const [flag, message] = args;
+  // `-a` is redundant in Jujutsu: `jj commit` commits the whole working copy,
+  // so `git commit -a -m x` and `git commit -am x` mean the same thing as
+  // `git commit -m x`. Dropping it is exact, not best-effort.
+  const rest = args.filter((arg) => arg !== "-a");
+  if (rest.length !== 2) return undefined;
+  const [flag, message] = rest;
   if (flag === undefined || message === undefined) return undefined;
-  if (flag !== "-m") return undefined;
+  // `-am` / `-ma` are the combined spelling of `-a -m`; the `a` is the
+  // redundant half, so the pair reduces to `-m <message>`.
+  if (flag !== "-m" && flag !== "-am" && flag !== "-ma") return undefined;
   // The one translation that carries free text must defend that text
   // against looking like a flag. `git commit -m --` is a legal (if odd)
   // invocation — the message is the two characters `--` — and the obvious
@@ -960,7 +1084,9 @@ function translateFetch(args: readonly string[]): readonly string[] | undefined 
   if (args.length === 0) return ["jj", "git", "fetch"];
   const [first, ...rest] = args;
   if (first === undefined) return undefined;
-  if (first === "--all-remotes" && rest.length === 0) {
+  if ((first === "--all-remotes" || first === "--all") && rest.length === 0) {
+    // `git fetch --all` and `jj git fetch --all-remotes` are the same request:
+    // fetch every configured remote.
     return ["jj", "git", "fetch", "--all-remotes"];
   }
   if (first === "--remote" && rest.length === 1) {

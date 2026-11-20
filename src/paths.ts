@@ -99,19 +99,24 @@ export function destructiveTargetsVcs(command: string): DestructiveTarget | unde
 }
 
 /**
- * The final path component, when it is exactly `.git` or `.jj`.
+ * The version-control component of a path, when any component is exactly
+ * `.git` or `.jj`.
  *
- * Trailing slashes are stripped, so `rm -rf .git/` triggers while
- * `rm -rf .gitignore` does not.
+ * **Any** component, not just the last: `rm -rf .git/objects` deletes the
+ * object store, and `rm -rf .jj/repo` deletes the operation log — both are
+ * exactly as unrecoverable as `rm -rf .git`, and checking only the basename
+ * let them through. Trailing slashes are stripped, so `rm -rf .git/` triggers
+ * while `rm -rf .gitignore` and `rm -rf .github` do not.
  */
 function componentOf(path: string): string | undefined {
   let trimmed = path;
   while (trimmed.length > 1 && trimmed.endsWith("/")) {
     trimmed = trimmed.slice(0, -1);
   }
-  const at = trimmed.lastIndexOf("/");
-  const base = at < 0 ? trimmed : trimmed.slice(at + 1);
-  return base === ".git" || base === ".jj" ? base : undefined;
+  for (const part of trimmed.split("/")) {
+    if (part === ".git" || part === ".jj") return part;
+  }
+  return undefined;
 }
 
 /**

@@ -15,7 +15,7 @@ block · **SPECIAL** = needs different treatment, see footnote.
 
 | Git command                                                                 | jj equivalent                                                | classification | denial message                                                                                                                                                                                                                      |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `git status`                                                                | `jj status` (`jj st`)                                        | DENY           | Refused `git status`: this is a Jujutsu workspace. Run `jj status` (alias `jj st`) — it shows the working-copy change and its parent commit.                                                                                        |
+| `git status`                                                                | `jj status` (`jj st`)                                        | DENY           | Refused `git status`: it can be stale in a Jujutsu workspace — it does not trigger a jj snapshot. Run `jj status` (alias `jj st`) — it shows the working-copy change and its parent commit.                                         |
 | `git diff`                                                                  | `jj diff`                                                    | DENY           | Refused `git diff`: Jujutsu has no staging index. Run `jj diff` for the working-copy change, or `jj diff -r <rev>` for another revision.                                                                                            |
 | `git log`                                                                   | `jj log`                                                     | DENY           | Refused `git log`: run `jj log`. Use `-r '::@'` for ancestors of `@`, or `-r 'all()'` for everything reachable.                                                                                                                     |
 | `git add <path>`                                                            | none — auto-tracked                                          | DENY           | Refused `git add`: Jujutsu has no staging area. New files are tracked automatically — just edit the file and `jj status` / `jj diff` will show it.                                                                                  |
@@ -52,6 +52,7 @@ block · **SPECIAL** = needs different treatment, see footnote.
 | `git bisect …`                                                              | `jj bisect run`                                              | DENY           | Refused `git bisect`: run `jj bisect run <cmd>` — it finds the first bad revision automatically.                                                                                                                                    |
 | `git blame <file>`                                                          | `jj file annotate <path>`                                    | DENY           | Refused `git blame`: run `jj file annotate <path>` to show the change that last modified each line.                                                                                                                                 |
 | `git show <rev>`                                                            | `jj show <rev>`                                              | DENY           | Refused `git show`: run `jj show <rev>` for the description plus diff.                                                                                                                                                              |
+| `git reflog`                                                                | `jj op log`                                                  | DENY           | Refused `git reflog`: run `jj op log` — every operation is recorded and reversible with `jj op restore`.                                                                                                                            |
 | `git clean -fd`                                                             | none                                                         | SPECIAL        | Refused `git clean -fd`: Jujutsu has no "untracked" state to clean. Inspect with `jj status`, then delete the files yourself with `rm`.                                                                                             |
 | `git restore <path>`                                                        | `jj restore <path>`                                          | DENY           | Refused `git restore`: run `jj restore <paths>` to restore from the parent, or `jj restore --from <rev> <paths>`.                                                                                                                   |
 | `git init`                                                                  | `jj git init`                                                | DENY           | Refused `git init`: run `jj git init` (colocated by default) or `jj git init --no-colocate`.                                                                                                                                        |
@@ -85,6 +86,16 @@ block · **SPECIAL** = needs different treatment, see footnote.
   `/opt/homebrew/bin/git-lfs`, but the gesture an agent emits is `git lfs …`,
   whose first token is `git`. Allowing it would require special-casing a
   subcommand list; denying with an explicit explanation is cheaper and safer.
+
+**Read-only plumbing.** `ls-files`, `ls-tree`, `cat-file`, `show-ref`,
+`for-each-ref`, `rev-list`, `shortlog`, `whatchanged`, `grep`, `merge-base`,
+`name-rev`, `check-ignore`, `check-attr`, `count-objects`, `version` and `help`
+are classified read-only (`ALWAYS_READ_ONLY` in `src/verbs.ts`) even though they
+have no row of their own. They read, so `readOnlyGit` governs them rather than
+`bypass`; the composed translation is the message when one exists
+(`git grep` → `jj file search`, `git ls-files` → `jj file list`,
+`git rev-parse --show-toplevel` → `jj workspace root`), and the generic fallback
+otherwise.
 
 ## 2. The `jj git` carve-out
 

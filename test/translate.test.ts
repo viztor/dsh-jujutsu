@@ -191,11 +191,84 @@ describe("read-only verbs translate their flags", () => {
     expect(equivalentOf("git log --oneline --since=2d")).toBe("jj log -r ::@ --no-graph");
     expect(equivalentOf("git show --pretty=fuller")).toBe("jj show");
   });
+
+  it("strips shell redirections before translating", () => {
+    // Found live: `git log --oneline -15 -- src/a.ts 2>&1` translated to
+    // `jj log … src/a.ts '2>&1'`, a fileset that does not exist. A redirection
+    // is shell syntax, not a Git argument, and the tokenizer keeps it as a
+    // word — so it has to be removed before the verb is classified.
+    expect(equivalentOf("git log --oneline -15 -- src/a.ts 2>&1")).toBe(
+      "jj log -r ::@ --limit 15 --no-graph src/a.ts",
+    );
+    expect(equivalentOf("git log 2>/dev/null")).toBe("jj log -r ::@");
+    expect(equivalentOf("git log > out.txt")).toBe("jj log -r ::@");
+    expect(equivalentOf("git log 2> err.txt")).toBe("jj log -r ::@");
+    expect(equivalentOf("git log >> out.txt")).toBe("jj log -r ::@");
+    expect(equivalentOf("git log &> all.txt")).toBe("jj log -r ::@");
+    expect(equivalentOf("git log < in.txt")).toBe("jj log -r ::@");
+  });
+
+  it("does not strip a quoted word that looks like a redirection", () => {
+    // `--grep="2>&1"` is an argument. The tokenizer marks it quoted, and the
+    // stripper must leave it alone — the flag is then dropped by the
+    // read-only best-effort rule, not mistaken for shell syntax.
+    expect(equivalentOf('git log --grep="2>&1"')).toBe("jj log -r ::@");
+  });
+
+  it("maps the flags jj spells the same way instead of dropping them", () => {
+    // `jj show --stat` and `jj git fetch --all-remotes` are the same requests
+    // under the same names. Dropping them would silently narrow the output.
+    expect(equivalentOf("git show HEAD --stat")).toBe("jj show @ --stat");
+    expect(equivalentOf("git show --stat HEAD")).toBe("jj show @ --stat");
+    expect(equivalentOf("git fetch --all")).toBe("jj git fetch --all-remotes");
+  });
+
+  it("maps the flags jj shares with git instead of dropping them", () => {
+    // `-p`, `--name-only` and `--summary` are the same flags under the same
+    // names in `jj log` / `jj show`. Dropping one silently narrows the output.
+    expect(equivalentOf("git log -p")).toBe("jj log -r ::@ -p");
+    expect(equivalentOf("git log --patch")).toBe("jj log -r ::@ -p");
+    expect(equivalentOf("git show --name-only")).toBe("jj show --name-only");
+    expect(equivalentOf("git show --summary")).toBe("jj show -s");
+  });
+
+  it("translates the read-only plumbing verbs", () => {
+    // These have no catalogue row of their own; the composed reason is the
+    // whole message, so the translation has to be right.
+    expect(equivalentOf("git config user.name")).toBe("jj config list user.name");
+    expect(equivalentOf("git config --get user.name")).toBe("jj config list user.name");
+    expect(equivalentOf("git rev-parse --show-toplevel")).toBe("jj workspace root");
+    expect(equivalentOf("git rev-parse HEAD")).toBe("jj log -r @ -T commit_id --no-graph");
+    expect(equivalentOf("git rev-parse HEAD~2")).toBe("jj log -r @-- -T commit_id --no-graph");
+    expect(equivalentOf("git ls-files")).toBe("jj file list");
+    expect(equivalentOf("git ls-files src/")).toBe("jj file list src/");
+    expect(equivalentOf("git grep foo")).toBe("jj file search --pattern foo");
+    expect(equivalentOf("git grep -n foo")).toBe("jj file search --line-number --pattern foo");
+    expect(equivalentOf("git grep -l foo src/")).toBe(
+      "jj file search --name-only --pattern foo src/",
+    );
+  });
+
+  it("translates git reflog to the operation log", () => {
+    // The operation log is Jujutsu's reflog: every mutation is recorded and
+    // reversible with `jj op restore`. `show` is the default form; `-n` is
+    // `--limit`. A ref argument has no equivalent and refuses.
+    expect(equivalentOf("git reflog")).toBe("jj op log");
+    expect(equivalentOf("git reflog show")).toBe("jj op log");
+    expect(equivalentOf("git reflog -n 5")).toBe("jj op log --limit 5");
+    expect(equivalentOf("git reflog show -n 5")).toBe("jj op log --limit 5");
+    expect(equivalentOf("git reflog show main")).toBeUndefined();
+    expect(equivalentOf("git reflog expire --expire=now --all")).toBeUndefined();
+  });
 });
 
 describe("mutating verbs are all-or-nothing", () => {
   it("translates the forms whose every argument maps", () => {
     expect(equivalentOf("git commit -m 'fix the thing'")).toBe("jj commit -m 'fix the thing'");
+    // `-a` is redundant in Jujutsu — `jj commit` commits the whole working
+    // copy — so dropping it is exact, not best-effort.
+    expect(equivalentOf("git commit -am 'fix the thing'")).toBe("jj commit -m 'fix the thing'");
+    expect(equivalentOf("git commit -a -m 'fix the thing'")).toBe("jj commit -m 'fix the thing'");
     expect(equivalentOf("git branch -d feat")).toBe("jj bookmark delete feat");
     expect(equivalentOf("git branch feat")).toBe("jj bookmark create feat -r @");
     expect(equivalentOf("git push origin main")).toBe(
@@ -363,6 +436,7 @@ describe("coverage against the catalogue", () => {
     bisect: ["run", "make"],
     blame: ["src/a.ts"],
     show: [],
+    reflog: [],
     clean: ["-fd"],
     restore: ["src/a.ts"],
     init: ["somewhere"],

@@ -118,7 +118,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     classification: "deny",
     message: {
       reason:
-        "Refused: git status describes a Git working tree that does not exist here. Run: jj status",
+        "Refused: git status can be stale in a Jujutsu workspace; it does not trigger a jj snapshot. Run: jj status",
       display: DISPLAY_REASONS.readOnly,
     },
   },
@@ -442,6 +442,15 @@ export const VERB_ROWS: readonly VerbRow[] = [
     },
   },
   {
+    match: ["reflog"],
+    classification: "deny",
+    message: {
+      reason:
+        "Refused: git reflog. Run: jj op log — every operation is recorded and reversible with jj op restore.",
+      display: DISPLAY_REASONS.readOnly,
+    },
+  },
+  {
     match: ["clean", "-fd"],
     classification: "special",
     message: {
@@ -609,6 +618,22 @@ export const LISTING_FORMS: Readonly<Record<string, readonly string[]>> = {
   remote: ["-v", "show"],
   config: ["--get", "--get-all", "--list", "-l"],
   stash: ["list", "show"],
+};
+
+/**
+ * Verbs that read in **every** form except the listed mutating subcommands.
+ *
+ * The inverse shape of {@link LISTING_FORMS}: there the read-only forms are
+ * enumerated because a verb has a few of them; here the *mutating* forms are
+ * enumerated because a verb has a few of those. `git reflog` is the case that
+ * needs it — `git reflog`, `git reflog show`, `git reflog -n 5` and
+ * `git reflog exists main` all read, while `expire`, `delete` and `drop`
+ * rewrite the reflog. Enumerating the read-only forms instead would have to
+ * list every flag `git reflog` accepts, and would silently classify a new one
+ * as mutating.
+ */
+export const READ_ONLY_BY_DEFAULT: Readonly<Record<string, readonly string[]>> = {
+  reflog: ["expire", "delete", "drop"],
 };
 
 /** Every message this module ships, for the budget assertion and for tests. */

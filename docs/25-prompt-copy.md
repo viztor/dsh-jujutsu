@@ -134,11 +134,11 @@ and destructive paths are `ask` under policy `ask` and `deny` with the same
 reason under `never`; write-protection and the two workspace refusals are a
 hard `deny` in both; low confidence asks and is never allowed.
 
-### 2.1 Verb-mapping denials (43 rows)
+### 2.1 Verb-mapping denials (44 rows)
 
 | Git command                | Message                                                                                                                                                                                                                         | Chars |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| `git status`               | Refused: git status describes a Git working tree that does not exist here. Run: jj status                                                                                                                                       | 89    |
+| `git status`               | Refused: git status can be stale in a Jujutsu workspace; it does not trigger a jj snapshot. Run: jj status                                                                                                                      | 106   |
 | `git diff`                 | Refused: git diff. Jujutsu has no staging index. Run: jj diff for the working-copy change, or jj diff -r <rev> for another revision.                                                                                            | 132   |
 | `git log`                  | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @, or jj log -r 'all()' for everything reachable.                                                                                                           | 117   |
 | `git add <path>`           | Refused: git add. Jujutsu has no staging area and tracks new files automatically. Run: jj status or jj diff to see the change.                                                                                                  | 126   |
@@ -174,6 +174,7 @@ hard `deny` in both; low confidence asks and is never allowed.
 | `git bisect`               | Refused: git bisect. Run: jj bisect run <cmd>; it finds the first bad revision automatically.                                                                                                                                   | 93    |
 | `git blame <file>`         | Refused: git blame. Run: jj file annotate <path> to show the change that last modified each line.                                                                                                                               | 97    |
 | `git show <rev>`           | Refused: git show. Run: jj show <rev> for the description plus diff.                                                                                                                                                            | 68    |
+| `git reflog`               | Refused: git reflog. Run: jj op log — every operation is recorded and reversible with jj op restore.                                                                                                                            | 100   |
 | `git restore <path>`       | Refused: git restore. Run: jj restore <paths> to restore from the parent, or jj restore --from <rev> <paths>.                                                                                                                   | 109   |
 | `git init`                 | Refused: git init. This is already a Jujutsu workspace; there is nothing to initialise. To create a new Jujutsu repo elsewhere, run: jj git init <directory>.                                                                   | 157   |
 | `git -C <dir> <sub>`       | Refused: git -C <dir>. Run: jj -R <dir> <sub>, or cd <dir> first.                                                                                                                                                               | 65    |
@@ -291,13 +292,13 @@ tested in `test/translate.test.ts`:
 
 The same command, both ways:
 
-| The model types        | §2.1–2.2 fallback                                                                         | §2.4 composed                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `git status`           | Refused: git status describes a Git working tree that does not exist here. Run: jj status | Refused: git status. Run: jj status                                             |
-| `git log --oneline -6` | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @ …                   | Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph          |
-| `git diff HEAD~1`      | Refused: git diff. Jujutsu has no staging index. Run: jj diff …                           | Refused: git diff HEAD~1. Run: jj diff --from @-                                |
-| `git push origin main` | Refused: git push. Run: jj git push --bookmark <name>. …                                  | Refused: git push origin main. Run: jj git push --remote origin --bookmark main |
-| `git branch -d feat`   | Refused: git branch -d. Run: jj bookmark delete <name>.                                   | Refused: git branch -d feat. Run: jj bookmark delete feat                       |
+| The model types        | §2.1–2.2 fallback                                                                                          | §2.4 composed                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `git status`           | Refused: git status can be stale in a Jujutsu workspace; it does not trigger a jj snapshot. Run: jj status | Refused: git status. Run: jj status                                             |
+| `git log --oneline -6` | Refused: git log. Run: jj log. Use jj log -r '::@' for ancestors of @ …                                    | Refused: git log --oneline -6. Run: jj log -r ::@ --limit 6 --no-graph          |
+| `git diff HEAD~1`      | Refused: git diff. Jujutsu has no staging index. Run: jj diff …                                            | Refused: git diff HEAD~1. Run: jj diff --from @-                                |
+| `git push origin main` | Refused: git push. Run: jj git push --bookmark <name>. …                                                   | Refused: git push origin main. Run: jj git push --remote origin --bookmark main |
+| `git branch -d feat`   | Refused: git branch -d. Run: jj bookmark delete <name>.                                                    | Refused: git branch -d feat. Run: jj bookmark delete feat                       |
 
 `displayReason` (§2.3) is unaffected: a human approving an ask still sees
 the family string, because the prompt is about the consequence, not the

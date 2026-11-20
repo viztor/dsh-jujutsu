@@ -33,13 +33,13 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 393 tests, `pnpm run ci` green:
+Implemented and tested — 401 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `invocation.ts` | the ported resolver; corpus test passes (64 commands, **0 false positives**)                                                                                                |
 | `parse.ts`      | the typed surface: `Invocation`, `Token`, `tokenize`, narrowing                                                                                                             |
-| `messages.ts`   | the 43-row message catalogue transcribed from `docs/25` §2                                                                                                                  |
+| `messages.ts`   | the 44-row message catalogue transcribed from `docs/25` §2                                                                                                                  |
 | `verbs.ts`      | first-match classification, flags-win-over-verb, generic fallback                                                                                                           |
 | `translate.ts`  | static analysis: argv → the concrete `jj` command, or `undefined`                                                                                                           |
 | `paths.ts`      | the destructive-path predicate (`.git` / `.jj` as exact components)                                                                                                         |
@@ -62,11 +62,11 @@ The plugin was installed into the live `web` profile, exercised, and removed —
 `bundle`s, and the one stale symlink `pnpm` left behind removed by hand). Three
 cases, run as real `bash` tool calls against real fixture repos:
 
-| Call                                                     | Result                                                                                                   |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `git status`, `workdir` = a colocated `jj` repo          | **denied** — `Refused: git status describes a Git working tree that does not exist here. Run: jj status` |
-| `git status`, `workdir` = a plain Git repo               | **ran** — the plugin is invisible outside a `jj` workspace                                               |
-| `git log`, `workdir` = a **subdirectory** of a `jj` repo | **denied** — the upward walk found the workspace root                                                    |
+| Call                                                     | Result                                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `git status`, `workdir` = a colocated `jj` repo          | **denied** — `Refused: git status can be stale in a Jujutsu workspace; it does not trigger a jj snapshot. Run: jj status` |
+| `git status`, `workdir` = a plain Git repo               | **ran** — the plugin is invisible outside a `jj` workspace                                                                |
+| `git log`, `workdir` = a **subdirectory** of a `jj` repo | **denied** — the upward walk found the workspace root                                                                     |
 
 That third row is the one the first draft got wrong: `jj` works from any
 subdirectory, so a detector that only checked the cwd would have said "no

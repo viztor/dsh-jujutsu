@@ -12,7 +12,7 @@
  * installed version; anything the card copied would drift. What the card keeps
  * is the part `jj help` cannot answer: the Git → jj intent map (a model that
  * knows Git asks "what replaces `git rebase -i`", not "which jj subcommand takes
- * `-b`"), the eleven plugin tools, the hunk query language, and the three things
+ * `-b`"), the plugin's tool surface, the hunk query language, and the three things
  * that make jj different enough to get wrong. Verbose prose was deleted, not
  * moved: a card that explains `jj help` to the model is paying twice.
  *
@@ -111,6 +111,7 @@ truth — for flags this card does not list, run \`jj help <subcommand>\` or
 | \`git push\` | \`jj git push --bookmark <name>\` |
 | \`git pull\` | \`jj git fetch\`, then \`jj rebase -b <bookmark> -o <remote-bookmark>\` |
 | \`git log\` | \`jj log -r '::@'\` |
+| \`git reflog\` | \`jj op log\` (every operation is reversible with \`jj op restore\`) |
 | \`git status\`, \`diff\`, \`show\`, \`fetch\` | \`jj status\`, \`jj diff\`, \`jj show\`, \`jj git fetch\` |
 
 \`git lfs\` and \`git clean -fd\` have no jj equivalent; a task that truly needs

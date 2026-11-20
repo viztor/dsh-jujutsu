@@ -29,10 +29,11 @@ import {
   GENERIC_FALLBACK,
   LISTING_FORMS,
   type Message,
+  READ_ONLY_BY_DEFAULT,
   READ_ONLY_VERBS,
   VERB_ROWS,
 } from "./messages.ts";
-import { type Invocation, isWord, tokenize } from "./parse.ts";
+import { type Invocation, type WordToken, isWord, tokenize } from "./parse.ts";
 import { translateEquivalent } from "./translate.ts";
 
 /**
@@ -50,6 +51,27 @@ const ALWAYS_READ_ONLY: ReadonlySet<string> = new Set([
   "blame",
   "rev-parse",
   "describe",
+  // The rest of Git's read-only surface. They have no `VERB_ROWS` entry, so
+  // the message is the generic fallback (or the composed translation when one
+  // exists), but the *posture* is what this set decides: a user who set
+  // `readOnlyGit: 'allow'` meant these too, and one who set `bypass: 'deny'`
+  // did not mean to deny `git grep`.
+  "ls-files",
+  "ls-tree",
+  "cat-file",
+  "show-ref",
+  "for-each-ref",
+  "rev-list",
+  "shortlog",
+  "whatchanged",
+  "grep",
+  "merge-base",
+  "name-rev",
+  "check-ignore",
+  "check-attr",
+  "count-objects",
+  "version",
+  "help",
 ]);
 
 export interface Refusal {
@@ -73,6 +95,43 @@ export interface Refusal {
 export type Decision = { readonly kind: "allow" } | Refusal;
 
 /**
+ * Drop shell redirections from a Git argv.
+ *
+ * The invocation resolver records the fragment's raw text, and the tokenizer
+ * keeps redirections as words: `git log -- src/a.ts 2>&1` tokenizes to
+ * `… "src/a.ts" "2>&1"`, and `git log > out.txt` to `… ">" "out.txt"`. Left in,
+ * they become arguments — the translator emitted `jj log … '2>&1'`, a fileset
+ * that does not exist, and the classifier could read a redirection target as a
+ * revision. A redirection is shell syntax, not part of the Git invocation, so
+ * it is removed before the verb is classified.
+ *
+ * Quoted words are never redirections: `git log --grep="2>&1"` is an argument.
+ * The operator forms (`>`, `2>`, `>>`, `&>`, `<`) take the next word as their
+ * target; the self-contained forms (`2>&1`, `>file`, `2>/dev/null`) do not.
+ */
+function stripRedirections(tokens: readonly WordToken[]): WordToken[] {
+  const out: WordToken[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token === undefined) continue;
+    if (token.quoted) {
+      out.push(token);
+      continue;
+    }
+    const value = token.value;
+    // `>`, `2>`, `>>`, `&>`, `<`, `<>`: the next word is the target.
+    if (/^[0-9]*(>>?|<<?|<>)$/.test(value) || /^&>>?$/.test(value)) {
+      i += 1;
+      continue;
+    }
+    // `2>&1`, `>file`, `2>/dev/null`: the target is inside the word.
+    if (/^[0-9]*[<>]/.test(value)) continue;
+    out.push(token);
+  }
+  return out;
+}
+
+/**
  * Decide what a command that invokes Git actually is.
  *
  * @param invocation - the parsed invocation. A non-Git one returns `allow`.
@@ -86,8 +145,7 @@ export function classifyGitInvocation(invocation: Invocation): Decision {
   const first = invocation.gitInvocations[0];
   if (first === undefined) return { kind: "allow" };
 
-  const argv = tokenize(first)
-    .filter(isWord)
+  const argv = stripRedirections(tokenize(first).filter(isWord))
     .map((token) => token.value)
     .filter((value) => value.length > 0);
   const args = argv[0] === "git" ? argv.slice(1) : argv;
@@ -278,7 +336,16 @@ export function matchesPrefix(prefix: readonly string[], args: readonly string[]
 /** Is this command read-only, in the form given? */
 export function isReadOnly(verb: string, args: readonly string[]): boolean {
   if (ALWAYS_READ_ONLY.has(verb)) return true;
+  // The inverse shape: read in every form except the listed mutating
+  // subcommands. `git reflog` is the case — `expire`, `delete` and `drop`
+  // rewrite the reflog, everything else reads it.
+  const mutating = READ_ONLY_BY_DEFAULT[verb];
+  if (mutating !== undefined) return !mutating.includes(args[0] ?? "");
   if (!READ_ONLY_VERBS.has(verb)) return false;
+  // `git config <key>` is the bare get form; `git config <key> <value>` writes.
+  // The listing forms above cover the flag spellings; this covers the one form
+  // whose read-only-ness depends on the argument *count*, not its name.
+  if (verb === "config" && args.length === 1 && !(args[0] ?? "").startsWith("-")) return true;
   return isReadOnlyForm(verb, args);
 }
 

@@ -291,7 +291,7 @@ const STRINGS: Record<string, Record<string, string>> = {
       "On refuses Git commands inside a Jujutsu workspace. Off leaves the guard mounted but inert -- useful to watch what it would have caught.",
     readOnlyGitLabel: "Read-only Git",
     readOnlyGitHint:
-      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
+      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe, and the plumbing verbs ls-files, ls-tree, cat-file, show-ref, for-each-ref, rev-list, shortlog, whatchanged, grep, merge-base, name-rev, check-ignore, check-attr, count-objects, version, help. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for users who want the model to inspect Git directly.",
     bypassLabel: "Writing Git",
     bypassHint:
       "What to do with every other Git command: commit, push, checkout, rebase, and anything the read-only setting does not list -- including the writing form of a verb it does. ask requests a one-call approval; deny never asks; allow disables the guard for these.",
@@ -358,7 +358,7 @@ const STRINGS: Record<string, Record<string, string>> = {
       "开启后拒绝 Jujutsu 工作区内的 Git 命令；关闭仍挂载拦截器但不生效——适合先观察它本会拦下什么。",
     readOnlyGitLabel: "只读 Git",
     readOnlyGitHint:
-      "对只读取的 Git 命令如何处理。始终只读：status、log、diff、show、blame、rev-parse、describe。仅在列举形式下只读：branch、tag、remote、config、stash——`git branch` 是读取，`git branch -d` 会写入。ask 会询问；allow 适合希望模型直接查看 Git 的用户。",
+      "对只读取的 Git 命令如何处理。始终只读：status、log、diff、show、blame、rev-parse、describe，以及底层命令 ls-files、ls-tree、cat-file、show-ref、for-each-ref、rev-list、shortlog、whatchanged、grep、merge-base、name-rev、check-ignore、check-attr、count-objects、version、help。仅在列举形式下只读：branch、tag、remote、config、stash——`git branch` 是读取，`git branch -d` 会写入。ask 会询问；allow 适合希望模型直接查看 Git 的用户。",
     bypassLabel: "写入型 Git",
     bypassHint:
       "对其它所有 Git 命令如何处理：commit、push、checkout、rebase，以及「只读 Git」未列出的任何命令——包括其中会写入的形式。ask 请求单次批准；deny 从不询问；allow 对这些命令关闭拦截。",

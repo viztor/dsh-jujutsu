@@ -369,6 +369,30 @@ describe.skipIf(!HAS_FIXTURES)("destructive paths — expansions must not over-t
     const harness = h();
     expect((await harness.preExecute(at(harness, "rm -rf $DIR/.gitignore"))).kind).toBe("allow");
   });
+
+  it("refuses a nested path inside .git or .jj, not just the directory itself", async () => {
+    // Found while auditing: the check looked only at the final path component,
+    // so `rm -rf .git/objects` and `rm -rf .jj/repo` were allowed — deleting
+    // the object store and the operation log is exactly as unrecoverable as
+    // deleting the directory. Any component counts now.
+    const harness = h();
+    for (const command of [
+      "rm -rf .git/objects",
+      "rm -rf .jj/repo",
+      "rm -rf foo/.git/objects",
+      "rm -rf .jj/working_copy/tree_state",
+    ]) {
+      const decision = await harness.preExecute(at(harness, command));
+      expect(decision.kind, command).not.toBe("allow");
+    }
+  });
+
+  it("still allows a sibling whose name merely starts with .git or .jj", async () => {
+    const harness = h();
+    for (const command of ["rm -rf .gitignore", "rm -rf .github", "rm -rf .jjignore"]) {
+      expect((await harness.preExecute(at(harness, command))).kind, command).toBe("allow");
+    }
+  });
 });
 
 describe.skipIf(!HAS_FIXTURES)("fail-open is loud", () => {
