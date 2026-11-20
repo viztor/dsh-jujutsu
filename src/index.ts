@@ -13,8 +13,8 @@
  *   1. **The guard** — `tools/pre-execute` refuses Git inside a `jj` workspace
  *      and names the exact `jj` command instead. This is the part that stops
  *      active harm, and it is what v0.1 is.
- *   2. **The tools and the `jj-hunk` bridge** — the eleven first-class tools in
- *      `docs/18-tool-surface.md`.
+ *   2. **The tools and the `jj-hunk` bridge** — the 28-tool agent surface in
+ *      `docs/40-consolidated-agent-surface-spec.md`.
  *
  * @module dsh-jujutsu
  */

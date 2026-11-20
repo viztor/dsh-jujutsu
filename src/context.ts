@@ -23,7 +23,7 @@
  * makes the card discoverable without paying for its body. The card itself was
  * cut to ~670 words by deferring flags and syntax to `jj help`, which is local,
  * free and always matches the installed binary; only what `jj help` cannot
- * answer (the Git-intent map, the eleven tools, hunk selection) stayed. Keep the
+ * answer (the Git-intent map, the tool surface, hunk selection) stayed. Keep the
  * skill description at or under the 214-character break-even from
  * `docs/32-probe-results-teaching.md` §Q3, or the split costs more than it
  * saves; it is 206 characters today.

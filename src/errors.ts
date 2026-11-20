@@ -3,7 +3,7 @@
  *
  * Two channels, and the difference matters (`docs/26-preflight-and-error-taxonomy.md` §0):
  *
- * - **Tool channel** — the eleven `jj` tools return
+ * - **Tool channel** — the `jj` tools return
  *   `{ error: { code, message, hint? } }` as their value. `info.code` on a guard
  *   `deny` is **not model-visible**; only `reason` is, so every guard message
  *   must be self-contained.

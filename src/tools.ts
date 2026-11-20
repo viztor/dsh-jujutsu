@@ -1,5 +1,5 @@
 /**
- * The eleven first-class `jj` tools.
+ * The first-class `jj` tools.
  *
  * **No tool returns prose.** `jj` is a graph-and-prose CLI by default, and an
  * agent that parses `jj log`'s graph output is an agent that will mis-parse it.
@@ -138,10 +138,10 @@ type ToolHandler = (args: ToolArgs, exec: unknown) => Promise<unknown>;
 /**
  * Wrap a handler so it runs against the session's workspace root.
  *
- * All eleven tools refuse an unresolved root identically, and the refusal is the
+ * Every tool refuses an unresolved root identically, and the refusal is the
  * bare code — no `message`, no `hint` — which makes the shape model-visible and
- * not an implementation detail. Eleven hand-written copies of that two-line
- * preamble were eleven chances for one tool to drift from it.
+ * not an implementation detail. Hand-written copies of that two-line preamble
+ * would be as many chances for one tool to drift from it.
  */
 function onWorkspaceRoot(
   run: (args: ToolArgs, cwd: string, exec: unknown) => Promise<unknown>,
@@ -734,7 +734,7 @@ async function probeRepo(ctx: Context, cwd: string): Promise<ToolError | undefin
 }
 
 /**
- * Build the eleven definitions.
+ * Build the definitions.
  *
  * Separate from registration so a test can validate every definition against the
  * real `defineTool` without a live registry — which is exactly the check that
@@ -745,7 +745,7 @@ export function buildToolDefinitions(
   settings: Settings,
 ): readonly Record<string, unknown>[] {
   /**
-   * One shared factory for eleven definitions whose output schema is identical.
+   * One shared factory for definitions whose output schema is identical.
    *
    * `defineTool` is generic over the parameter and output specs, and that
    * inference does not survive being funnelled through one helper: the value

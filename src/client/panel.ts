@@ -297,7 +297,7 @@ const STRINGS: Record<string, Record<string, string>> = {
       "What to do with every other Git command: commit, push, checkout, rebase, and anything the read-only setting does not list -- including the writing form of a verb it does. ask requests a one-call approval; deny never asks; allow disables the guard for these.",
     rememberBypassLabel: "Remember approvals",
     rememberBypassHint:
-      "After you approve one Git command, stop asking about that same verb for the rest of the session. Off means each command is asked about separately. In memory only — it does not survive a restart.",
+      "After you approve one Git command, stop asking about it for the rest of the session. A read-only approval covers the whole read-only surface (approving `git status` also allows `git log`); a mutating approval covers that verb only. Off means every command is asked about separately. In memory only — it does not survive a restart.",
     alertUninitialisedLabel: "Mention missing version control",
     alertUninitialisedHint:
       "When a directory has no version control at all, tell the model so it can offer to initialise one. Off means the plugin stays silent outside a repository.",
@@ -364,7 +364,7 @@ const STRINGS: Record<string, Record<string, string>> = {
       "对其它所有 Git 命令如何处理：commit、push、checkout、rebase，以及「只读 Git」未列出的任何命令——包括其中会写入的形式。ask 请求单次批准；deny 从不询问；allow 对这些命令关闭拦截。",
     rememberBypassLabel: "记住批准",
     rememberBypassHint:
-      "批准过某个 Git 命令后，本次会话内不再就同一动作重复询问。仅存于内存，重启后失效。",
+      "批准过某个 Git 命令后，本次会话内不再就它重复询问。只读批准覆盖整个只读面（批准 `git status` 后 `git log` 也不再询问）；写入批准只覆盖该动作。关闭后每条命令都会单独询问。仅存于内存，重启后失效。",
     alertUninitialisedLabel: "提示缺少版本控制",
     alertUninitialisedHint:
       "当目录完全没有版本控制时告知模型，以便它主动建议初始化。关闭后插件在仓库之外保持静默。",

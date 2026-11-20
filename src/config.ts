@@ -52,7 +52,7 @@ export const Config = z.object({
     .union([z.const("deny"), z.const("ask"), z.const("allow")])
     .default("ask")
     .description(
-      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for when you want the model to inspect Git directly.",
+      "What to do with Git commands that only read. Always read-only: status, log, diff, show, blame, rev-parse, describe, and the plumbing verbs ls-files, ls-tree, cat-file, show-ref, for-each-ref, rev-list, shortlog, whatchanged, grep, merge-base, name-rev, check-ignore, check-attr, count-objects, version, help. Read-only only in their listing form: branch, tag, remote, config, stash -- so `git branch` reads but `git branch -d` writes. ask prompts; allow is for when you want the model to inspect Git directly.",
     )
     .volatile(),
 
@@ -69,12 +69,12 @@ export const Config = z.object({
     )
     .volatile(),
 
-  /** Remember an approved verb for the rest of the session. */
+  /** Remember an approved command for the rest of the session. */
   rememberBypass: z
     .boolean()
     .default(true)
     .description(
-      "After you approve one Git command, stop asking about that same verb for the rest of the session. Off means each command is asked about separately. In memory only — it does not survive a restart.",
+      "After you approve one Git command, stop asking about it for the rest of the session. A read-only approval covers the whole read-only surface (approving `git status` also allows `git log`); a mutating approval covers that verb only. Off means every command is asked about separately. In memory only — it does not survive a restart.",
     )
     .volatile(),
 

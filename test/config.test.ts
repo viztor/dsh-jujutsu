@@ -74,8 +74,8 @@ const SCHEMA_ONLY: ReadonlyMap<string, string> = new Map([]);
 describe("every setting is read", () => {
   it("finds the fields the schema declares", () => {
     // A regex that matched nothing would make the check below vacuous, and a
-    // vacuous guard reads as protection. `Config` has eleven fields.
-    expect(declaredFields().length).toBeGreaterThanOrEqual(11);
+    // vacuous guard reads as protection. `Config` has twenty fields.
+    expect(declaredFields().length).toBeGreaterThanOrEqual(20);
   });
 
   it("is read by host code, or listed as schema-only with a reason", () => {
