@@ -6,6 +6,13 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.4.1](https://github.com/viztor/dsh-jujutsu/compare/v0.4.0...v0.4.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **display:** follow the current plugin-page conventions, and put the logo in the README ([08fdfc4](https://github.com/viztor/dsh-jujutsu/commit/08fdfc4680003349550980c2ba2858a6b8cc5fec))
+
 ## [0.4.0](https://github.com/viztor/dsh-jujutsu/compare/v0.3.7...v0.4.0) (2026-11-20)
 
 ### Features
