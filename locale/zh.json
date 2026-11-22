@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Jujutsu",
-    "description": "在 Jujutsu 工作区中拒绝 Git 命令，并把对应的 jj 命令返回给模型。",
-    "detail": "DETAIL.md"
+    "description": "在 Jujutsu 工作区中拒绝 Git 命令，并把对应的 jj 命令返回给模型。提供 28 个 jj 工具、多智能体工作区与操作日志恢复；在「插件 → Jujutsu」中配置。",
+    "detail": "assets/DETAIL.zh.md"
   }
 }

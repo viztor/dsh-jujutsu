@@ -1,8 +1,18 @@
-![dsh-jujutsu](assets/feature-card.svg)
+<p align="center">
+  <img src="icon.svg" alt="Jujutsu" width="72" height="72" />
+</p>
 
-**Jujutsu for DeepSeek Harness.** Inside a [Jujutsu](https://jj-vcs.dev) workspace the agent stops reaching for Git and uses `jj` instead — and it is told why, rather than just being blocked.
+<h1 align="center">dsh-jujutsu</h1>
 
-[![npm version](https://img.shields.io/npm/v/dsh-jujutsu.svg)](https://www.npmjs.com/package/dsh-jujutsu) [![CI](https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/dsh-jujutsu.svg)](LICENSE)
+<p align="center"><b>Jujutsu for DeepSeek Harness.</b> Inside a <a href="https://jj-vcs.dev">Jujutsu</a> workspace the agent stops reaching for Git and uses <code>jj</code> instead — and it is told why, rather than just being blocked.</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/dsh-jujutsu"><img src="https://img.shields.io/npm/v/dsh-jujutsu.svg" alt="npm version" /></a>
+  <a href="https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml"><img src="https://github.com/viztor/dsh-jujutsu/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/dsh-jujutsu.svg" alt="license" /></a>
+</p>
+
+![dsh-jujutsu feature card](assets/feature-card.svg)
 
 ## Install
 

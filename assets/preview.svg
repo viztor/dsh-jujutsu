@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img" aria-labelledby="preview-title preview-desc">
+  <title id="preview-title">Git is refused and the jj command is returned</title>
+  <desc id="preview-desc">A terminal running a Git command is blocked, and an arrow leads to a terminal running the equivalent jj command.</desc>
+
+  <defs>
+    <linearGradient id="jj-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#2E9BFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Canvas: a light card, so the illustration reads on both themes. -->
+  <rect width="640" height="300" rx="20" fill="#f3f5f9"/>
+
+  <!-- Left terminal: the Git command that is refused. -->
+  <g>
+    <rect x="48" y="48" width="240" height="204" rx="16" fill="#ffffff" stroke="#d6dde7" stroke-width="2"/>
+    <circle cx="72" cy="72" r="4" fill="#cbd5e1"/>
+    <circle cx="88" cy="72" r="4" fill="#cbd5e1"/>
+    <circle cx="104" cy="72" r="4" fill="#cbd5e1"/>
+    <rect x="72" y="100" width="160" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="72" y="120" width="120" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="72" y="140" width="140" height="8" rx="4" fill="#e2e8f0"/>
+
+    <!-- Git branch: a trunk with two commits on a side branch. -->
+    <g fill="none" stroke="#64748b" stroke-width="3" stroke-linecap="round">
+      <path d="M96 196 V236"/>
+      <path d="M96 210 C120 210 120 226 144 226 V236"/>
+    </g>
+    <circle cx="96" cy="190" r="7" fill="#ffffff" stroke="#64748b" stroke-width="3"/>
+    <circle cx="96" cy="242" r="7" fill="#ffffff" stroke="#64748b" stroke-width="3"/>
+    <circle cx="144" cy="242" r="7" fill="#ffffff" stroke="#64748b" stroke-width="3"/>
+
+    <!-- Blocked badge. -->
+    <circle cx="232" cy="196" r="18" fill="#fee2e2"/>
+    <path d="M224 188 L240 204 M240 188 L224 204" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Arrow: the refusal hands back a different command. -->
+  <g fill="none" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 150 H336"/>
+    <path d="M326 140 L338 150 L326 160"/>
+  </g>
+
+  <!-- Right terminal: the jj command that runs instead. -->
+  <g>
+    <rect x="352" y="48" width="240" height="204" rx="16" fill="#ffffff" stroke="#d6dde7" stroke-width="2"/>
+    <circle cx="376" cy="72" r="4" fill="#cbd5e1"/>
+    <circle cx="392" cy="72" r="4" fill="#cbd5e1"/>
+    <circle cx="408" cy="72" r="4" fill="#cbd5e1"/>
+    <rect x="376" y="100" width="160" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="376" y="120" width="120" height="8" rx="4" fill="#e2e8f0"/>
+    <rect x="376" y="140" width="140" height="8" rx="4" fill="#e2e8f0"/>
+
+    <!-- The jj mark: two strokes descending into a hook. -->
+    <g fill="none" stroke="url(#jj-accent)" stroke-width="7" stroke-linecap="round">
+      <path d="M400 186 V214 a10 10 0 0 1 -10 10"/>
+      <path d="M428 186 V214 a10 10 0 0 1 -10 10" opacity="0.55"/>
+    </g>
+
+    <!-- Accepted badge. -->
+    <circle cx="536" cy="196" r="18" fill="#dcfce7"/>
+    <path d="M528 196 L534 202 L545 190" fill="none" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

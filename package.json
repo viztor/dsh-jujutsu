@@ -1,7 +1,7 @@
 {
   "name": "dsh-jujutsu",
   "version": "0.4.0",
-  "description": "Refuses Git in a Jujutsu workspace and hands back the jj command.",
+  "description": "Refuses Git in a Jujutsu workspace and hands back the jj command. Adds a 28-tool jj surface, multi-agent workspaces and op-log recovery; configure it under Plugins → Jujutsu.",
   "keywords": [
     "cordis",
     "deepseek-harness",
@@ -26,12 +26,14 @@
     "url": "git+https://github.com/viztor/dsh-jujutsu.git"
   },
   "files": [
+    "assets/DETAIL.md",
+    "assets/DETAIL.zh.md",
+    "assets/preview.svg",
+    "assets/feature-card.svg",
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "locale/*.json",
     "icon.svg",
-    "assets/feature-card.svg",
-    "DETAIL.md",
     "cordis.patch.yml",
     "CHANGELOG.md",
     "README.md",
@@ -88,9 +90,9 @@
     "vitest": "^5.1.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.4 || >=4.0.5-0 <4.1.0 || >=4.0.6-0 <4.2.0",
-    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
-    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0"
+    "@deepseek-ai/cordis": "~4.0.4 || >=4.0.5-0 <4.1.0 || >=4.0.6-0 <4.2.0 || 4.2.0-alpha.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0 || >=0.2.3-alpha.2 <0.2.4-0",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0 || >=0.2.3-alpha.2 <0.2.4-0"
   },
   "icon": "./icon.svg",
   "engines": {
@@ -103,7 +105,7 @@
     },
     "compatibility": {
       "node": ">=24",
-      "dsh": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0"
+      "dsh": "^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0 || >=0.2.3-alpha.2 <0.2.4-0"
     },
     "client": {
       "inject": [
