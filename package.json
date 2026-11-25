@@ -86,7 +86,7 @@
     "@types/react": "^18.3.31",
     "react": "^18.3.1",
     "typescript": "^7.0.2",
-    "vite-plus": "1.7.0",
+    "vite-plus": "1.8.0",
     "vitest": "^5.1.1"
   },
   "peerDependencies": {
@@ -98,7 +98,7 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@12.16.1",
+  "packageManager": "pnpm@12.23.0",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
