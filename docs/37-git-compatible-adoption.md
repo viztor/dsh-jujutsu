@@ -159,3 +159,23 @@ Three sentences, in `context.ts`:
   repository from nothing is a different decision from adopting one that exists.
 - **Not `jj workspace add`.** A linked Git worktree is refused, and the correct
   jj tool for that shape is a workspace, which this plugin does not manage.
+
+## 7. Linked Git worktrees are not jj workspaces
+
+A directory created by `git worktree add` has a `.git` **file** and may have no
+`.jj` at all. Running `jj` from it does not bind to that checkout: jj walks to
+the repository's `.jj`, selects the repository's default workspace, and every
+command (including the guard's own `jj` replacements) acts on **the main
+checkout**. Two working copies are then edited, but only one is the jj `@`.
+
+The plugin must not translate Git commands in that directory. The supported
+shape is a real secondary jj workspace, created from the main checkout:
+
+```sh
+jj workspace add --colocate --name <name> <path>
+```
+
+Then remove the old Git worktree (`git worktree remove <path>`), and re-enter
+the new path. A primary checkout under adoption already handles its own linked
+worktrees; this caveat is specifically for a repository that was colocated
+**after** a Git worktree existed.

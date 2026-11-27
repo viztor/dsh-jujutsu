@@ -1487,9 +1487,14 @@ export function buildToolDefinitions(
       revsets: { type: "string", description: "The revisions to act on." },
       source: {
         type: "string",
-        description: "Rebase: rebase this revision and its descendants (-s).",
+        description:
+          "Rebase this revision and its descendants (-s). To move a whole branch, prefer `branch`; if using `source`, pass the stack root, not the tip.",
       },
-      branch: { type: "string", description: "Rebase: rebase this branch (-b)." },
+      branch: {
+        type: "string",
+        description:
+          "Rebase: rebase this branch (-b). Use this for a bookmark with ancestry.",
+      },
       revisions: {
         type: "string",
         description: "Rebase: rebase these revisions without descendants (-r).",

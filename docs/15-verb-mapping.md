@@ -31,7 +31,7 @@ block · **SPECIAL** = needs different treatment, see footnote.
 | `git checkout <branch>`                                                     | `jj new <rev>` / `jj edit <rev>`                             | DENY           | Refused `git checkout <rev>`: run `jj new <rev>` to start a change on top of it, or `jj edit <rev>` to make it the working copy.                                                                                                    |
 | `git switch <branch>`                                                       | `jj new <rev>` / `jj edit <rev>`                             | DENY           | Refused `git switch`: run `jj new <rev>` to start a change on top, or `jj edit <rev>` to make that revision the working copy.                                                                                                       |
 | `git merge <rev>`                                                           | `jj new @ <rev>`                                             | DENY           | Refused `git merge`: run `jj new @ <rev>`. A merge is just a change with two parents; conflicts are recorded in-tree, so there is no `--continue`.                                                                                  |
-| `git rebase`                                                                | `jj rebase`                                                  | DENY           | Refused `git rebase`: run `jj rebase -s <src> -o <dest>` (move a subtree) or `jj rebase -b <bookmark> -o <dest>` (move a branch).                                                                                                   |
+| `git rebase`                                                                | `jj rebase`                                                  | Refused: git rebase. Move a branch with jj rebase -b <bookmark> -o <dest>. The -s <src> form moves only <src> and its descendants, so pass the stack root, not the branch tip. | Refused `git rebase`: run `jj rebase -s <src> -o <dest>` (move a subtree) or `jj rebase -b <bookmark> -o <dest>` (move a branch).                                                                                                   |
 | `git rebase -i`                                                             | `jj rebase -r … -B/-A`, `jj squash`, `jj split`, `jj absorb` | DENY           | Refused `git rebase -i`: it is interactive and unusable headless. Reorder with `jj rebase -r <rev> -B <rev>`; fold with `jj squash`; auto-place fixes with `jj absorb`.                                                             |
 | `git reset --hard`                                                          | `jj abandon` / `jj restore`                                  | DENY           | Refused `git reset --hard`. Discard edits with `jj restore <paths>`; drop the current change with `jj abandon`. Both are reversible via `jj undo`.                                                                                  |
 | `git reset --soft HEAD~1`                                                   | `jj squash --from @-`                                        | DENY           | Refused `git reset --soft`: run `jj squash --from @-` to fold the parent's diff into the working copy. Jujutsu never rewrites a commit in place.                                                                                    |
@@ -443,12 +443,36 @@ the catalogue refuses and requires each one to be either translated or named in
 an explicit "cannot be translated, and here is why" list — so a new catalogue row
 cannot silently have no translation.
 
+### 6.3a Rebasing a branch, without dropping its ancestry
+
+Use the branch form when the thing being moved is a bookmark with history:
+
+```sh
+jj rebase -b <bookmark> -o <destination>
+```
+
+`-s <src>` moves **`<src>` and its descendants**. If `<src>` is the branch tip,
+its ancestors are not descendants and are left behind; the bookmark lands on
+one rebased commit. Pass the **stack root**, not the tip, when using `-s`.
+
+A bookmark name resolves to one commit. Write `::<bookmark>` for its ancestry:
+
+```sh
+# correct source for -s: the first commit in the branch that main lacks
+jj rebase -s 'roots(::<bookmark> ~ ::<destination>)' -o <destination>
+```
+
+If every commit in a long branch conflicts after a large destination update, do
+not resolve the same three files once per commit. Stop, restore the branch, and
+integrate with one merge (`jj new <branch> <destination>`), resolving the tree
+once. Keep the linear form for stacks that are genuinely small or close.
+
 ### 6.4 What remains untranslatable
 
 | Gesture         | Why                                                                     |
 | --------------- | ----------------------------------------------------------------------- |
 | `git add`       | no staging area; there is nothing to translate to                       |
-| `git rebase`    | Git's branch model supplies `-s`/`-o`; `jj` needs them named explicitly |
+| `git rebase`    | Git's branch model supplies `-s`/`-o`; `jj` needs them named explicitly | Refused: git rebase. Move a branch with jj rebase -b <bookmark> -o <dest>. The -s <src> form moves only <src> and its descendants, so pass the stack root, not the branch tip. 
 | `git pull`      | two commands, the second conditional (`jj git fetch`, then `jj rebase`) |
 | `git submodule` | no `jj` submodule command; submodules themselves are unaffected         |
 | `git bisect`    | `jj bisect run` requires a `--range` that `git bisect` infers           |

@@ -268,7 +268,7 @@ export const VERB_ROWS: readonly VerbRow[] = [
     classification: "deny",
     message: {
       reason:
-        "Refused: git rebase. Run: jj rebase -s <src> -o <dest> to move a subtree, or jj rebase -b <bookmark> -o <dest> to move a branch.",
+        "Refused: git rebase. Move a branch with jj rebase -b <bookmark> -o <dest>. The -s <src> form moves only <src> and its descendants, so pass the stack root, not the branch tip.",
       display: DISPLAY_REASONS.rebase,
     },
   },
