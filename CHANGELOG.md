@@ -6,6 +6,13 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.4.2](https://github.com/viztor/dsh-jujutsu/compare/v0.4.1...v0.4.2) (2026-11-27)
+
+### Bug Fixes
+
+- **guard:** name the branch form of `jj rebase` and say that `-s` needs the stack root, not the branch tip ([94ec80e1](https://github.com/viztor/dsh-jujutsu/commit/94ec80e1e9a5f605cea52f2e724f58975c65b7dc))
+- **detection:** record that a linked Git worktree is not a jj workspace, and that the migration is `jj workspace add --colocate` ([94ec80e1](https://github.com/viztor/dsh-jujutsu/commit/94ec80e1e9a5f605cea52f2e724f58975c65b7dc))
+
 ## [0.4.1](https://github.com/viztor/dsh-jujutsu/compare/v0.4.0...v0.4.1) (2026-11-22)
 
 ### Bug Fixes

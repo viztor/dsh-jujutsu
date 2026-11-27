@@ -1,6 +1,6 @@
 {
   "name": "dsh-jujutsu",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Refuses Git in a Jujutsu workspace and hands back the jj command. Adds a 28-tool jj surface, multi-agent workspaces and op-log recovery; configure it under Plugins → Jujutsu.",
   "keywords": [
     "cordis",
