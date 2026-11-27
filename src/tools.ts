@@ -1492,8 +1492,7 @@ export function buildToolDefinitions(
       },
       branch: {
         type: "string",
-        description:
-          "Rebase: rebase this branch (-b). Use this for a bookmark with ancestry.",
+        description: "Rebase: rebase this branch (-b). Use this for a bookmark with ancestry.",
       },
       revisions: {
         type: "string",
