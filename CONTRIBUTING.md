@@ -290,6 +290,55 @@ The settings API does not help: a `PATCH` with
 absent, and `GET /dependency-graph/sbom` returns `404` until the toggle is on.
 This one is a human action.
 
+### When a publish fails after the tag exists
+
+The release-please job cuts the tag and the GitHub Release **before** the publish
+job runs, so a gate failure in `publish / verify` leaves a version that is
+announced and not on npm. That is what happened to 0.5.0:
+
+```
+publish / verify: FAIL the tarball installs and loads
+  ERESOLVE: peer @deepseek-ai/cordis@"~4.2.0-alpha.2" from dsh-llm@0.2.3-alpha.3
+publish / publish: skipped
+```
+
+Do not re-run the failed job — it rebuilds the same tree and fails the same way.
+Diagnose first, then recover:
+
+```bash
+# 1. Read the failure. `--log-failed` is the only view that names the check.
+gh run view <run-id> --repo viztor/dsh-jujutsu --log-failed
+
+# 2. Confirm nothing reached the registry. If it did, stop: this is not the case.
+npm view dsh-jujutsu@<version> version
+
+# 3. Remove the release AND its tag. An unpublished version must not keep either.
+gh release delete v<version> --repo viztor/dsh-jujutsu --yes --cleanup-tag
+
+# 4. Fix the defect on `main`, run the gate locally, push.
+
+# 5. release-please will re-open its pull request. Close it and publish by hand:
+gh workflow run release.yml --repo viztor/dsh-jujutsu --ref main -f dry-run=false
+```
+
+Two details of that sequence are not obvious:
+
+- **Deleting the tag moves the next proposal.** release-please anchors on the
+  last release it can see, so with `v0.5.0` gone it replayed the `feat:` from
+  0.5.0's own range and proposed **0.6.0**. The manual path publishes whatever
+  `package.json` holds, so it is the way back to the version that was already in
+  the changelog.
+- **`gh release delete --cleanup-tag` first, dispatch second.** The manual path
+  creates the tag from the commit it runs on, so the tag, the manifest, the
+  changelog entry and `package.json` all end up on one commit. Re-creating the
+  tag by hand over an older commit is how those four drift apart.
+
+Since 0.5.0, the release pull request is gated on the packaged artifact before
+merge (`.github/workflows/release-please.yml`, "Gate the packaged artifact"), so
+a floating upstream that breaks `npm install` of the tarball shows up on the pull
+request instead of after the tag. The publish-time gate is still the last line:
+the registry is the only place the real install happens.
+
 ## The gate
 
 ```bash
