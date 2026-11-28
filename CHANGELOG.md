@@ -6,6 +6,18 @@ summary of the state before release-please took over — kept because the commit
 it would have read were never written in conventional form, so there is nothing
 for the bot to reconstruct.
 
+## [0.5.0](https://github.com/viztor/dsh-jujutsu/compare/v0.4.2...v0.5.0) (2026-11-28)
+
+
+### Features
+
+* teach the workflow rules a session had to learn the hard way ([6c90254](https://github.com/viztor/dsh-jujutsu/commit/6c90254a41422aa6d156743ede9056585a8c73ba))
+
+
+### Bug Fixes
+
+* **approval:** ask a question, never repeat the refusal ([7cd40c0](https://github.com/viztor/dsh-jujutsu/commit/7cd40c0af8b6b0121fac27c2829b2d60f04020f7))
+
 ## [0.4.2](https://github.com/viztor/dsh-jujutsu/compare/v0.4.1...v0.4.2) (2026-11-27)
 
 ### Bug Fixes
