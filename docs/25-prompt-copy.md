@@ -225,25 +225,26 @@ side is stale, and here that was the document. `test/transcription.test.ts` now
 checks the two against each other in both directions, so the next disagreement
 fails rather than waiting to be noticed.
 
-### 2.3 `displayReason` variants (11 rows)
+### 2.3 `displayReason` variants (12 rows)
 
 The short string a human sees in the approval prompt
 ([17](17-bypass-and-approval.md)). It names the consequence and the `jj`
 alternative; the full `reason` stays attached to the call.
 
-| Family                                               | `displayReason`                                                                                                                          | Chars |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| Read-only (`status`, `log`, `diff`, `show`, `blame`) | Run a read-only Git command in this Jujutsu workspace? The equivalent is jj status, jj log, jj diff, jj show, or jj file annotate.       | 130   |
-| `commit`                                             | Run git commit? The Jujutsu equivalent is jj commit -m "<msg>".                                                                          | 63    |
-| `add`                                                | Run git add? Jujutsu has no staging area; files are tracked automatically. See jj status or jj diff.                                     | 100   |
-| `branch`                                             | Run a Git branch command? Jujutsu calls these bookmarks: jj bookmark list / create / delete.                                             | 92    |
-| `checkout` / `switch`                                | Run a Git checkout or switch? The Jujutsu equivalents are jj new <rev> and jj edit <rev>.                                                | 89    |
-| `rebase` / `merge`                                   | Run a Git rebase or merge? The Jujutsu equivalents are jj rebase and jj new @ <rev>.                                                     | 84    |
-| `reset` / `restore` / `stash`                        | Run a Git reset, restore, or stash? The Jujutsu equivalents are jj restore <paths>, jj abandon, and jj new @-.                           | 110   |
-| `remote` / `push` / `pull`                           | Run a Git remote command? The Jujutsu equivalents are jj git fetch and jj git push --bookmark <name>.                                    | 101   |
-| Destructive `.git`/`.jj`                             | Delete the .git or .jj component? This is unrecoverable and jj cannot restore it. Approve only if you intend to destroy this repository. | 136   |
-| Write into `.jj`/`.git`                              | Write inside .jj or .git? This corrupts the state Jujutsu reads. Use jj op restore <opId> instead.                                       | 98    |
-| Low confidence                                       | Run a command whose program cannot be resolved? Approve only if you are sure it does not invoke Git.                                     | 100   |
+| Family                                                     | `displayReason`                                                                                                                          | Chars |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Read-only (`status`, `log`, `diff`, `show`, `blame`)       | Run a read-only Git command in this Jujutsu workspace? The equivalent is jj status, jj log, jj diff, jj show, or jj file annotate.       | 130   |
+| `commit`                                                   | Run git commit? The Jujutsu equivalent is jj commit -m "<msg>".                                                                          | 63    |
+| `add`                                                      | Run git add? Jujutsu has no staging area; files are tracked automatically. See jj status or jj diff.                                     | 100   |
+| `branch`                                                   | Run a Git branch command? Jujutsu calls these bookmarks: jj bookmark list / create / delete.                                             | 92    |
+| `checkout` / `switch`                                      | Run a Git checkout or switch? The Jujutsu equivalents are jj new <rev> and jj edit <rev>.                                                | 89    |
+| `rebase` / `merge`                                         | Run a Git rebase or merge? The Jujutsu equivalents are jj rebase and jj new @ <rev>.                                                     | 84    |
+| `reset` / `restore` / `stash`                              | Run a Git reset, restore, or stash? The Jujutsu equivalents are jj restore <paths>, jj abandon, and jj new @-.                           | 110   |
+| `remote` / `push` / `pull`                                 | Run a Git remote command? The Jujutsu equivalents are jj git fetch and jj git push --bookmark <name>.                                    | 101   |
+| Destructive `.git`/`.jj`                                   | Delete the .git or .jj component? This is unrecoverable and jj cannot restore it. Approve only if you intend to destroy this repository. | 136   |
+| Write into `.jj`/`.git`                                    | Write inside .jj or .git? This corrupts the state Jujutsu reads. Use jj op restore <opId> instead.                                       | 98    |
+| Low confidence                                             | Run a command whose program cannot be resolved? Approve only if you are sure it does not invoke Git.                                     | 100   |
+| No curated family (the composed form names the equivalent) | Run the Git command anyway? Jujutsu is the version control here; approving runs this one Git command.                                    | 101   |
 
 ### 2.4 Composed reasons — the concrete command
 

@@ -33,7 +33,13 @@ import { classifyInvocation } from "./parse.ts";
 import { type DestructiveTarget, destructiveTargetsVcs } from "./paths.ts";
 import { refusalReason } from "./translate.ts";
 import type { Settings } from "./settings.ts";
-import { JJ_ADOPTION_REFUSED, JJ_NO_WORKSPACE, DESTRUCTIVE, WRITE_PROTECTION } from "./messages.ts";
+import {
+  DISPLAY_REASONS,
+  DESTRUCTIVE,
+  JJ_ADOPTION_REFUSED,
+  JJ_NO_WORKSPACE,
+  WRITE_PROTECTION,
+} from "./messages.ts";
 import { workspaceState } from "./state.ts";
 import { type Refusal, classifyGitInvocation, classifyJjInvocation } from "./verbs.ts";
 
@@ -267,13 +273,35 @@ function gate(
   }
 
   markAsked(exec, refusal);
-  // `displayReason` stays the family string from `docs/25` §2.3: the human
-  // approving the call is deciding about the consequence, not the syntax.
+  // `displayReason` is what the human sees as the approval card's title, and it
+  // is **a question, never a verdict**: `docs/25` §2.3 supplies the family copy,
+  // and a verb with no family falls back to a request-shaped line rather than to
+  // `refusal.message.reason`. That fallback used to be the reason itself, so the
+  // card for `git fetch` read "Refused: git fetch…" above an **Allow once**
+  // button — the call had not been refused, and the card said both things.
   return {
     kind: "ask",
     reason,
-    displayReason: { en: refusal.message.display ?? refusal.message.reason },
+    displayReason: { en: askTitle(refusal) },
   };
+}
+
+/**
+ * The title of the approval card for one refusal.
+ *
+ * Three sources, most specific first: the curated family line (`docs/25` §2.3),
+ * the concrete `jj` command when static analysis found one, and the generic
+ * request. The composed form is why the model's exact command reach the human
+ * instead of a family name: `git fetch origin` asks "the equivalent is
+ * `jj git fetch --remote origin`", which is the answer to the question the card
+ * poses.
+ */
+function askTitle(refusal: Refusal): string {
+  if (refusal.message.display !== undefined) return refusal.message.display;
+  if (refusal.equivalent !== undefined) {
+    return `Run the Git command anyway? The Jujutsu equivalent is ${refusal.equivalent}.`;
+  }
+  return DISPLAY_REASONS.genericAsk;
 }
 
 /**

@@ -33,7 +33,7 @@ Every module below has a real signature and a documented contract. Build order i
 
 **The guard works, and it is verified live.**
 
-Implemented and tested — 406 tests, `pnpm run ci` green:
+Implemented and tested — 410 tests, `pnpm run ci` green:
 
 | Module          | What works                                                                                                                                                                  |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

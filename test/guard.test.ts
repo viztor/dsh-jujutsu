@@ -17,6 +17,7 @@ import { apply } from "../src/index.ts";
 import { forget } from "../src/bypass.ts";
 import { invalidateDetection } from "../src/detect.ts";
 import { MARKER_FILE, invalidateMarkers } from "../src/marker.ts";
+import { DISPLAY_REASONS, VERB_ROWS } from "../src/messages.ts";
 import { clearWorkspaceState, setWorkspaceState } from "../src/state.ts";
 import { FIXTURES, fakeHarness, HAS_FIXTURES } from "./helpers.ts";
 
@@ -272,6 +273,51 @@ describe.skipIf(!HAS_FIXTURES)("the approval policy", () => {
     // `overrideOf` returns undefined, so the deployment default must be read —
     // the three-term expression. A two-term read would conclude "ask" here.
     expect((await harness.preExecute(bash(harness, "git commit -m x"))).kind).toBe("deny");
+  });
+});
+
+describe.skipIf(!HAS_FIXTURES)("the approval card asks a question, never a verdict", () => {
+  const h = harnessWith({ readOnlyGit: "ask", bypass: "ask" });
+
+  it("does not title the card with the refusal for a family that has none", async () => {
+    // Found by a user reading the prompt: the card for `git fetch` said
+    // "Refused: git fetch. Run: jj git fetch…" above an **Allow once** button.
+    // The call was not refused — it was waiting for a decision — and the title
+    // came from the fallback to `message.reason`. Thirteen catalogue rows have
+    // no curated family line, so each of them read this way.
+    const decision = await h.preExecute(bash(h, "git fetch origin"));
+    expect(decision.kind).toBe("ask");
+    if (decision.kind !== "ask") return;
+    const title = decision.displayReason?.en ?? "";
+    expect(title).not.toMatch(/^Refused/);
+    expect(title).toContain("jj git fetch --remote origin");
+  });
+
+  it("names the curated consequence where a family line exists", async () => {
+    const decision = await h.preExecute(bash(h, "git commit -m x"));
+    expect(decision.kind).toBe("ask");
+    if (decision.kind !== "ask") return;
+    expect(decision.displayReason?.en).toContain("jj commit");
+    expect(decision.displayReason?.en).not.toMatch(/^Refused/);
+  });
+
+  it("asks a bare question when no translation exists either", async () => {
+    // `git init` has no equivalent in a workspace that already is one, so the
+    // title has to stand on its own without naming a command.
+    const decision = await h.preExecute(bash(h, "git init"));
+    expect(decision.kind).toBe("ask");
+    if (decision.kind !== "ask") return;
+    const title = decision.displayReason?.en ?? "";
+    expect(title).not.toMatch(/^Refused/);
+    expect(title.length).toBeGreaterThan(20);
+  });
+
+  it("never titles any catalogue row with its refusal", () => {
+    // The invariant over the whole table, so a new row cannot reintroduce the
+    // fallback: every row's display copy is either curated or the generic
+    // request — and neither begins "Refused".
+    const titles = VERB_ROWS.map((row) => row.message.display ?? DISPLAY_REASONS.genericAsk);
+    for (const text of titles) expect(text).not.toMatch(/^Refused/);
   });
 });
 

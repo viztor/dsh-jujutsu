@@ -96,6 +96,17 @@ export const DISPLAY_REASONS = {
     "Write inside .jj or .git? This corrupts the state Jujutsu reads. Use jj op restore <opId> instead.",
   lowConfidence:
     "Run a command whose program cannot be resolved? Approve only if you are sure it does not invoke Git.",
+  /**
+   * The ask title for a verb with no curated family line.
+   *
+   * Until this existed, `gate()` fell back to `message.reason`, which starts with
+   * `Refused:` — so the approval card read "Refused: git fetch. Run: jj git
+   * fetch…" above an **Allow once** button. The call had not been refused; it
+   * was waiting for a decision, and the card said both things at once. A title
+   * is a question, never a verdict.
+   */
+  genericAsk:
+    "Run the Git command anyway? Jujutsu is the version control here; approving runs this one Git command.",
 } as const;
 
 /**

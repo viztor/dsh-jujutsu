@@ -131,13 +131,13 @@ const NOT_VERBATIM: ReadonlySet<string> = new Set([]);
 
 describe("the denial copy is the document's copy", () => {
   it("parses the catalogue it claims to parse", () => {
-    // §2 states its own inventory: "44 rows" in §2.1, 9 in §2.2, 11
+    // §2 states its own inventory: "44 rows" in §2.1, 9 in §2.2, 12
     // displayReason variants in §2.3. A reworded heading would empty a slice and
     // let every check below pass on nothing, which is the failure mode of a
     // parsing test.
     expect(countedRows(verbCopy)).toBe(44);
     expect(countedRows(specialCopy)).toBe(9);
-    expect(countedRows(displayCopy)).toBe(11);
+    expect(countedRows(displayCopy)).toBe(12);
   });
 
   it("copies every reason verbatim from §2.1 or §2.2", () => {

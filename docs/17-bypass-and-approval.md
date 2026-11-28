@@ -109,6 +109,25 @@ exists to prevent. `ApprovalService.config` is public
 | `ask`, no answerer                                  | anything          | `ask`                   | nothing                     | `unavailable` → denied                                                        |
 | any                                                 | `jj new`          | `next()`                | nothing                     | allowed                                                                       |
 
+## What the prompt says
+
+`reason` is the model-facing sentence and it begins `Refused:` — it is only
+delivered when the guard denies. The **human** reads `displayReason`, which the
+panel renders as the approval card's title, so it is a question and never a
+verdict:
+
+| Source                                                  | Example                                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| the curated family line (`docs/25` §2.3)                | `Run git commit? The Jujutsu equivalent is jj commit -m "<msg>".`                                       |
+| the composed equivalent, for a verb with no family line | `Run the Git command anyway? The Jujutsu equivalent is jj git fetch --remote origin.`                   |
+| `genericAsk`, when there is no translation either       | `Run the Git command anyway? Jujutsu is the version control here; approving runs this one Git command.` |
+
+The third row is not decoration. Until it existed the fallback was
+`message.reason`, so thirteen catalogue rows asked for approval with a title
+that read **"Refused: …"** above an **Allow once** button — the card denied the
+call and offered to allow it in the same breath. `docs/25` §2.3 carries the copy;
+`test/guard.test.ts` pins that no row's title begins `Refused`.
+
 ## The repetition problem
 
 `allowed-once` is per call **by design** — there is no "always allow" outcome
