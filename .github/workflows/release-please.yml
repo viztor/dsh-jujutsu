@@ -193,6 +193,33 @@ jobs:
           git push origin "HEAD:refs/heads/$branch"
           echo "pushed to $branch"
 
+      # Gate the tree that will be merged, not the commit after it.
+      #
+      # The release pull request's own CI does not run: a PR opened with
+      # `GITHUB_TOKEN` starts no workflows, and the `pull_request` runs that do
+      # appear sit at `action_required` waiting for a human. So before this step
+      # existed, the first gate on a release was inside `release.yml` — after the
+      # tag and the GitHub Release already existed. That is exactly how 0.5.0 was
+      # tagged and never published: `scripts/check.ts` installs the packed tarball
+      # with plain `npm install`, npm resolved `@deepseek-ai/dsh-llm@0.2.3-alpha.3`
+      # (whose peer is Cordis `~4.2.0-alpha.2`) against a range that stopped at
+      # the literal `4.2.0-alpha.1`, and the publish job was skipped.
+      #
+      # Build then `package-check`, deliberately not the whole gate: the tests
+      # need `jj` and `jj-hunk` and several minutes, and every defect this step is
+      # meant to catch is about the *packaged* artifact — a version, a `files`
+      # entry, or a peer range a fresh install cannot resolve. The full gate still
+      # runs at publish time; this is the earlier of the two chances, not a
+      # replacement for it.
+      #
+      # It runs after the push, so it gates the branch as it now stands rather
+      # than a tree that no longer exists.
+      - name: Gate the packaged artifact
+        if: steps.release.outputs.prs_created == 'true'
+        run: |
+          ./node_modules/.bin/vp run build
+          ./node_modules/.bin/vp run package-check
+
   # The publish, in the same run that created the tag.
   #
   # This is `release.yml` called as a reusable workflow, not a second copy of the
