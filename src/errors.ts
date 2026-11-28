@@ -61,6 +61,16 @@ export const ErrorCode = {
   JJ_REBASE_DESTINATION_AMBIGUOUS: "JJ_REBASE_DESTINATION_AMBIGUOUS",
   JJ_OP_NOT_FOUND: "JJ_OP_NOT_FOUND",
   JJ_CHANGE_OWNED_BY_WORKSPACE: "JJ_CHANGE_OWNED_BY_WORKSPACE",
+  /**
+   * The revision is in `immutable_heads()` — usually because it is already on
+   * the remote's trunk. Rewriting it is possible but must be deliberate, so the
+   * failure is its own code with a hint that names `allowImmutable`.
+   *
+   * Reporting it as `JJ_EXEC_FAILED` produced "run it by hand to see the full
+   * output", which reproduces a message the model has already been shown and
+   * says nothing about the one flag that would let the call proceed.
+   */
+  JJ_COMMIT_IMMUTABLE: "JJ_COMMIT_IMMUTABLE",
   JJ_PUBLISH_APPROVAL_REQUIRED: "JJ_PUBLISH_APPROVAL_REQUIRED",
   // `FS_ERROR` was here. It named "ctx.fs.stat / readText throws while probing",
   // which this plugin swallows everywhere on purpose: the guard fails **open** on

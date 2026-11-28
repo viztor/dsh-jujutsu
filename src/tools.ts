@@ -260,6 +260,38 @@ async function jj(
           },
         };
       }
+      // Measured on 0.46.0 and 0.47.0, rewording a published commit:
+      //
+      //   Error: Commit 4559042c9d26 is immutable
+      //   Hint: Immutable commits are used to protect shared history.
+      //   Hint: This operation would rewrite 1 immutable commits.
+      //
+      // Two clauses carry the failure: `Commit <id> is immutable` on the first
+      // line and `would rewrite N immutable commits` in the hints. Matching the
+      // bare word would also catch unrelated config diagnostics that merely name
+      // `immutable_heads`, so both spellings are required explicitly.
+      if (/\bis immutable\b|\bimmutable commits?\b/i.test(stderr)) {
+        // The root commit has no parent and no description to reword; it is
+        // immutable for a different reason, and `--ignore-immutable` must not
+        // be offered for it. Measured: `jj describe -r @-- -m x` in a shallow
+        // repository reports "The root commit 000000000000 is immutable".
+        if (/the root commit/i.test(stderr)) {
+          return {
+            error: {
+              code: ErrorCode.JJ_COMMIT_IMMUTABLE,
+              message: `That revset resolves to the root commit, which has no content to edit: ${stderr.slice(0, 200)}`,
+              hint: "The root commit has no content to edit. Use a real revision: `jj log -r '::@'` shows what exists, and `@` or `@-` is usually what was meant.",
+            },
+          };
+        }
+        return {
+          error: {
+            code: ErrorCode.JJ_COMMIT_IMMUTABLE,
+            message: `The revision is immutable — it is shared history: ${stderr.slice(0, 200)}`,
+            hint: "Rewrite before pushing where possible. To reword or move published history deliberately, pass allowImmutable:true; that is the deliberate escape hatch, not a default.",
+          },
+        };
+      }
       if (/Failed to parse revset/i.test(stderr)) {
         return {
           error: {
@@ -934,14 +966,22 @@ export function buildToolDefinitions(
   register({
     name: "jj_describe",
     description:
-      "Set the description of a change. Preserves the author, so it is safe when the identity is unconfigured.",
+      "Set the description of a change. Preserves the author, so it is safe when the identity is unconfigured. The message is passed as a parameter, never through a shell, so quotes and backticks in it are literal.",
     parameters: {
       message: { type: "string", description: "The new description.", required: true },
       revset: { type: "string", description: "Defaults to `@`." },
+      allowImmutable: {
+        type: "boolean",
+        description:
+          "Allow rewording a published commit (one in immutable_heads). Default false, because a push safety net exists for a reason; set it only to correct history the user asked to correct.",
+      },
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
-      const argv = ["describe", "-m", String(args.message)];
+      const argv =
+        args.allowImmutable === true
+          ? ["describe", "--ignore-immutable", "-m", String(args.message)]
+          : ["describe", "-m", String(args.message)];
       if (typeof args.revset === "string") argv.push("-r", args.revset);
       const raw = await jj(ctx, settings, cwd, argv);
       if (typeof raw !== "string") return raw;
@@ -964,6 +1004,11 @@ export function buildToolDefinitions(
         description:
           "Revision to squash into. Defaults to `@`, so a bare `jj squash` folds the working copy into its parent.",
       },
+      allowImmutable: {
+        type: "boolean",
+        description:
+          "Allow folding into a published commit (one in immutable_heads). Default false; set it only when the user asked to rewrite shared history.",
+      },
     },
     output: JSON_OUTPUT,
     execute: onWorkspaceRoot(async (args, cwd) => {
@@ -974,7 +1019,7 @@ export function buildToolDefinitions(
         ...(typeof args.into === "string" ? [args.into] : []),
       ]);
       if (owned.error !== undefined) return owned.error;
-      const argv = ["squash"];
+      const argv = args.allowImmutable === true ? ["squash", "--ignore-immutable"] : ["squash"];
       if (typeof args.from === "string") argv.push("--from", args.from);
       if (typeof args.into === "string") argv.push("--into", args.into);
       const raw = await jj(ctx, settings, cwd, argv);

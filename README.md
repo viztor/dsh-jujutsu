@@ -69,7 +69,7 @@ The system prompt says version control here is Jujutsu, and what that implies: n
 
 Plain Git repositories can be adopted deliberately. Turn on _Use Jujutsu in Git repos_ and the first session in a Git repo with no `.jj` runs `jj git init --colocate`: the history is imported, `.git` is untouched. It is refused outright for repositories `jj` cannot represent — LFS, sparse checkouts, shallow clones, linked worktrees, and a Git operation in progress. Submodules are fine. See [docs/37](docs/37-git-compatible-adoption.md).
 
-The manual — the working-copy model, the Git→`jj` verb map, what each tool returns — ships as a `jujutsu` runtime skill, so its cost is one catalog line until the model needs it. Turn it off with _Offer the jj manual_.
+The manual — the working-copy model, the Git→`jj` verb map, what each tool returns, and the six workflow rules a real session had to learn the hard way — ships as a `jujutsu` runtime skill, so its cost is one catalog line until the model needs it. Turn it off with _Offer the jj manual_. The failure behind each rule, with the exact commands that produced it, is [docs/41](docs/41-jj-workflow-patterns.md).
 
 ## Configuration
 
@@ -158,7 +158,7 @@ Releases go through CI with npm's OIDC trusted publishing, so there is no token 
 | `SPEC.md`     | The build specification.                                                               |
 | `docs/`       | The design record: verified contracts, measurements, decisions.                        |
 
-The harness contract and the `jj` behaviour are both verified against the real thing, with citations in [docs/11](docs/11-verified-dsh-api-contract.md) and [docs/13](docs/13-empirical-verification.md). **401 tests**, `pnpm run ci` green.
+The harness contract and the `jj` behaviour are both verified against the real thing, with citations in [docs/11](docs/11-verified-dsh-api-contract.md) and [docs/13](docs/13-empirical-verification.md). **406 tests**, `pnpm run ci` green.
 
 ## License
 

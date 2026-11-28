@@ -349,3 +349,102 @@ describe("the wrong jj-hunk is named as such", () => {
     }
   });
 });
+
+describe("an immutable commit is a named failure, not a generic one", () => {
+  /** A stub `jj` that records its argv and fails the way jj fails. */
+  function stubJj(dir: string, stderr: string): string {
+    const binary = join(dir, "jj");
+    writeFileSync(
+      binary,
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "--version" ]; then echo "jj 0.47.0"; exit 0; fi',
+        `printf '%s\\n' "$@" >> '${join(dir, "argv.log")}'`,
+        "echo '---' >> '" + join(dir, "argv.log") + "'",
+        `cat >&2 <<'STDERR'`,
+        stderr,
+        "STDERR",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    chmodSync(binary, 0o755);
+    return binary;
+  }
+
+  async function runDescribe(dir: string, args: Record<string, unknown>) {
+    const h = fakeHarness();
+    realShell(h.ctx);
+    const { buildToolDefinitions } = await import("../src/tools.ts");
+    const defs = buildToolDefinitions(h.ctx, resolveSettings({ jjPath: join(dir, "jj") }));
+    const tool = defs.find((d) => d.name === "jj_describe") as
+      | { execute: (a: unknown, e: unknown) => Promise<unknown> }
+      | undefined;
+    expect(tool).toBeDefined();
+    return (await tool?.execute(args, h.session("s", dir).exec("bash", {}))) as
+      | {
+          error?: { code: string; message: string; hint?: string };
+          stdout?: string;
+        }
+      | undefined;
+  }
+
+  it("reports the published-commit refusal with the parameter that lifts it", async () => {
+    // Measured on 0.47: rewording a commit on a tracked trunk prints
+    //   Error: Commit f791bde59fdf is immutable
+    //   Hint: This operation would rewrite 1 immutable commits.
+    // Reporting that as JJ_EXEC_FAILED told the model to "run it by hand",
+    // which reproduces the message it had already been shown and names none of
+    // the flag that would let the call proceed.
+    const dir = mkdtempSync(join(tmpdir(), "dsh-jujutsu-immutable-"));
+    try {
+      stubJj(
+        dir,
+        [
+          "Error: Commit f791bde59fdf is immutable",
+          "Hint: Immutable commits are used to protect shared history.",
+          "Hint: This operation would rewrite 1 immutable commits.",
+        ].join("\n"),
+      );
+      const outcome = await runDescribe(dir, { message: "reworded", revset: "@-" });
+      expect(outcome?.error?.code).toBe("JJ_COMMIT_IMMUTABLE");
+      expect(outcome?.error?.hint).toContain("allowImmutable");
+      expect(outcome?.error?.hint).not.toContain("by hand");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not offer the escape hatch for the root commit", async () => {
+    // `The root commit 000000000000 is immutable` is a different failure: there
+    // is no content to edit and no flag that makes it meaningful.
+    const dir = mkdtempSync(join(tmpdir(), "dsh-jujutsu-root-"));
+    try {
+      stubJj(dir, "Error: The root commit 000000000000 is immutable");
+      const outcome = await runDescribe(dir, { message: "x", revset: "@--" });
+      expect(outcome?.error?.code).toBe("JJ_COMMIT_IMMUTABLE");
+      expect(outcome?.error?.hint).not.toContain("allowImmutable:true");
+      expect(outcome?.error?.hint).toContain("root commit");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("passes --ignore-immutable only when the caller asked for it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dsh-jujutsu-flag-"));
+    try {
+      stubJj(dir, "Error: unrelated failure");
+      await runDescribe(dir, { message: "x", allowImmutable: true });
+      const logged = readFileSync(join(dir, "argv.log"), "utf8");
+      expect(logged).toContain("--ignore-immutable");
+
+      rmSync(join(dir, "argv.log"), { force: true });
+      await runDescribe(dir, { message: "x" });
+      const plain = readFileSync(join(dir, "argv.log"), "utf8");
+      expect(plain).not.toContain("--ignore-immutable");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

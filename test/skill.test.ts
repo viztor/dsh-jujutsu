@@ -63,10 +63,35 @@ describe("the jj manual is a skill", () => {
     // manual: `jj help` is local, free and always matches the installed version.
     // Anything that can be discovered by running it does not belong here.
     expect(SKILL_CONTENT).toContain("jj help <subcommand>");
-    // ~670 words today. The bound is headroom for a better sentence or two, not
-    // room for the docs/15 verb catalogue to be pasted back in.
+    // 798 words today, after the workflow rules replaced the duplicated
+    // book/op-log bullets. The bound is headroom for a better sentence or two,
+    // not room for the docs/15 verb catalogue to be pasted back in.
     const words = SKILL_CONTENT.split(/\s+/).filter(Boolean).length;
-    expect(words).toBeLessThan(800);
+    expect(words).toBeLessThan(820);
+  });
+
+  it("carries the workflow rules a session had to learn the hard way", () => {
+    // `docs/41` is the evidence; these are the rules that cost real sessions to
+    // learn, and a card that loses one sends the next model back to the failure.
+    // Each marker is the phrase the rule is useless without, not a sentence that
+    // can be reworded away.
+    for (const marker of [
+      "A message is data",
+      "The commit type picks the release version",
+      "Rewriting a published commit needs",
+      "already the safe push",
+      "bookmark does not follow",
+      "`jj op log` is the undo",
+    ]) {
+      expect(SKILL_CONTENT, marker).toContain(marker);
+    }
+  });
+
+  it("points at the reasoning behind the rules", () => {
+    // The card states the rules; the document explains why each is true. A
+    // reader who doubts rule 1 needs the measured failure, and the card is the
+    // only surface they see before the body loads.
+    expect(SKILL_CONTENT).toContain("docs/41");
   });
 
   it("keeps the catalog line at or under the break-even length", () => {

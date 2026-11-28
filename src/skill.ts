@@ -71,27 +71,40 @@ export const SKILL_DESCRIPTION = [
  */
 export const SKILL_CONTENT = `# Jujutsu (jj) in this workspace
 
-Version control here is Jujutsu, not Git: the bash tool intercepts \`git\` and
-returns the \`jj\` command to run instead. The installed binary is the source of
-truth — for flags this card does not list, run \`jj help <subcommand>\` or
-\`jj help -k <topic>\` (revsets, bookmarks, …).
+Version control here is Jujutsu: the bash tool intercepts \`git\` and returns
+the \`jj\` command instead. The installed binary is the source of truth — use
+\`jj help <subcommand>\` or \`jj help -k <topic>\` for what this card omits.
 
 ## The model
 
 - The working copy \`@\` is always a commit and always dirty. No staging, no
   \`jj add\`: a new file is tracked as soon as it exists.
-- \`jj new\` finalises \`@\` and starts an empty change on top — that is the
-  commit gesture. \`jj commit -m "…"\` does both in one call; \`jj describe -m "…"\`
-  rewords and preserves the author.
+- \`jj new\` finalises \`@\` and starts an empty change on top — the commit
+  gesture. \`jj commit -m "…"\` does both; \`jj describe -m "…"\` rewords and keeps
+  the author.
 - Change IDs survive rewrites; commit IDs do not. Revsets: \`@\`, \`@-\`, \`::@\`,
   \`all()\`.
-- Bookmarks are the publish boundary: \`jj bookmark create <name> -r <rev>\`, then
-  \`jj git push --bookmark <name>\`. No implicit push, no force.
-- The op log is the undo: \`jj op log\`, \`jj undo\`, \`jj op restore <op-id>\`.
-  Everything except deleting \`.git\` or \`.jj\` is recoverable.
-- Conflicts are recorded in-tree. \`jj_new\`, \`jj_squash\` and \`jj_hunk_apply\`
-  refuse while \`@\` is conflicted; \`jj_describe\`, \`jj_bookmark\` and
-  \`jj_op_restore\` stay available on purpose.
+- Conflicts are recorded in-tree: \`jj_new\`, \`jj_squash\` and \`jj_hunk_apply\`
+  refuse while \`@\` is conflicted; \`jj_describe\` and \`jj_op_restore\` do not.
+
+## In this workflow
+
+Six rules; \`docs/41-jj-workflow-patterns.md\` in the repository carries the
+measured failure behind each.
+
+1. **A message is data.** Pass it to \`jj_commit\`/\`jj_describe\`. In bash,
+   single-quote it or use \`jj describe --stdin\`: a double-quoted message runs
+   backticks as commands, and \`jj commit\` then reads the mangled words as file
+   paths.
+2. **The commit type picks the release version** (\`fix:\` patch, \`feat:\` minor,
+   \`feat!:\` major). Choose it deliberately; fix it before pushing, not after the
+   release PR merges.
+3. **Rewriting a published commit needs \`allowImmutable:true\`.** Without it the
+   call fails with \`JJ_COMMIT_IMMUTABLE\`. The root commit is never the target.
+4. **A push after a rewrite is already the safe push** — there is no \`--force\`.
+5. **\`jj git fetch\`, then \`jj new main\`.** The bookmark does not follow, so
+   \`jj bookmark set main -r <rev>\` before pushing.
+6. **\`jj op log\` is the undo** — \`jj op restore <op-id>\` never touches the remote.
 
 ## Git → jj
 
@@ -110,9 +123,7 @@ truth — for flags this card does not list, run \`jj help <subcommand>\` or
 | \`git revert <rev>\` | \`jj revert -r <rev> -B @\` |
 | \`git push\` | \`jj git push --bookmark <name>\` |
 | \`git pull\` | \`jj git fetch\`, then \`jj rebase -b <bookmark> -o <remote-bookmark>\` |
-| \`git log\` | \`jj log -r '::@'\` |
 | \`git reflog\` | \`jj op log\` (every operation is reversible with \`jj op restore\`) |
-| \`git status\`, \`diff\`, \`show\`, \`fetch\` | \`jj status\`, \`jj diff\`, \`jj show\`, \`jj git fetch\` |
 
 \`git lfs\` and \`git clean -fd\` have no jj equivalent; a task that truly needs
 one belongs in a separate plain Git checkout. Submodules are not in that group:
@@ -128,43 +139,33 @@ the graph. Reads pass \`--ignore-working-copy\`, so a history read never capture
 another agent's half-written files; \`jj_status({snapshot:true})\` is the one
 read that writes, and it returns the checkpoint \`opId\`.
 
-- Read: \`jj_status\` (\`opId\`, \`divergent\`, \`conflicts\`; \`snapshot\`),
-  \`jj_log\`, \`jj_diff\` (\`interdiff\`), \`jj_show\`, \`jj_file\`
-  (\`list\`/\`show\`/\`search\`/\`annotate\`), \`jj_evolog\`, \`jj_op_log\`.
-- Author: \`jj_new\`, \`jj_describe\`, \`jj_commit\` (\`commit\`/\`split\`),
-  \`jj_edit\`, \`jj_squash\`, \`jj_hunk_list\`, \`jj_hunk_apply\`.
-- History: \`jj_history\` (\`rebase\`/\`duplicate\`/\`revert\`/\`abandon\`/
-  \`restore\`/\`metaedit\`), \`jj_repair\` (\`undo\`/\`redo\`/\`absorb\`/
-  \`converge\`).
-- Recover: \`jj_op\` (\`log\`/\`show\`/\`diff\`/\`restore\`/\`revert\`/
-  \`abandon\`/\`integrate\`), \`jj_op_restore\`.
-- Workspaces: \`jj_workspace\` (\`list\`/\`add\`/\`remove\`/\`forget\`/
-  \`update-stale\`/\`root\`/\`rename\`). A workspace path is the \`cwd\` for another
-  agent; \`add\` writes an \`agent/<name>\` ownership bookmark.
-- Coordinate: \`jj_coordinate\` plans groups from those bookmarks;
-  \`jj_group\` merges, squashes or names them; \`jj_doctor\` reports readiness.
-- Verify: \`jj_test\` (\`test\`/\`run\`/\`bisect\`), \`jj_fix\`.
+- Read: \`jj_status\` (\`opId\`, \`divergent\`, \`conflicts\`; \`snapshot\`), \`jj_log\`,
+  \`jj_diff\` (\`interdiff\`), \`jj_show\`, \`jj_file\`, \`jj_evolog\`, \`jj_op_log\`.
+- Author: \`jj_new\`, \`jj_describe\`, \`jj_commit\`, \`jj_edit\`, \`jj_squash\`,
+  \`jj_hunk_list\`, \`jj_hunk_apply\`.
+- History and recovery: \`jj_history\`, \`jj_repair\`, \`jj_op\`, \`jj_op_restore\`.
+- Workspaces and verification: \`jj_workspace\`, \`jj_coordinate\`, \`jj_group\`,
+  \`jj_doctor\`, \`jj_test\`, \`jj_fix\`.
 - Publish: \`jj_bookmark\`, \`jj_publish\` (\`push\`/\`fetch\`/tags; push asks or
   denies by default).
 
-Every commit-rewriting mutation returns \`opId\`; destructive history tools also return
-\`beforeOpId\`, so \`jj_op({action:"restore", opId: beforeOpId})\` undoes them.
+Every rewriting mutation returns \`opId\`; destructive ones also return
+\`beforeOpId\`, which \`jj_op({action:"restore", opId: beforeOpId})\` undoes.
 
 What they refuse: a missing \`user.name\`/\`user.email\` (fix with
-\`jj config set --user user.name "…"\` and the same for \`user.email\`), a
-conflicted \`@\` for the tools that rewrite it, and anything interactive — pass
-the query, message and revset as arguments.
+\`jj config set --user user.name "…"\`), a conflicted \`@\` for the tools that
+rewrite it, and anything interactive — pass the query, message and revset as
+arguments. The message is quoted once at the argv edge, so backticks, quotes and
+\`$(…)\` in it are literal. That is why a message goes through the tool.
 
 ## Selecting hunks
 
-Select with \`query\`, never a saved hunk id: ids are regenerated whenever the
-working copy changes. Predicates: \`added()\`, \`removed()\`, \`changed()\`,
-\`renamed()\`, \`mode_changed()\`, \`binary_changed()\`, \`all()\`, \`none()\`.
-Fields: \`content:\` and \`path:\`, with \`substring:\`/\`glob:\`/\`regex:\`/
-\`exact:\`. Combine with \`&\`, \`|\`, \`~\`. Examples:
-\`added(content:"TIMEOUT_MS")\`, \`removed()\`,
-\`added(content:regex:"(?i)todo|fixme")\`. A rename, mode or binary change
-selects the file but yields no hunks.
+Select with \`query\`, never a saved hunk id: ids regenerate whenever the working
+copy changes. Predicates \`added()\`, \`removed()\`, \`changed()\`, \`renamed()\`,
+\`mode_changed()\`, \`binary_changed()\`, \`all()\`, \`none()\`; fields \`content:\` and
+\`path:\` with \`substring:\`/\`glob:\`/\`regex:\`/\`exact:\`; combine with \`&\`, \`|\`, \`~\`.
+Examples: \`added(content:"TIMEOUT_MS")\`, \`added(content:regex:"(?i)todo|fixme")\`.
+A rename, mode or binary change selects the file but yields no hunks.
 `;
 
 /**
